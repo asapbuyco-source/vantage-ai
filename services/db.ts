@@ -195,8 +195,10 @@ export const getVipDailyData = async (dateStr: string, bustCache = false): Promi
             cacheSet(cacheKey, dailyAnalysis, CACHE_TTL);
             return dailyAnalysis as DailyAnalysis;
         }
-    } catch (e) {
-        console.warn(`[VIP] Firestore Fetch Error for quant_vip ${dateStr}:`, e);
+    } catch (e: any) {
+        if (e?.code !== 'permission-denied') {
+            console.warn(`[VIP] Firestore Fetch Error for quant_vip ${dateStr}:`, e);
+        }
     }
     return null;
 };
@@ -313,12 +315,15 @@ export const deleteTodaysPredictions = async (): Promise<void> => {
         if (!auth.currentUser) return;
         await Promise.all([
             deleteDoc(doc(db, "daily_predictions", todayStr)),
-            deleteDoc(doc(db, "quant_predictions", todayStr))
+            deleteDoc(doc(db, "quant_predictions", todayStr)),
+            deleteDoc(doc(db, "quant_vip", todayStr)),
+            deleteDoc(doc(db, "basketball_predictions", todayStr)),
+            deleteDoc(doc(db, "cricket_predictions", todayStr)),
         ]);
-        console.log("Firestore data cleared for today (both legacy and quant).");
+        console.log(`[DB] Firestore predictions cleared for ${todayStr}`);
     } catch (e: any) {
         if (e.code === 'permission-denied') {
-            console.warn("[DB] Firestore delete denied. Local cache cleared only.");
+            console.warn("[DB] Firestore delete denied — not admin. Local cache cleared only.");
         } else {
             console.error("Firestore Delete Error:", e);
         }

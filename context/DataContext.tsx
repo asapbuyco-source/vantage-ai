@@ -138,15 +138,16 @@ const fetchFromDB = async (bypassCache = false) => {
                         setRawFixtures(dailyData.rawFixtures || []);
                         setAccumulators(dailyData.accumulators || null);
                     }
-                } else {
-                    // No data available yet — backend scheduler hasn't run (before 8am)
-                    // or it's a past date with no data. Show empty state in UI.
+                } else if (!isToday) {
+                    // Past date with no data — show empty.
                     if (mountedRef.current) {
                         setPredictions([]);
                         setRawFixtures([]);
                         setAccumulators(null);
                     }
                 }
+                // If today and data is empty: don't clear — the onSnapshot listener
+                // will populate predictions when the backend pipeline runs.
 
                 // Load non-football predictions passively (read-only)
                 if (isToday) {
