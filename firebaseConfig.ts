@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { getFirestore, enableMultiTabIndexedDbPersistence } from "firebase/firestore";
 
 // Configuration using Vite Environment Variables with provided fallbacks
 const firebaseConfig = {
@@ -25,11 +25,14 @@ export const enableFirestorePersistence = (() => {
   return async () => {
     if (enabled) return;
     try {
-      await enableIndexedDbPersistence(db);
+      await enableMultiTabIndexedDbPersistence(db);
       enabled = true;
     } catch (err: any) {
-      if (err.code === 'failed-precondition') console.warn('Firestore persistence: multiple tabs open');
-      else if (err.code === 'unimplemented') console.warn('Firestore persistence: browser not supported');
+      if (err.code === 'failed-precondition') {
+        console.warn('[Firestore] Multi-tab conflict — using memory cache. Predictions still load from network.');
+      } else if (err.code === 'unimplemented') {
+        console.warn('[Firestore] IndexedDB not available — using memory cache.');
+      }
     }
   };
 })();
