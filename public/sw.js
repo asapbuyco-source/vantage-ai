@@ -12,9 +12,8 @@
 
 // IMPORTANT: Bump this on every deploy. The build process or CI should update this.
 // We use a timestamp so it auto-invalidates.
-const CACHE_VERSION = 'v3-' + '20260520';
+const CACHE_VERSION = 'v3-' + '20260626';
 const SHELL_CACHE = `vantage-shell-${CACHE_VERSION}`;
-const DATA_CACHE = `vantage-data-${CACHE_VERSION}`;
 const FONT_CACHE = `vantage-fonts-${CACHE_VERSION}`;
 const LOGO_CACHE = `vantage-logos-${CACHE_VERSION}`;
 
@@ -41,7 +40,7 @@ self.addEventListener('install', (event) => {
 // ── Activate: purge ALL old caches and take control of all tabs ─────────────
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating version:', CACHE_VERSION);
-  const activeCaches = new Set([SHELL_CACHE, DATA_CACHE, FONT_CACHE, LOGO_CACHE]);
+  const activeCaches = new Set([SHELL_CACHE, FONT_CACHE, LOGO_CACHE]);
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
@@ -109,13 +108,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Firestore / Firebase → Network-First (2h cache) ────────────────────
+  // ── Firestore / Firebase / API → Network-Only (Firestore handles offline) ──
+  // Firestore has its own IndexedDB offline persistence — SW caching collides.
+  // Users would see stale/empty predictions from SW cache instead of fresh data.
   if (
     url.hostname.includes('firestore.googleapis.com') ||
     url.hostname.includes('firebase') ||
     url.pathname.startsWith('/api/')
   ) {
-    event.respondWith(networkFirst(request, DATA_CACHE, 2 * 60 * 60));
+    event.respondWith(fetch(new Request(request, { cache: 'no-store' })));
     return;
   }
 
@@ -172,7 +173,7 @@ async function cacheFirst(request, cacheName, maxAgeSec) {
 async function networkFirst(request, cacheName, maxAgeSec) {
   const cache = await caches.open(cacheName);
   try {
-    const fresh = await fetch(request);
+    const fresh = await fetch(new Request(request, { cache: 'no-store' }));
     if (fresh.ok) cache.put(request, fresh.clone());
     return fresh;
   } catch {
