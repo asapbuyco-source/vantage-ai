@@ -30,6 +30,9 @@ TIER_2 = {
     9:    "Championship",
     1204: "Scottish Premiership",
     138:  "Jupiler Pro League",
+    98:   "J1 League (Japan)",          # Summer league: Mar-Dec
+    262:  "Liga MX (Mexico)",           # Summer league: Jul-May
+    169:  "Chinese Super League",      # Summer league: Mar-Nov
 }
 
 # ── Tier 3: Reliable data, good volume ────────────────────────────────────
@@ -50,6 +53,18 @@ TIER_3 = {
     85:   "2. Bundesliga (Germany)",
     395:  "Serie B (Italy)",
     302:  "Ligue 2 (France)",
+    # ── Summer-active leagues (Jun-Aug window) ──
+    268:  "Uruguayan Primera División", # Feb-Dec
+    266:  "Chilean Primera División",   # Feb-Nov
+    281:  "Peruvian Liga 1",             # Feb-Nov
+    269:  "Ecuadorian Serie A",          # Feb-Dec
+    346:  "Irish Premier Division",      # Feb-Nov
+    # ── International tournaments (summer window) ──
+    9:   "Copa America",
+    13:  "FIFA World Cup Qualifiers (CONMEBOL)",
+    31:  "FIFA World Cup Qualifiers (CONCACAF)",
+    15:  "FIFA World Cup Qualifiers (AFC)",
+    33:  "FIFA World Cup Qualifiers (CAF)",
 }
 
 # ── Tier 4: Minor / High Variance (Safety First) ──────────────────────────
@@ -116,6 +131,17 @@ _APPROVED_NAMES_TIER: list[tuple[str, int, float]] = [
     ("primera nacional", 3, 0.65),
     ("copa de la liga", 3, 0.65),
     ("copa chile", 3, 0.65),
+    ("j1 league", 2, 0.85),
+    ("j league", 2, 0.85),
+    ("liga mx", 2, 0.85),
+    ("chinese super", 2, 0.85),
+    ("uruguayan", 3, 0.70),
+    ("chilean", 3, 0.70),
+    ("peruvian", 3, 0.70),
+    ("ecuadorian", 3, 0.70),
+    ("copa america", 3, 0.80),
+    ("irish premier", 3, 0.70),
+    ("world cup qualif", 3, 0.80),
 ]
 
 

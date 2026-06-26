@@ -100,6 +100,8 @@ odds_fetched_at?: string;
   expected_corners?: number;
   over85_corners_prob?: number;
   over95_corners_prob?: number;
+  // ── Score predictions ──────────────────────────────────────────────────────
+  top_scorelines?: Array<{ score: string; prob: number }>;
   all_value_bets?: Array<{ market: string; prob: number; raw_prob?: number; odds: number; ev: number; calibration_tier?: string }>;
   // ── Match Analysis Platform fields (snake_case from pipeline) ────────────────
   value_rank?: 'high' | 'medium' | 'low' | 'none';

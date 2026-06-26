@@ -256,9 +256,9 @@ def compute_fh_markets(mu_home: float, mu_away: float, rho: float | None = None)
 
 # ── Utility ────────────────────────────────────────────────────────────────────
 def top_scorelines(grid: dict[tuple[int, int], float], n: int = 5) -> list[tuple[str, float]]:
-    """Return the N most probable scorelines."""
+    """Return the N most probable scorelines as Firestore-safe dicts."""
     sorted_scores = sorted(grid.items(), key=lambda x: x[1], reverse=True)
-    return [(f"{h}-{a}", round(p, 4)) for (h, a), p in sorted_scores[:n]]
+    return [{"score": f"{h}-{a}", "prob": round(p, 4)} for (h, a), p in sorted_scores[:n]]
 
 
 if __name__ == "__main__":

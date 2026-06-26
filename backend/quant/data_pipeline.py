@@ -38,6 +38,17 @@ RECENT_DAYS = 90  # Look back 90 days for form data
 AF_KEY = os.environ.get("API_FOOTBALL_KEY", "")
 AF_BASE = "https://v3.football.api-sports.io"
 
+# ── Sportmonks compatibility (for cache-based backtesting) ──────────────────
+SM_TOKEN = ""
+try:
+    from api_football_client import _get
+except ImportError:
+    def _get(path, params=None):
+        return None
+
+def _get_paginated(path, params=None, max_pages=5):
+    return _get(path, params)
+
 # ── ClubElo Seeding (override manual club Elo system) ───────────────────────
 def _seed_club_elo_cache():
     """Seed Elo cache from ClubElo at startup."""

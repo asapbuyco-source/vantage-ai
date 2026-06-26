@@ -40,7 +40,7 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
   const over95C = (match.over95_corners_prob ?? 0) * 100;
   const evColor = ev >= 0.10 ? 'text-emerald-400' : ev >= 0.05 ? 'text-yellow-400' : 'text-orange-400';
 
-  const topScorelines = (match as any).top_scorelines as [string, number][] | undefined;
+  const topScorelines = match.top_scorelines;
   const topScore = topScorelines?.[0];
 
   return (
@@ -164,12 +164,12 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
                       { label: 'O 1.5', pct: over15 },
                       { label: 'DC 1X', pct: dc1x },
                       { label: 'DC X2', pct: dcx2 },
-                      { label: topScore ? `CS ${topScore[0]}` : 'Score', pct: topScore ? topScore[1] * 100 : 0 },
+                      { label: topScore ? `CS ${topScore.score}` : 'Score', pct: topScore ? topScore.prob * 100 : 0 },
                     ].map((mkt, i) => (
                       <div key={i} className="flex flex-col items-center justify-center px-1 py-1.5 bg-white/50 dark:bg-white/5 rounded-lg">
                         <span className="text-[8px] font-medium text-gray-500 dark:text-gray-400">{mkt.label}</span>
                         <span className={`text-[10px] font-bold font-mono ${mkt.pct >= 60 ? 'text-emerald-400' : mkt.pct >= 40 ? 'text-yellow-400' : 'text-slate-500'}`}>
-                          {i === 5 && topScore ? `${(topScore[1] * 100).toFixed(1)}%` : `${mkt.pct.toFixed(0)}%`}
+                          {i === 5 && topScore ? `${(topScore.prob * 100).toFixed(1)}%` : `${mkt.pct.toFixed(0)}%`}
                         </span>
                       </div>
                     ))}
@@ -220,9 +220,9 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
                   <div>
                     <span className="text-[8px] text-gray-500 uppercase tracking-wide">Most Likely Score</span>
                     <div className="flex gap-1.5 mt-1 flex-wrap">
-                      {topScorelines.map(([score, prob], i) => (
+                      {topScorelines.map((s, i) => (
                         <span key={i} className="text-[9px] font-mono font-bold px-2 py-1 rounded-lg bg-white/50 dark:bg-white/5 border border-slate-200 dark:border-white/5">
-                          {score} <span className="text-gray-400 font-normal">{(prob * 100).toFixed(1)}%</span>
+                          {s.score} <span className="text-gray-400 font-normal">{(s.prob * 100).toFixed(1)}%</span>
                         </span>
                       ))}
                     </div>

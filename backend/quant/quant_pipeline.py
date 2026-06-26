@@ -644,9 +644,12 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
         if db:
             try:
                 db.collection("quant_predictions").document(date_str).set(doc)
-                db.collection("quant_vip").document(date_str).set(vip_doc)
                 _safe_print(f"[QuantPipeline] 💾 Saved {len(predictions)} match analyses to Firestore for {date_str}")
-                _safe_print(f"[QuantPipeline] 💾 Saved VIP analyses to quant_vip/{date_str}")
+                try:
+                    db.collection("quant_vip").document(date_str).set(vip_doc)
+                    _safe_print(f"[QuantPipeline] 💾 Saved VIP analyses to quant_vip/{date_str}")
+                except Exception as ve:
+                    _safe_print(f"[QuantPipeline]   ⚠️  VIP save failed (non-fatal): {ve}", file=sys.stderr)
                 # Update Elo ratings
                 save_dirty_ratings()
             except Exception as e:
