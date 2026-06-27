@@ -111,7 +111,7 @@ service cloud.firestore {
           "userId", "userEmail", "amount", "phoneNumber", "status", "date", "paymentMethod"
         ]);
       allow get: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
-      allow list: if isAdmin();
+      allow list: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
       allow update, delete: if isAdmin();
     }
 
@@ -155,7 +155,7 @@ service cloud.firestore {
     }
 
     match /quant_vip/{dateStr} {
-      allow read: if isVip();
+      allow read: if isVip() || isAdmin();
       allow write: if isAdmin();
     }
 
