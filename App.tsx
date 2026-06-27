@@ -18,6 +18,7 @@ import { LiveScores } from './pages/LiveScores';
 import { BlogIndex } from './pages/BlogIndex';
 import { BlogPost } from './pages/BlogPost';
 import { MatchDetails } from './pages/MatchDetails';
+import { Privacy } from './pages/Privacy';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -217,6 +218,7 @@ function AppContent() {
       <Routes>
         <Route path="/blog" element={<BlogIndex />} />
         <Route path="/blog/:date" element={<BlogPost />} />
+        <Route path="/privacy-policy" element={<Privacy />} />
         <Route path="*" element={
           <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans">
             <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -280,6 +282,7 @@ function AppContent() {
 
       {/* ───── Match Details Page (full-screen, no bottom nav) ───── */}
       <Route path="/match/:id" element={<MatchDetails />} />
+      <Route path="/privacy-policy" element={<Privacy />} />
 
       {/* ───── All other routes = main authenticated app ───── */}
       <Route path="*" element={

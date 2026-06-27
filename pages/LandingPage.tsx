@@ -395,6 +395,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                 <p className="text-xs text-gray-500 max-w-md mx-auto mb-4 px-4">
                     Sports trading involves significant risk. Our platform provides data and mathematical models, not financial advice. Past performance does not guarantee future results.
                 </p>
+                <div className="flex justify-center gap-4 text-xs text-gray-400">
+                    <a href="/privacy-policy" className="hover:text-vantage-cyan transition-colors">Privacy Policy</a>
+                </div>
             </footer>
         </div>
     );
