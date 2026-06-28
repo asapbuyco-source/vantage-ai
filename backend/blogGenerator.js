@@ -1,16 +1,13 @@
 import admin from 'firebase-admin';
+import { getLagosTodayKey, getLagosYesterdayKey } from './dateUtils.js';
+import pino from 'pino';
 
-const getDateKey = (daysAgo = 0) => {
-    const now = new Date();
-    const lagosOffset = 60;
-    const localMs = now.getTime() + (lagosOffset - now.getTimezoneOffset()) * 60000;
-    const d = new Date(localMs);
-    d.setDate(d.getDate() - daysAgo);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-const getGlobalTodayKey = () => getDateKey(0);
-const getGlobalYesterdayKey = () => getDateKey(1);
+const logger = pino({
+    level: process.env.LOG_LEVEL || 'info',
+    transport: process.env.NODE_ENV === 'development'
+        ? { target: 'pino-pretty', options: { colorize: true } }
+        : undefined,
+});
 
 const KEYWORDS_EN = [
     'football betting tips', 'value bets today', 'data-driven predictions',
@@ -129,7 +126,7 @@ const generateDataDrivenPreview = (db, allMatches, league) => {
         return null;
     }
 
-    const todayStr = getGlobalTodayKey();
+        const todayStr = getLagosTodayKey();
     const templates = TEMPLATES_EN;
     const leagueName = league || 'Top Leagues';
 
@@ -227,7 +224,7 @@ const injectKeywords = (text, keywords) => {
 };
 
 export const generateBlogPost = async (language = 'en', leagueOverride = null) => {
-    const todayStr = getGlobalTodayKey();
+        const todayStr = getLagosTodayKey();
     const db = admin.firestore();
 
     const [footballSnap, basketballSnap] = await Promise.all([
@@ -367,7 +364,7 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
 };
 
 export const triggerBlogGeneration = async () => {
-    console.log('[BlogGenerator] Starting programmatic blog generation...');
+    logger.info('[BlogGenerator] Starting programmatic blog generation...');
     try {
         const topLeagues = ['Premier League', 'La Liga', 'Serie A', 'Champions League'];
 
@@ -381,10 +378,10 @@ export const triggerBlogGeneration = async () => {
         results.forEach((res, i) => {
             if (res.status === 'fulfilled') {
                 succeeded.push(topLeagues[i]);
-                console.log(`[BlogGenerator] ✅ Generated English blog for ${topLeagues[i]} (${res.value.status})`);
+                logger.info(`[BlogGenerator] Generated English blog for ${topLeagues[i]} (${res.value.status})`);
             } else {
                 failed.push(topLeagues[i]);
-                console.warn(`[BlogGenerator] ⚠️ Failed to generate blog for ${topLeagues[i]}: ${res.reason?.message}`);
+                logger.warn(`[BlogGenerator] Failed to generate blog for ${topLeagues[i]}: ${res.reason?.message}`);
             }
         });
 
@@ -394,7 +391,7 @@ export const triggerBlogGeneration = async () => {
             failedLeagues: failed,
         };
     } catch (e) {
-        console.error('[BlogGenerator] Error:', e.message);
+        logger.error({ error: e.message }, '[BlogGenerator] Error');
         return { status: 'error', error: e.message };
     }
 };

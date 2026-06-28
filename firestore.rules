@@ -122,10 +122,7 @@ service cloud.firestore {
 
     match /selar_pending/{refId} {
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
-      allow create: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.used == false
-        && request.resource.data.plan in ["daily", "weekly", "monthly", "quarterly", "annual"];
+      allow create: if false; // backend-only via Firebase Admin SDK
       allow update: if false;
       allow delete: if false;
     }

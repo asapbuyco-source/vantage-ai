@@ -43,8 +43,8 @@ async function acquireLock(taskName, ttlMinutes = 60) {
         });
         return result;
     } catch (err) {
-        logger.warn({ task: taskName, err: err.message }, '[Scheduler] Lock acquisition failed, proceeding anyway');
-        return true; // on error, proceed rather than deadlock
+        logger.error({ task: taskName, err: err.message }, '[Scheduler] Lock acquisition failed — skipping job to avoid duplicate execution');
+        return false; // fail-closed: skip rather than risk double-run
     }
 }
 

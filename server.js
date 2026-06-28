@@ -45,9 +45,9 @@ if (SENTRY_DSN) {
             Sentry.onUnhandledRejectionIntegration(),
         ],
     });
-    console.log('✅ Sentry initialized for error tracking');
+    logger.info('Sentry initialized for error tracking');
 } else {
-    console.warn('⚠️  SENTRY_DSN not set — error tracking disabled');
+    logger.warn('SENTRY_DSN not set — error tracking disabled');
 }
 
 // Initialize Pino structured logger
@@ -116,6 +116,17 @@ try {
 // This resolves the ERR_ERL_UNEXPECTED_X_FORWARDED_FOR error.
 app.set('trust proxy', 1);
 
+// ── Public privacy policy for Play Store compliance ────────────────────────
+app.get('/privacy', (req, res) => {
+    const lang = (req.query.lang || 'en').startsWith('fr') ? 'fr' : 'en';
+    const lastUpdated = new Date().toISOString().split('T')[0];
+    const title = lang === 'fr' ? 'Politique de Confidentialité — Vantage AI' : 'Privacy Policy — Vantage AI';
+    const content = lang === 'fr'
+        ? `<h1>Politique de Confidentialité</h1><p><strong>Dernière mise à jour :</strong> ${lastUpdated}</p><p>Chez <strong>Vantage AI</strong>, nous accordons une importance capitale à la confidentialité de vos données.</p><h2>1. Collecte des Données</h2><p>Nous collectons : adresse email, nom d'affichage (via Google Auth ou Email), historique des transactions VIP, données d'utilisation.</p><h2>2. Utilisation</h2><p>Fournir les services, gérer les abonnements, améliorer l'algorithme.</p><h2>3. Sécurité</h2><p>Chiffrement SSL, authentification Firebase sécurisée.</p><h2>4. Partage</h2><p>Nous ne vendons jamais vos données. Partagées uniquement avec Google Cloud (Firebase), Google Play (RevenueCat) pour les abonnements.</p><h2>5. Vos Droits</h2><p>Accès, rectification, suppression. Contact via la section Profil de l'application.</p><p>Contact : <a href="mailto:support@vantageai.online">support@vantageai.online</a></p>`
+        : `<h1>Privacy Policy</h1><p><strong>Last Updated:</strong> ${lastUpdated}</p><p>At <strong>Vantage AI</strong>, we prioritize your data privacy.</p><h2>1. Data Collection</h2><p>We collect: email address, display name (via Google Auth or Email), VIP transaction history, usage data.</p><h2>2. Usage</h2><p>To provide services, manage subscriptions, improve our algorithm.</p><h2>3. Security</h2><p>SSL encryption, secure Firebase authentication.</p><h2>4. Data Sharing</h2><p>We never sell your data. Shared only with Google Cloud (Firebase), Google Play (RevenueCat) for subscriptions.</p><h2>5. Your Rights</h2><p>Access, correction, deletion. Contact us via the Profile section in the app.</p><p>Contact: <a href="mailto:support@vantageai.online">support@vantageai.online</a></p>`;
+    res.send(`<!DOCTYPE html><html lang="${lang}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title}</title><style>body{font-family:system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;line-height:1.6;color:#1e293b;background:#f8fafc}h1{color:#0f172a}h2{color:#334155;margin-top:2rem}a{color:#0891b2}</style></head><body>${content}</body></html>`);
+});
+
 // ── Sentry Middleware ─────────────────────────────────────────────────────────
 // Basic health check endpoint for Render/Railway (Needs to be above CORS so it isn't blocked by missing origin)
 app.get('/health', (req, res) => {
@@ -148,7 +159,7 @@ app.get('/health/python', (req, res) => {
         }
         
         if (!pythonBinary) {
-            console.warn('[Health] Python binary not found');
+            logger.warn('[Health] Python binary not found');
             return res.status(503).json({
                 status: 'degraded',
                 python: 'unavailable',
@@ -177,11 +188,17 @@ app.get('/health/python', (req, res) => {
 // Enable CORS
 // During local dev, allow localhost:5173.
 // In production, allow the Netlify frontend URL.
+// Also allow Capacitor native app origins (Android + iOS).
 const allowedOrigins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'https://vantageaiafrica.netlify.app',
     'https://vantageai.online',
+    // Capacitor native app origins
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+    'https://localhost',
     process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : null
 ].filter(Boolean); // Remove undefined values
 
@@ -832,6 +849,79 @@ app.post('/api/payments/selar/webhook', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// REVENUECAT WEBHOOK — Android Google Play subscriptions
+// ══════════════════════════════════════════════════════════════════════
+const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
+
+app.post('/api/payments/revenuecat/webhook', express.json({ limit: '1mb' }), async (req, res) => {
+    try {
+        if (!REVENUECAT_WEBHOOK_SECRET) {
+            logger.error('[RevenueCat] REVENUECAT_WEBHOOK_SECRET is not configured — webhook disabled');
+            return res.status(503).json({ error: 'RevenueCat webhook is not configured on this server.' });
+        }
+        const authHeader = req.headers['authorization'] || '';
+        if (!authHeader || authHeader !== `Bearer ${REVENUECAT_WEBHOOK_SECRET}`) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const event = req.body?.event;
+        if (!event) return res.status(400).json({ error: 'Missing event' });
+
+        const validEvents = ['INITIAL_PURCHASE', 'RENEWAL', 'NON_RENEWING_PURCHASE'];
+        if (!validEvents.includes(event.type)) {
+            return res.status(200).json({ ignored: true, reason: `Event type ${event.type} not processed` });
+        }
+
+        const appUserId = event.app_user_id;
+        const productId = event.product_id || '';
+        if (!appUserId || !productId) {
+            return res.status(400).json({ error: 'Missing app_user_id or product_id' });
+        }
+
+        const plan = productId.includes('annual') ? 'annual'
+            : productId.includes('quarterly') ? 'quarterly'
+            : productId.includes('monthly') ? 'monthly'
+            : productId.includes('weekly') ? 'weekly'
+            : productId.includes('daily') ? 'daily'
+            : null;
+
+        if (!plan) {
+            logger.warn({ productId }, '[RevenueCat] Unknown product ID');
+            return res.status(200).json({ ignored: true, reason: 'Unknown product' });
+        }
+
+        const db = admin.firestore();
+        const userQuery = await db.collection('profiles')
+            .where('revenuecatId', '==', appUserId)
+            .limit(1)
+            .get();
+
+        if (userQuery.empty) {
+            logger.warn({ appUserId, productId }, '[RevenueCat] No user found for RevenueCat ID');
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const userDoc = userQuery.docs[0];
+        const txId = `rc_${event.id || Date.now()}`;
+
+        await fulfillVipPayment({
+            uid: userDoc.id,
+            provider: 'revenuecat',
+            transactionId: txId,
+            plan,
+            amount: 0,
+            raw: req.body,
+        });
+
+        logger.info({ uid: userDoc.id, plan, productId }, '[RevenueCat] VIP fulfilled via webhook');
+        res.json({ ok: true });
+    } catch (e) {
+        logger.error({ error: e }, '[RevenueCat] Webhook error');
+        res.status(500).json({ error: 'Webhook processing failed' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // PUSH NOTIFICATIONS
 // ══════════════════════════════════════════════════════════════════════
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
@@ -866,13 +956,40 @@ app.post('/api/push/subscribe', pushLimiter, requireFirebaseUser, async (req, re
             await admin.firestore().collection('push_subscriptions').doc(subId).set({
                 subscription,
                 uid,
+                platform: 'web',
                 createdAt: admin.firestore.FieldValue.serverTimestamp()
             });
         }
         res.status(201).json({ success: true });
     } catch (e) {
-        console.error('Push subscription error:', e);
+        logger.error({ error: e }, 'Push subscription error');
         res.status(500).json({ error: 'Failed to save subscription' });
+    }
+});
+
+// FCM token registration (Android/iOS native push via Capacitor)
+app.post('/api/push/register-fcm', pushLimiter, requireFirebaseUser, async (req, res) => {
+    try {
+        const { token, platform = 'android' } = req.body || {};
+        if (!token || typeof token !== 'string' || token.length < 20) {
+            return res.status(400).json({ error: 'Invalid FCM token' });
+        }
+
+        if (admin.apps.length > 0) {
+            const uid = req.firebaseUser.uid;
+            const tokenHash = createHash('sha256').update(token).digest('hex').substring(0, 16);
+            const subId = `${uid}_fcm_${tokenHash}`;
+            await admin.firestore().collection('push_subscriptions').doc(subId).set({
+                fcmToken: token,
+                uid,
+                platform,
+                createdAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        res.status(201).json({ success: true });
+    } catch (e) {
+        logger.error({ error: e }, 'FCM registration error');
+        res.status(500).json({ error: 'Failed to register FCM token' });
     }
 });
 

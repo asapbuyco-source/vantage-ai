@@ -6,6 +6,15 @@ export const PLAN_CONFIG = {
   annual: { days: 365, amount: 35000 },
 };
 
+// USD-equivalent amounts for Selar / RevenueCat / global card payments
+export const PLAN_AMOUNT_USD = {
+  daily: 4.99,
+  weekly: 14.99,
+  monthly: 24.99,
+  quarterly: 59.99,
+  annual: 99.99,
+};
+
 export function assertValidPlan(plan) {
   if (!PLAN_CONFIG[plan]) {
     const err = new Error("Invalid plan");

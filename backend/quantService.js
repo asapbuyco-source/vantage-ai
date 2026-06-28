@@ -38,34 +38,39 @@ const PYTHON_CANDIDATES = [
 ];
 
 let _pythonBin = null;
+let _pythonBinPromise = null; // deduplicate concurrent resolution
 
 async function resolvePythonBin() {
     if (_pythonBin) return _pythonBin;
-    const probeEnv = {
-        PATH: [
-            '/nix/var/nix/profiles/default/bin',
-            '/root/.nix-profile/bin',
-            '/usr/local/bin',
-            '/usr/bin',
-            '/bin',
-            process.env.PATH || '',
-        ].join(':'),
-    };
-    for (const candidate of PYTHON_CANDIDATES) {
-        try {
-            const result = spawnSync(candidate, ['--version'], { encoding: 'utf8', timeout: 3000, env: probeEnv });
-            if (result.status === 0) {
-                const ver = (result.stdout || result.stderr || '').trim();
-                logger.info(`[QuantService] ✅ Python binary resolved: ${candidate} (${ver})`);
-                _pythonBin = candidate;
-                return _pythonBin;
-            }
-        } catch (_) { /* not available */ }
-    }
-    const pathEnv = process.env.PATH || '(not set)';
-    logger.error(`[QuantService] ❌ No Python binary found. PATH = ${pathEnv}`);
-    _pythonBin = 'python3'; // surface a clear ENOENT at spawn time
-    return _pythonBin;
+    if (_pythonBinPromise) return _pythonBinPromise;
+    _pythonBinPromise = (async () => {
+        const probeEnv = {
+            PATH: [
+                '/nix/var/nix/profiles/default/bin',
+                '/root/.nix-profile/bin',
+                '/usr/local/bin',
+                '/usr/bin',
+                '/bin',
+                process.env.PATH || '',
+            ].join(':'),
+        };
+        for (const candidate of PYTHON_CANDIDATES) {
+            try {
+                const result = spawnSync(candidate, ['--version'], { encoding: 'utf8', timeout: 3000, env: probeEnv });
+                if (result.status === 0) {
+                    const ver = (result.stdout || result.stderr || '').trim();
+                    logger.info(`[QuantService] Python binary resolved: ${candidate} (${ver})`);
+                    _pythonBin = candidate;
+                    return _pythonBin;
+                }
+            } catch (_) { /* not available */ }
+        }
+        const pathEnv = process.env.PATH || '(not set)';
+        logger.error(`[QuantService] No Python binary found. PATH = ${pathEnv}`);
+        _pythonBin = 'python3'; // surface a clear ENOENT at spawn time
+        return _pythonBin;
+    })();
+    return _pythonBinPromise;
 }
 
 // ── Env forward to Python process (scoped whitelist) ─────────────────────────
@@ -331,7 +336,7 @@ export const runQuantGrading = async (dateStr = null) => {
             total,
         };
     } catch (err) {
-        console.error(`[QuantService] Grading error: ${err.message}`);
+        logger.error(`[QuantService] Grading error: ${err.message}`);
         return { status: 'error', error: err.message };
     }
 };
