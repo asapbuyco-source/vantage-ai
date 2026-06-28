@@ -31,6 +31,19 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 // SENTRY & STRUCTURED LOGGING SETUP
 // ══════════════════════════════════════════════════════════════════════
 
+// Initialize Pino structured logger
+const logger = pino({
+    level: process.env.LOG_LEVEL || 'info',
+    transport: process.env.NODE_ENV === 'development'
+        ? { target: 'pino-pretty', options: { colorize: true } }
+        : undefined,
+    serializers: {
+        error: pino.stdSerializers.err,
+        req: pino.stdSerializers.req,
+        res: pino.stdSerializers.res,
+    }
+});
+
 // Initialize Sentry for error tracking (if SENTRY_DSN is provided)
 const SENTRY_DSN = process.env.SENTRY_DSN;
 if (SENTRY_DSN) {
@@ -49,19 +62,6 @@ if (SENTRY_DSN) {
 } else {
     logger.warn('SENTRY_DSN not set — error tracking disabled');
 }
-
-// Initialize Pino structured logger
-const logger = pino({
-    level: process.env.LOG_LEVEL || 'info',
-    transport: process.env.NODE_ENV === 'development'
-        ? { target: 'pino-pretty', options: { colorize: true } }
-        : undefined,
-    serializers: {
-        error: pino.stdSerializers.err,
-        req: pino.stdSerializers.req,
-        res: pino.stdSerializers.res,
-    }
-});
 
 // Log startup
 logger.info({ env: process.env.NODE_ENV }, '[Server] Starting Vantage AI backend');
