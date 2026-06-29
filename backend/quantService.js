@@ -27,6 +27,175 @@ const logger = pino({
         : undefined,
 });
 
+// ── AI Analysis via Groq (Llama models) ─────────────────────────────────────
+async function enrichWithAIAnalysis(predictions) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+        logger.warn('[QuantService] GROQ_API_KEY not set, skipping AI analysis');
+        return predictions;
+    }
+
+    const GROQ_MODEL = 'llama-3.1-8b-instant';
+    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    async function callGroq(messages, temperature = 0.15) {
+        const response = await fetch(GROQ_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: GROQ_MODEL,
+                messages,
+                temperature,
+                max_tokens: 150
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Groq API error: ${response.status} - ${err}`);
+        }
+
+        const data = await response.json();
+        return data.choices?.[0]?.message?.content?.trim() || '';
+    }
+
+    const enriched = [];
+    for (const pred of predictions) {
+        const prompt = `Match: ${pred.home_team} vs ${pred.away_team} (${pred.league})
+Pick: ${pred.bet_type} | Model probability: ${(pred.calibrated_probability || pred.probability * 100).toFixed(1)}% | EV: ${(pred.expected_value * 100).toFixed(1)}%
+Home form: ${pred.home_form || 'N/A'} | Away form: ${pred.away_form || 'N/A'}
+Home xG: ${pred.expected_goals_home?.toFixed(2) || 'N/A'} | Away xG: ${pred.expected_goals_away?.toFixed(2) || 'N/A'}
+
+Write a 2-sentence professional betting rationale for this pick.
+Be specific (use team names and stats). Tone: confident but measured.
+End with the key risk factor. Max 60 words.`;
+
+        try {
+            const analysis = await callGroq([{ role: 'user', content: prompt }]);
+            enriched.push({ ...pred, analysis_en: analysis });
+
+            // Translate to French
+            try {
+                const frPrompt = `Translate to French, keep all numbers and team names exactly as-is:\n\n${analysis}`;
+                const frAnalysis = await callGroq([{ role: 'user', content: frPrompt }], 0.1);
+                enriched[enriched.length - 1].analysis_fr = frAnalysis;
+            } catch (frErr) {
+                logger.warn(`[QuantService] French translation failed for ${pred.fixture_id}: ${frErr.message}`);
+                enriched[enriched.length - 1].analysis_fr = enriched[enriched.length - 1].analysis_en;
+            }
+
+            logger.info(`[QuantService] ✅ AI analysis for ${pred.fixture_id}: ${pred.home_team} vs ${pred.away_team}`);
+        } catch (pickErr) {
+            logger.warn(`[QuantService] AI analysis failed for ${pred.fixture_id}: ${pickErr.message}`);
+            enriched.push(pred);
+        }
+    }
+return enriched;
+}
+
+// ── AI League Radar ───────────────────────────────────────────────────────────
+async function generateLeagueRadar(predictions) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey || predictions.length === 0) return null;
+
+    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    try {
+        const leagueStats = {};
+        for (const pred of predictions) {
+            const league = pred.league || 'Unknown';
+            if (!leagueStats[league]) leagueStats[league] = { name: league, picks: [], totalEv: 0, highValueCount: 0 };
+            leagueStats[league].picks.push(pred);
+            leagueStats[league].totalEv += (pred.expected_value || 0) * 100;
+            if ((pred.expected_value || 0) >= 0.06) leagueStats[league].highValueCount++;
+        }
+
+        const sortedLeagues = Object.values(leagueStats)
+            .map(l => ({ ...l, avgEv: l.totalEv / l.picks.length }))
+            .sort((a, b) => b.avgEv - a.avgEv)
+            .slice(0, 5);
+
+        const leagueSummary = sortedLeagues.map(l => ({ name: l.name, picks: l.picks.length, avgEv: l.avgEv.toFixed(1), highValue: l.highValueCount }));
+
+        const prompt = `You are a betting analyst. Based on this data, give a 3-sentence summary of the best leagues for betting today:\n\n${JSON.stringify(leagueSummary, null, 2)}\n\nFocus on: Which leagues have the most value? What's the best strategy today? Keep it concise and actionable. Max 60 words.`;
+
+        const response = await fetch(GROQ_URL, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 100 })
+        });
+
+        if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+        const data = await response.json();
+        return { leagues: leagueSummary, insight: data.choices?.[0]?.message?.content?.trim() || '', generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[QuantService] League Radar failed: ${e.message}`);
+        return null;
+    }
+}
+
+// ── AI Acca Copilot ───────────────────────────────────────────────────────────
+async function generateAccaCopilot(predictions) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey || predictions.length === 0) return null;
+
+    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    try {
+        const vaultPicks = predictions.filter(p => p.vault_eligible && p.odds > 0).sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0)).slice(0, 10);
+        if (vaultPicks.length < 2) return null;
+
+        const picksSummary = vaultPicks.map(p => ({ match: `${p.home_team} vs ${p.away_team}`, pick: p.bet_type, odds: p.odds, ev: ((p.expected_value || 0) * 100).toFixed(1) }));
+
+        const prompt = `You are an accumulator betting expert. From these picks, suggest 2 accumulator combinations:\n\n${JSON.stringify(picksSummary, null, 2)}\n\nRules:\n- Each acca should have 2-4 legs\n- Combined odds should be reasonable (2.0 - 10.0)\n- Mix different leagues if possible\n- Explain why this combo works\n\nOutput format:\n**[Acca 1: Name]** (2-4 legs)\nLeg 1: Team A - Pick @ Odds\nCombined Odds: X.XX\n\nBe concise. Total response under 100 words.`;
+
+        const response = await fetch(GROQ_URL, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 200 })
+        });
+
+        if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+        const data = await response.json();
+        return { suggestions: data.choices?.[0]?.message?.content?.trim() || '', picks: picksSummary, generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[QuantService] Acca Copilot failed: ${e.message}`);
+        return null;
+    }
+}
+
+// ── AI Daily Tip ───────────────────────────────────────────────────────────────
+async function generateDailyTip(predictions) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey || predictions.length === 0) return null;
+
+    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+    try {
+        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0).sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0))[0];
+        if (!bestPick) return null;
+
+        const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."`;
+
+        const response = await fetch(GROQ_URL, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.3, max_tokens: 50 })
+        });
+
+        if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+        const data = await response.json();
+        const tip = data.choices?.[0]?.message?.content?.trim() || '';
+        return { tip, match: `${bestPick.home_team} vs ${bestPick.away_team}`, pick: bestPick.bet_type, odds: bestPick.odds, ev: ((bestPick.expected_value || 0) * 100).toFixed(1), generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[QuantService] Daily Tip failed: ${e.message}`);
+        return null;
+    }
+}
+
 // ── Async Python binary resolution (cached after first call) ─────────────────
 const PYTHON_CANDIDATES = [
     'python3', 'python',
@@ -256,6 +425,31 @@ export const runQuantPipeline = async (dateStr = null, dryRun = false) => {
                 const doc = await db.collection('quant_predictions').doc(effectiveDate).get();
                 if (doc.exists) {
                     predictions = doc.data()?.predictions || [];
+                }
+
+                // ── Workstream 4: AI Analysis ─────────────────────────────
+                if (predictions.length > 0) {
+                    logger.info(`[QuantService] 🤖 Starting AI analysis for ${predictions.length} predictions...`);
+                    const enrichedPredictions = await enrichWithAIAnalysis(predictions);
+
+                    // Update Firestore with enriched predictions
+                    if (JSON.stringify(enrichedPredictions) !== JSON.stringify(predictions)) {
+                        try {
+                            await db.collection('quant_predictions').doc(effectiveDate).set(
+                                { predictions: enrichedPredictions },
+                                { merge: true }
+                            );
+                            // Also update VIP document
+                            await db.collection('quant_vip').doc(effectiveDate).set(
+                                { predictions: enrichedPredictions },
+                                { merge: true }
+                            );
+                            predictions = enrichedPredictions;
+                            logger.info('[QuantService] ✅ AI analysis saved to Firestore');
+                        } catch (writeErr) {
+                            logger.warn(`[QuantService] Could not save Gemini analysis: ${writeErr.message}`);
+                        }
+                    }
                 }
             } catch (fsErr) {
                 logger.warn(`[QuantService] Could not read Firestore confirmation: ${fsErr.message}`);

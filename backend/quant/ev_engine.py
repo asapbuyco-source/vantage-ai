@@ -17,7 +17,7 @@ preventing the system from overstating its edge by 5-8%.
 import math
 from dataclasses import dataclass
 from typing import Optional
-from calibration_registry import get_calibration_factor, get_calibration_tier, FRAGILE_MARKETS, CALIBRATION_VERSION
+from calibration_registry import get_calibration_factor, get_calibration_tier, FRAGILE_MARKETS, CALIBRATION_VERSION, get_dynamic_calibration_factor
 from probability_engine import CombinedProbabilities
 from data_pipeline import OddsData
 
@@ -59,10 +59,15 @@ def _market_to_key(market: str) -> str:
     return _MARKET_KEY_MAP.get(market, market.lower().replace(" ", "_").replace("-", "_"))
 
 
-def calibrate_market_probability(raw_prob: float, market: str) -> tuple[float, float, str]:
+def calibrate_market_probability(
+    raw_prob: float,
+    market: str,
+    league_id: int | None = None,
+    month: int | None = None,
+) -> tuple[float, float, str]:
     """Return calibrated probability, factor, and trust tier for auditability."""
     key = _market_to_key(market)
-    factor = get_calibration_factor(key, 0.97)
+    factor = get_dynamic_calibration_factor(key, 0.97, league_id, month)
     calibrated = max(0.01, min(0.99, raw_prob * factor))
     tier = get_calibration_tier(key)
     return calibrated, factor, tier
@@ -251,11 +256,19 @@ def compute_line_movement(odds: 'OddsData') -> dict:
 def evaluate_all_markets(
     probs: 'CombinedProbabilities',
     odds: 'OddsData',
+    league_id: int | None = None,
+    month: int | None = None,
 ) -> list[ValueBet]:
     """
     Evaluate all available markets and return all ValueBet objects.
     Uses devigged implied probabilities for market comparison.
     Skips DC/DNB markets unless dedicated odds are available.
+
+    Args:
+        probs: CombinedProbabilities from the model
+        odds: OddsData with current bookmaker odds
+        league_id: Optional league ID for league-aware calibration
+        month: Optional month (1-12) for season-phase calibration
     """
     results: list[ValueBet] = []
 
@@ -307,7 +320,7 @@ def evaluate_all_markets(
         raw_model_prob = getattr(probs, prob_attr, None)
         if raw_model_prob is None:
             continue
-        model_prob, calibration_factor, calibration_tier = calibrate_market_probability(raw_model_prob, market)
+        model_prob, calibration_factor, calibration_tier = calibrate_market_probability(raw_model_prob, market, league_id, month)
 
         odds_attr = MARKET_TO_ODDS_FIELD.get(market, "")
         market_odds = getattr(odds, odds_attr, 0.0) if odds_attr else 0.0

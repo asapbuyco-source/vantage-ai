@@ -15,7 +15,7 @@ import OpenAI from 'openai';
 import sanitizeHtml from 'sanitize-html';
 import jwt from 'jsonwebtoken';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
-import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions } from './backend/scheduler.js';
+import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
 import { sendTelegramTestMessage } from './backend/telegramService.js';
 import { requireFirebaseUser } from './backend/authMiddleware.js';
 import { assertValidPlan, inferPlanFromAmount } from './backend/paymentPlans.js';
@@ -287,6 +287,137 @@ app.post('/api/gemini/generate', adminAuth, geminiLimiter, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// AI FEATURES ENDPOINT (League Radar, Acca Copilot, Daily Tip)
+// ══════════════════════════════════════════════════════════════════════
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.1-8b-instant';
+
+async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
+    if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
+    const response = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: GROQ_MODEL, messages, temperature, max_tokens: maxTokens })
+    });
+    if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content?.trim() || '';
+}
+
+async function generateLeagueRadar(predictions) {
+    if (!predictions || predictions.length === 0) return null;
+    try {
+        const leagueStats = {};
+        for (const pred of predictions) {
+            const league = pred.league || 'Unknown';
+            if (!leagueStats[league]) leagueStats[league] = { name: league, picks: [], totalEv: 0, highValueCount: 0 };
+            leagueStats[league].picks.push(pred);
+            leagueStats[league].totalEv += (pred.expected_value || 0) * 100;
+            if ((pred.expected_value || 0) >= 0.06) leagueStats[league].highValueCount++;
+        }
+        const sortedLeagues = Object.values(leagueStats)
+            .map(l => ({ ...l, avgEv: l.totalEv / l.picks.length }))
+            .sort((a, b) => b.avgEv - a.avgEv)
+            .slice(0, 5);
+        const leagueSummary = sortedLeagues.map(l => ({ name: l.name, picks: l.picks.length, avgEv: l.avgEv.toFixed(1), highValue: l.highValueCount }));
+        const prompt = `You are a betting analyst. Based on this data, give a 3-sentence summary of the best leagues for betting today:\n\n${JSON.stringify(leagueSummary, null, 2)}\n\nFocus on: Which leagues have the most value? What's the best strategy today? Keep it concise and actionable. Max 60 words.`;
+        const insight = await callGroq([{ role: 'user', content: prompt }], 0.2, 100);
+        return { leagues: leagueSummary, insight, generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[AI] League Radar failed: ${e.message}`);
+        return null;
+    }
+}
+
+async function generateAccaCopilot(predictions) {
+    if (!predictions || predictions.length === 0) return null;
+    try {
+        const vaultPicks = predictions.filter(p => p.vault_eligible && p.odds > 0)
+            .sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0)).slice(0, 10);
+        if (vaultPicks.length < 2) return null;
+        const picksSummary = vaultPicks.map(p => ({ match: `${p.home_team} vs ${p.away_team}`, pick: p.bet_type, odds: p.odds, ev: ((p.expected_value || 0) * 100).toFixed(1) }));
+        const prompt = `You are an accumulator betting expert. From these picks, suggest 2 accumulator combinations:\n\n${JSON.stringify(picksSummary, null, 2)}\n\nRules:\n- Each acca should have 2-4 legs\n- Combined odds should be reasonable (2.0 - 10.0)\n- Mix different leagues if possible\n- Explain why this combo works\n\nOutput format:\n**[Acca 1]**\nLeg 1: Team A - Pick @ Odds\nCombined Odds: X.XX\n\nBe concise. Total response under 100 words.`;
+        const suggestions = await callGroq([{ role: 'user', content: prompt }], 0.2, 200);
+        return { suggestions, picks: picksSummary, generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[AI] Acca Copilot failed: ${e.message}`);
+        return null;
+    }
+}
+
+async function generateDailyTip(predictions) {
+    if (!predictions || predictions.length === 0) return null;
+    try {
+        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0)
+            .sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0))[0];
+        if (!bestPick) return null;
+        const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."`;
+        const tip = await callGroq([{ role: 'user', content: prompt }], 0.3, 50);
+        return { tip, match: `${bestPick.home_team} vs ${bestPick.away_team}`, pick: bestPick.bet_type, odds: bestPick.odds, ev: ((bestPick.expected_value || 0) * 100).toFixed(1), generatedAt: new Date().toISOString() };
+    } catch (e) {
+        logger.error(`[AI] Daily Tip failed: ${e.message}`);
+        return null;
+    }
+}
+
+app.post('/api/ai/features', async (req, res) => {
+    try {
+        const { predictions } = req.body;
+        const [leagueRadar, accaCopilot, dailyTip] = await Promise.all([
+            generateLeagueRadar(predictions),
+            generateAccaCopilot(predictions),
+            generateDailyTip(predictions)
+        ]);
+        res.json({ leagueRadar, accaCopilot, dailyTip });
+    } catch (error) {
+        logger.error({ error }, 'AI features error');
+        res.status(500).json({ error: 'Failed to generate AI features' });
+    }
+});
+
+app.post('/api/ai/ticket-explanation', async (req, res) => {
+    try {
+        const { ticket, stake, goal, risk } = req.body;
+        if (!ticket || ticket.length === 0) {
+            return res.status(400).json({ error: 'No ticket provided' });
+        }
+
+        const totalOdds = ticket.reduce((acc, m) => acc * (m.odds || 1), 1);
+        const combinedEv = ticket.reduce((acc, m) => acc + ((m.expected_value || 0) * 100), 0);
+
+        const leagues = [...new Set(ticket.map(m => m.league || 'Unknown'))];
+        const picks = ticket.map((m, i) => `Leg ${i + 1}: ${m.home_team || m.homeTeam} vs ${m.away_team || m.awayTeam} - ${m.bet_type || m.prediction} @ ${m.odds?.toFixed(2)} (EV: ${((m.expected_value || 0) * 100).toFixed(1)}%)`).join('\n');
+
+        const prompt = `You are an accumulator betting expert explaining a smart ticket to a user.
+
+Ticket Details:
+Stake: ${stake} FCFA
+Target: ${goal} FCFA
+Risk Level: ${risk}
+Combined Odds: ${totalOdds.toFixed(2)}
+Combined EV: ${combinedEv.toFixed(1)}%
+Leagues: ${leagues.join(', ')}
+
+${picks}
+
+Write a 2-3 sentence explanation of WHY this ticket was selected:
+- Why these picks work together
+- What makes it a good combination
+- Any risk factors
+
+Be encouraging but realistic. Keep it under 60 words. Max 50 words.`;
+
+        const explanation = await callGroq([{ role: 'user', content: prompt }], 0.2, 80);
+        res.json({ explanation, totalOdds: totalOdds.toFixed(2), combinedEv: combinedEv.toFixed(1) });
+    } catch (error) {
+        logger.error({ error }, 'Ticket explanation error');
+        res.status(500).json({ error: 'Failed to generate ticket explanation' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // ADMIN TRIGGER ENDPOINTS
 // ══════════════════════════════════════════════════════════════════════
 
@@ -431,6 +562,18 @@ app.post('/api/admin/telegram-test', adminAuth, async (req, res) => {
         logger.error({ error: e }, '[API] Telegram test error');
         Sentry.captureException(e);
         res.status(500).json({ error: 'Telegram test failed', details: e.message });
+    }
+});
+
+app.post('/api/admin/tip-of-day', adminAuth, async (req, res) => {
+    try {
+        logger.info('[API] Manual Tip of the Day Triggered via Admin');
+        const result = await triggerTipOfTheDay();
+        res.json(result);
+    } catch (e) {
+        logger.error({ error: e }, '[API] Tip of the Day error');
+        Sentry.captureException(e);
+        res.status(500).json({ error: 'Tip of the Day failed', details: e.message });
     }
 });
 

@@ -279,11 +279,13 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 rho=rho,
                 weights_override=weights_override,
                 league_tier=match.league_tier if hasattr(match, 'league_tier') else 2,
+                is_derby=is_derby,
             )
 
 
             # ── Evaluate ALL markets for this match (FIX: was undefined) ────
-            all_value_bets = evaluate_all_markets(probs, match.odds)
+            current_month = datetime.now().month
+            all_value_bets = evaluate_all_markets(probs, match.odds, match.league_id, current_month)
 
             # ── Apply risk filters to find approved value bets ──────────────
             approved_bets = filter_bets(all_value_bets, match.league_tier)

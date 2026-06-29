@@ -10,6 +10,7 @@ import {
     runLineupSyncer,
     runArbScanner
 } from './quantService.js';
+import { sendTipOfTheDayPush, generateDailyTipFromPredictions } from './pushService.js';
 
 const logger = pino({
     level: process.env.LOG_LEVEL || 'info',
@@ -168,6 +169,34 @@ export const triggerTelegramBroadcast = async () => {
     }
 };
 
+export const triggerTipOfTheDay = async () => {
+    logger.info('[Scheduler] Triggering Tip of the Day push...');
+    try {
+        const db = admin.firestore();
+        const todayKey = new Date().toISOString().split('T')[0];
+        
+        const snap = await db.collection('quant_predictions').doc(todayKey).get();
+        if (!snap.exists || !snap.data().predictions) {
+            logger.warn('[Scheduler] No predictions found for today');
+            return { status: 'error', error: 'No predictions found' };
+        }
+
+        const predictions = snap.data().predictions;
+        const tipData = await generateDailyTipFromPredictions(predictions);
+        
+        if (!tipData) {
+            return { status: 'error', error: 'Failed to generate tip' };
+        }
+
+        const result = await sendTipOfTheDayPush(tipData);
+        logger.info('[Scheduler] Tip of the Day push complete.', result);
+        return { status: 'success', ...result };
+    } catch (e) {
+        logger.error({ error: e }, '[Scheduler] Tip of the Day push error');
+        return { status: 'error', error: e.message };
+    }
+};
+
 export const triggerQuantPipeline = async (dateStr = null, dryRun = false) => {
     logger.info('[Scheduler] Triggering quant pipeline...');
     try {
@@ -286,6 +315,17 @@ export const initScheduler = () => {
     tasks.set('telegram', telegramTask);
     logger.info('📱 Telegram broadcast scheduled at 09:00 Lagos');
 
+    // Tip of the Day push at 08:00 Lagos time (after quant pipeline completes)
+    const tipTask = cron.schedule('0 8 * * *',
+        withLock('tip_of_day_push', 15, async () => {
+            logger.info('[Scheduler] Sending Tip of the Day push...');
+            await triggerTipOfTheDay();
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('tipOfDay', tipTask);
+    logger.info('💡 Tip of the Day push scheduled at 08:00 Lagos');
+
     // NOTE: Live momentum engine and player stats client have been disabled.
     // They consumed ~15,000+ API-Football credits/day running every 2-5 minutes,
     // leaving no quota for grading. Predictions and grading are the priority.
@@ -317,19 +357,21 @@ export const initScheduler = () => {
     logger.info('📋 Lineup sync scheduled at 11:00 Lagos');
 
     // Arb Scanner every 15 minutes (short TTL since it runs frequently)
-    const arbScannerTask = cron.schedule('*/15 * * * *',
-        withLock('arb_scanner', 14, async () => {
-            logger.info('[Scheduler] Running 15-minute Arb Scanner...');
-            try {
-                await runArbScanner();
-                logger.info('[Scheduler] Arb Scanner complete.');
-            } catch (e) {
-                logger.error({ error: e }, '[Scheduler] Arb Scanner error');
-            }
-        })
-    );
-    tasks.set('arbScanner', arbScannerTask);
-    logger.info('🔍 Arb Scanner scheduled every 15 minutes');
+    // DISABLED: The arb scanner has never found a prediction for the West African bookmaker market.
+    // Keeping the code on disk for future rebuild with custom scraper.
+    // const arbScannerTask = cron.schedule('*/15 * * * *',
+    //     withLock('arb_scanner', 14, async () => {
+    //         logger.info('[Scheduler] Running 15-minute Arb Scanner...');
+    //         try {
+    //             await runArbScanner();
+    //             logger.info('[Scheduler] Arb Scanner complete.');
+    //         } catch (e) {
+    //             logger.error({ error: e }, '[Scheduler] Arb Scanner error');
+    //         }
+    //     })
+    // );
+    // tasks.set('arbScanner', arbScannerTask);
+    // logger.info('🔍 Arb Scanner scheduled every 15 minutes');
 
     // Repair corrupted predictions at 23:30 Lagos time
     const repairTask = cron.schedule('30 23 * * *',

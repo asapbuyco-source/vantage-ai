@@ -468,6 +468,17 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
     except Exception as e:
         print(f"[Grading] Calibration failed (non-fatal): {e}", file=sys.stderr)
 
+    # Workstream 6: Auto-update calibration from grading results
+    try:
+        from calibration_registry import update_calibration_from_results
+        graded_preds = [p for p in predictions if p.get("status") in ("won", "lost", "void")]
+        if graded_preds:
+            calib_result = update_calibration_from_results(graded_preds)
+            if calib_result.get("markets_updated", 0) > 0:
+                print(f"[Grading] ✅ Auto-updated calibration for {calib_result['markets_updated']} markets")
+    except Exception as e:
+        print(f"[Grading] Calibration auto-update failed (non-fatal): {e}", file=sys.stderr)
+
     # FIX-2: Update Elo ratings from graded results
     try:
         from elo_rating import bulk_update_from_results

@@ -21,7 +21,9 @@ export const MatchDetails: React.FC = () => {
 
     const [match, setMatch] = useState<Match | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'prediction' | 'overview' | 'stats' | 'h2h' | 'lineup'>('prediction');
+    const [activeTab, setActiveTab] = useState<'prediction' | 'overview' | 'stats' | 'h2h' | 'lineup' | 'picks'>('prediction');
+    const [allMatchPicks, setAllMatchPicks] = useState<Match[]>([]);
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
     const [odds, setOdds] = useState<MatchOdds | null>(null);
     const [realH2H, setRealH2H] = useState<H2HRecord | null>(null);
@@ -35,24 +37,32 @@ export const MatchDetails: React.FC = () => {
         const foundMatch = [...predictions, ...rawFixtures].find(m => m.id === id);
         if (foundMatch) {
             setMatch(foundMatch);
+            // Find all predictions for the same fixture
+            const fixtureId = foundMatch.fixture_id || foundMatch.fixtureId;
+            const sameFixturePicks = predictions.filter(p =>
+                (p.fixture_id === fixtureId || p.fixtureId === fixtureId) && p.id !== foundMatch.id
+            );
+            setAllMatchPicks(sameFixturePicks);
         }
         setLoading(false);
     }, [id, predictions, rawFixtures]);
 
+    // Lazy load details only when tab changes (not on initial render)
     useEffect(() => {
         if (!match) return;
 
+        // Only load details if user navigates to a tab that needs them
+        const detailsTabs = ['overview', 'stats', 'h2h', 'lineup'];
+        if (!detailsTabs.includes(activeTab)) {
+            return;
+        }
+
         let isMounted = true;
-        setLoading(true);
-        setActiveTab('prediction');
-        setRealH2H(null);
-        setLineup(null);
-        setMatchStats(null);
-        setMatchFacts([]);
+        setIsLoadingDetails(true);
 
         const fetchDetails = async () => {
             try {
-                const fixtureId = Number(match.fixtureId || match.id) || 0;
+                const fixtureId = Number(match.fixtureId || match.fixture_id || match.id) || 0;
 
                 const [od, h2hData, lineupData, statsData, factsData] = await Promise.all([
                     fixtureId ? getLiveOddsFromDB(fixtureId) : null,
@@ -68,20 +78,16 @@ export const MatchDetails: React.FC = () => {
                     setLineup(lineupData);
                     setMatchStats(statsData);
                     setMatchFacts(factsData || []);
-                    setLoading(false);
+                    setIsLoadingDetails(false);
                 }
             } catch (e) {
                 console.error("Error fetching match details:", e);
-                if (isMounted) setLoading(false);
+                if (isMounted) setIsLoadingDetails(false);
             }
         };
 
-        fetchDetails();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [match]);
+fetchDetails();
+    }, [id, predictions, rawFixtures, activeTab]);
 
     const handleBack = () => {
         navigate(-1);
@@ -204,6 +210,7 @@ export const MatchDetails: React.FC = () => {
             <div className="flex px-4 pt-4 overflow-x-auto no-scrollbar border-b border-slate-200 dark:border-white/5 gap-2">
                 {[
                     { id: 'prediction', icon: Zap, label: language === 'fr' ? 'Prédiction' : 'Prediction' },
+                    { id: 'picks', icon: BarChart3, label: language === 'fr' ? 'Autres Paris' : 'More Picks' },
                     { id: 'overview', icon: Activity, label: language === 'fr' ? 'Aperçu' : 'Overview' },
                     { id: 'stats', icon: BarChart3, label: 'Stats' },
                     { id: 'h2h', icon: Target, label: 'H2H' },
@@ -220,6 +227,9 @@ export const MatchDetails: React.FC = () => {
                     >
                         <tab.icon size={16} />
                         {tab.label}
+                        {tab.id === 'picks' && allMatchPicks.length > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-vantage-cyan/20 text-vantage-cyan text-[10px] font-bold">{allMatchPicks.length}</span>
+                        )}
                     </button>
                 ))}
             </div>
@@ -346,10 +356,93 @@ export const MatchDetails: React.FC = () => {
                             </>
                         )}
 
+                        {/* PICKS TAB - More predictions for this match */}
+                        {activeTab === 'picks' && (
+                            <>
+                                {allMatchPicks.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
+                                        <div className="w-14 h-14 bg-slate-100 dark:bg-white/10 rounded-full flex items-center justify-center">
+                                            <BarChart3 size={24} className="text-gray-400" />
+                                        </div>
+                                        <h3 className="text-sm font-bold text-gray-500">
+                                            {language === 'fr' ? 'Aucun autre pari disponible' : 'No other predictions available'}
+                                        </h3>
+                                        <p className="text-xs text-gray-400">
+                                            {language === 'fr' ? "L'IA n'a identifié qu'un seul pari de valeur pour ce match." : "The AI has identified only one value bet for this match."}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                                                {language === 'fr' ? `+ ${allMatchPicks.length} autres paris` : `+ ${allMatchPicks.length} more picks`}
+                                            </h3>
+                                            <span className="text-[10px] text-gray-400">
+                                                {language === 'fr' ? "Triés par EV" : "Sorted by EV"}
+                                            </span>
+                                        </div>
+                                        {allMatchPicks
+                                            .sort((a, b) => ((b.expected_value || 0) - (a.expected_value || 0)))
+                                            .map((pick, idx) => {
+                                                const pickEv = (pick.expected_value || 0) * 100;
+                                                const pickConf = pick.confidence || ((pick.calibrated_probability || pick.probability || 0) * 100);
+                                                const pickOdds = pick.odds || 0;
+                                                const pickLabel = language === 'fr' ? (pick.prediction_fr || pick.prediction_en || pick.prediction) : (pick.prediction_en || pick.prediction);
+                                                const evColor = pickEv >= 10 ? 'text-emerald-400' : pickEv >= 5 ? 'text-yellow-400' : 'text-orange-400';
+
+                                                return (
+                                                    <div
+                                                        key={pick.id || idx}
+                                                        className="p-4 rounded-xl bg-white/5 dark:bg-white/5 border border-white/10 hover:border-vantage-cyan/30 transition-colors"
+                                                    >
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-gray-500 uppercase">
+                                                                {pick.category || 'value'}
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={`text-[10px] font-bold font-mono ${evColor}`}>
+                                                                    +{pickEv.toFixed(1)}% EV
+                                                                </span>
+                                                                {pick.vault_eligible && (
+                                                                    <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{pickLabel}</p>
+                                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                                    {language === 'fr' ? 'Confiance' : 'Confidence'}: {pickConf.toFixed(0)}%
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-lg font-black font-mono text-vantage-cyan">{pickOdds > 0 ? pickOdds.toFixed(2) : '—'}</p>
+                                                                <p className="text-[10px] text-gray-400">{pick.bet_type || ''}</p>
+                                                            </div>
+                                                        </div>
+                                                        {(pick as any).analysis_en && (
+                                                            <div className="mt-2 pt-2 border-t border-white/5">
+                                                                <p className="text-[10px] text-gray-400 leading-relaxed">
+                                                                    {(language === 'fr' ? (pick as any).analysis_fr : (pick as any).analysis_en)}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                )}
+                            </>
+                        )}
+
                         {/* OVERVIEW TAB */}
                         {activeTab === 'overview' && (
                             <>
-                                {(match.homeForm || match.awayForm) && (
+                                {isLoadingDetails ? (
+                                    <div className="flex items-center justify-center py-10">
+                                        <Loader2 className="animate-spin text-vantage-cyan" size={24} />
+                                    </div>
+                                ) : (
                                     <div className="space-y-4">
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
                                             <Activity size={12} /> {language === 'fr' ? 'État de Forme (5 Derniers)' : 'Form Guide (Last 5)'}

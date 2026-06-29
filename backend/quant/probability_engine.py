@@ -41,7 +41,25 @@ INTERNATIONAL_LEAGUE_IDS = {294, 3016, 3015, 3014, 3013, 3012, 3011, 3010, 3009,
 W_POISSON = 0.60  # Poisson score model (primary — strongest for goals markets)
 W_ELO     = 0.25  # Elo ratings (secondary — good for match outcomes)
 W_FORM    = 0.10  # Form model (10% — recency-weighted team performance)
-W_H2H     = 0.05  # FIX-3: Enabled H2H contribution (was 0.00)
+
+
+def get_adaptive_h2h_weight(h2h_total: int, is_derby: bool, h2h_home_wins: int = 0, h2h_away_wins: int = 0, h2h_draws: int = 0) -> float:
+    """
+    Adaptive H2H weighting based on match type and data quality.
+    Replaces the fixed W_H2H = 0.05 constant.
+
+    - Derby matches with rich H2H history: 12% (H2H is highly predictive)
+    - Many H2H meetings (8+): 8% (more data = more weight)
+    - Standard 3+ meetings: 5% baseline
+    - Insufficient data (<3): 5% (fallback)
+    """
+    if h2h_total < 3:
+        return 0.05  # baseline — insufficient data
+    if is_derby and h2h_total >= 5:
+        return 0.12  # derby with good history — H2H is highly predictive
+    if h2h_total >= 8:
+        return 0.08  # lots of H2H data — increase weight slightly
+    return 0.05  # default
 
 
 def _calibrate(raw: float, market_key: str, default: float = 0.92) -> float:
@@ -113,6 +131,7 @@ def compute_combined(
     weights_override: dict | None = None,
     league_tier: int = 2,
     league_id: int | None = None,
+    is_derby: bool = False,
 ) -> CombinedProbabilities:
     """
     Combine Poisson + Elo + Form + H2H into final probabilities.
@@ -138,16 +157,17 @@ def compute_combined(
         rho: Dixon-Coles rho for score correlation
         weights_override: dict of model weights (poisson, elo, form, h2h)
         league_tier: League tier (1=elite, 5=lower) for home advantage multiplier
+        is_derby: Whether this is a derby/rivalry match (increases H2H weight)
 
     Returns:
         CombinedProbabilities with all markets filled.
     """
-    
-    # Apply weights override if provided
+
+    # Apply weights override if provided (H2H is handled separately via adaptive weighting)
     w_poisson = weights_override.get('poisson', W_POISSON) if weights_override else W_POISSON
     w_elo = weights_override.get('elo', W_ELO) if weights_override else W_ELO
     w_form = weights_override.get('form', W_FORM) if weights_override else W_FORM
-    w_h2h = weights_override.get('h2h', W_H2H) if weights_override else W_H2H
+    # Note: w_h2h is set via get_adaptive_h2h_weight() below, not from weights_override
 
     W_SM = 0.10
     # FIX-1: SM (Sportmonks prediction) integration is disabled until data_pipeline
@@ -230,6 +250,8 @@ def compute_combined(
 
     # ── Model 4: H2H (Fix #5) ─────────────────────────────────────────────
     h2h_total = h2h_home_wins + h2h_away_wins + h2h_draws
+    # Workstream 5: Adaptive H2H weighting
+    w_h2h = get_adaptive_h2h_weight(h2h_total, is_derby, h2h_home_wins, h2h_away_wins, h2h_draws)
     if h2h_total >= 3:  # Only use H2H signal if sufficient samples
         h2h_p_home = h2h_home_wins / h2h_total
         h2h_p_draw = h2h_draws / h2h_total

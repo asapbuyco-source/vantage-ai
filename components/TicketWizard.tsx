@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Sparkles, TrendingUp, Target, ShieldCheck,
     Flame, RefreshCw, Check, ChevronRight,
-    Wallet, DollarSign, Wand2, Info
+    Wallet, DollarSign, Wand2, Info, BrainCircuit, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useData } from '../context/DataContext';
@@ -12,6 +12,8 @@ import { GlassCard } from './GlassCard';
 import { TeamLogo } from './TeamLogo';
 import { useAuth } from '../context/AuthContext';
 import { Match, NavigationTab } from '../types';
+
+const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
 
 interface TicketWizardProps {}
 
@@ -151,9 +153,11 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
         }
     }, [userProfile?.portfolioBankroll]);
     const [goal, setGoal] = useState<string>('5000');
-    const [risk, setRisk] = useState<RiskLevel>('med');
+const [risk, setRisk] = useState<RiskLevel>('med');
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedTicket, setGeneratedTicket] = useState<Match[] | null>(null);
+    const [ticketExplanation, setTicketExplanation] = useState<string | null>(null);
+    const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
 
     const allMatches = useMemo(
         () => [...predictions, ...basketballPredictions, ...cricketPredictions],
@@ -163,6 +167,7 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
     const generateTicket = () => {
         setIsGenerating(true);
         setGeneratedTicket(null);
+        setTicketExplanation(null);
 
         // Simulate AI "thinking"
         setTimeout(() => {
@@ -171,7 +176,36 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
             setGeneratedTicket(ticket);
             setIsGenerating(false);
             setStep(3);
+
+            // Fetch AI explanation for the ticket
+            if (ticket && ticket.length > 0) {
+                setIsLoadingExplanation(true);
+                fetchTicketExplanation(ticket);
+            }
         }, 1500);
+    };
+
+    const fetchTicketExplanation = async (ticket: Match[]) => {
+        try {
+            const response = await fetch(`${backendUrl}/api/ai/ticket-explanation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticket,
+                    stake: parseFloat(stake) || 1000,
+                    goal: parseFloat(goal) || 5000,
+                    risk
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setTicketExplanation(data.explanation);
+            }
+        } catch (e) {
+            console.warn('Failed to fetch ticket explanation:', e);
+        } finally {
+            setIsLoadingExplanation(false);
+        }
     };
 
     const findBestCombination = (matches: Match[], target: number, riskLevel: RiskLevel): Match[] | null => {
@@ -405,9 +439,28 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
                                         </div>
                                     </div>
 
+                                    {/* AI Explanation */}
+                                    {(ticketExplanation || isLoadingExplanation) && (
+                                        <div className="mx-4 mb-2">
+                                            <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <BrainCircuit size={12} className="text-cyan-500" />
+                                                    <span className="text-[10px] font-bold text-cyan-500 uppercase">AI Insight</span>
+                                                    {isLoadingExplanation && <Loader2 size={10} className="animate-spin text-cyan-500" />}
+                                                </div>
+                                                {ticketExplanation && (
+                                                    <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                                                        {ticketExplanation}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     <div className="p-4 space-y-3">
-                                        {generatedTicket.map((match) => (
+                                        {generatedTicket.map((match, idx) => (
                                             <div key={match.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                                <span className="text-[10px] font-black text-gray-300 dark:text-gray-600 shrink-0">{idx + 1}</span>
                                                 <div className="flex -space-x-2 shrink-0">
                                                     <TeamLogo src={match.homeTeamLogo} teamName={match.homeTeam} className="w-8 h-8 rounded-full border-2 border-white dark:border-vantage-bg shadow-sm" />
                                                     <TeamLogo src={match.awayTeamLogo} teamName={match.awayTeam} className="w-8 h-8 rounded-full border-2 border-white dark:border-vantage-bg shadow-sm" />
@@ -421,6 +474,9 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
                                                         <span className="text-[10px] font-black text-vantage-purple uppercase">{match.prediction}</span>
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-gray-500 font-bold font-mono">@{match.odds.toFixed(2)}</span>
                                                     </div>
+                                                    {(match as any).analysis_en && (
+                                                        <p className="text-[9px] text-gray-400 mt-1 line-clamp-2">{(match as any).analysis_en}</p>
+                                                    )}
                                                 </div>
                                                 <button
                                                     onClick={() => toggleSavedPick({

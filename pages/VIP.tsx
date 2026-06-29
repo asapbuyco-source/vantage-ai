@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Star, ShieldCheck, CheckCircle2, Loader2, Zap, Flame, Copy, Check, Clock, User, ArrowRight, ShieldAlert, BrainCircuit, Layers, RefreshCw, Crown, Sparkles, TrendingUp, BarChart2, ChevronDown, ChevronUp, Calendar, Activity, Pencil, Banknote, Radio } from 'lucide-react';
+import { Lock, Star, ShieldCheck, CheckCircle2, Loader2, Zap, Flame, Copy, Check, Clock, User, ArrowRight, ShieldAlert, BrainCircuit, Layers, RefreshCw, Crown, Sparkles, TrendingUp, BarChart2, ChevronDown, ChevronUp, ChevronRight, Calendar, Activity, Pencil, Banknote, Radio, LayoutGrid, Radar } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { useAppContext } from '../context/AppContext';
 import { useData } from '../context/DataContext';
@@ -18,10 +18,11 @@ import { PortfolioOnboarding } from '../components/PortfolioOnboarding';
 import { Sparkline } from '../components/Sparkline';
 import { Screener } from '../components/Screener';
 import { MatchCardAlpha } from '../components/MatchCardAlpha';
-import { ArbFinder } from './ArbFinder';
 
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+
+const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
 
 // ── Currency detection helper ──────────────────────────────────────
 const CURRENCY_MAP: Record<string, { symbol: string; rate: number; label: string }> = {
@@ -66,7 +67,9 @@ export const VIP: React.FC<VIPProps> = () => {
     });
   }, []);
 
-  const [activeVipTab, setActiveVipTab] = useState<'predictions' | 'vault' | 'arbs'>('predictions');
+  const [activeVipTab, setActiveVipTab] = useState<'predictions' | 'vault' | 'accumulators'>('predictions');
+  const [hasSeenPicksSection, setHasSeenPicksSection] = useState(false);
+  const [showPicksHighlight, setShowPicksHighlight] = useState(false);
   const [activeSport, setActiveSport] = useState<'football' | 'basketball' | 'cricket'>('football');
   const activeAltPredictions = activeSport === 'cricket' ? cricketPredictions : basketballPredictions;
   const activeAltSportLabel = activeSport === 'cricket' ? 'Cricket' : 'Basketball';
@@ -100,6 +103,10 @@ export const VIP: React.FC<VIPProps> = () => {
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showPortfolioEdit, setShowPortfolioEdit] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
+  const [leagueRadar, setLeagueRadar] = useState<any>(null);
+  const [accaCopilot, setAccaCopilot] = useState<any>(null);
+  const [dailyTip, setDailyTip] = useState<any>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   // Sort predictions by rank priority (same logic as before but now uses DataContext data)
   const quantPredictions = useMemo(() => {
     const sorted = [...predictions].map(normalizeQuantPrediction) as Match[];
@@ -107,6 +114,16 @@ export const VIP: React.FC<VIPProps> = () => {
     sorted.sort((a, b) => (rankPriority[b.value_rank ?? ''] || 0) - (rankPriority[a.value_rank ?? ''] || 0));
     return sorted;
   }, [predictions]);
+
+  // Auto-expand Model Picks on first visit to predictions tab
+  useEffect(() => {
+    if (activeVipTab === 'predictions' && !hasSeenPicksSection && quantPredictions.length > 0) {
+      setQuantExpanded(true);
+      setHasSeenPicksSection(true);
+      setShowPicksHighlight(true);
+      setTimeout(() => setShowPicksHighlight(false), 2500);
+    }
+  }, [activeVipTab, hasSeenPicksSection, quantPredictions.length]);
 
   // Load accumulators from DataContext accumulators or fallback to Firestore
   useEffect(() => {
@@ -123,6 +140,34 @@ export const VIP: React.FC<VIPProps> = () => {
       }
     }).catch(() => {}).finally(() => setQuantLoading(false));
   }, [isUnlocked]);
+
+  // Fetch AI-powered features when predictions are loaded
+  useEffect(() => {
+    if (!isUnlocked || quantPredictions.length === 0) return;
+    
+    const fetchAIFeatures = async () => {
+      setAiLoading(true);
+      try {
+        const response = await fetch(`${backendUrl}/api/ai/features`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ predictions: quantPredictions })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setLeagueRadar(data.leagueRadar);
+          setAccaCopilot(data.accaCopilot);
+          setDailyTip(data.dailyTip);
+        }
+      } catch (e) {
+        console.warn('AI features fetch failed:', e);
+      } finally {
+        setAiLoading(false);
+      }
+    };
+
+    fetchAIFeatures();
+  }, [isUnlocked, quantPredictions.length, backendUrl]);
 
   const BET_TYPE_FILTERS = ['All', 'Home Win', 'Away Win', 'Over 2.5 Goals', 'BTTS', 'Double Chance (1X)', 'Double Chance (X2)'];
   const BET_TYPE_LABELS: Record<string, string> = {
@@ -531,10 +576,10 @@ export const VIP: React.FC<VIPProps> = () => {
           </button>
 
           <button
-            onClick={() => setActiveVipTab('arbs')}
-            className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${activeVipTab === 'arbs' ? 'bg-white dark:bg-[#1a1d26] shadow-sm text-yellow-500' : 'text-gray-500 hover:text-gray-300'}`}
+            onClick={() => setActiveVipTab('accumulators')}
+            className={`flex-1 py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-colors flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${activeVipTab === 'accumulators' ? 'bg-white dark:bg-[#1a1d26] shadow-sm text-purple-500' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            <Zap size={16} /> <span>Arbs</span>
+            <LayoutGrid size={16} /> <span>Accumulators</span>
           </button>
         </div>
 
@@ -547,17 +592,102 @@ export const VIP: React.FC<VIPProps> = () => {
           </div>
         )}
 
-        {/* ── ARBS SECTION ── */}
-        {activeVipTab === 'arbs' && (
+        {/* ── ACCUMULATORS SECTION ── */}
+        {activeVipTab === 'accumulators' && (
           <div className="mb-6">
-            <ArbFinder />
+            <div className="mb-4">
+              <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2 text-purple-500">
+                <LayoutGrid size={16} />
+                <span>Accumulators</span>
+                <span className="text-[9px] font-normal text-gray-500 ml-1">
+                  {(() => {
+                    let total = 0;
+                    Object.values(quantAccumulators).forEach((arr: any[]) => { total += (arr as any[]).length; });
+                    return `${total} slips across ${Object.keys(quantAccumulators).filter(k => quantAccumulators[k]?.length > 0).length} tiers`;
+                  })()}
+                </span>
+              </h3>
+            </div>
+            {!quantLoading && Object.keys(quantAccumulators).length === 0 ? (
+              <div className="text-center py-10 rounded-2xl border-2 border-dashed border-purple-500/20 bg-purple-500/5">
+                <LayoutGrid size={28} className="mx-auto mb-2 text-purple-500/40" />
+                <p className="text-sm font-medium text-gray-500">No accumulators generated today</p>
+                <p className="text-xs text-gray-400 mt-1">Check back after 19:00 Lagos time</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: 'baseline', icon: '🛡️', label: 'Baseline', color: 'emerald', desc: language === 'fr' ? ' safest picks' : 'Safest combinations' },
+                  { key: 'alpha_edge', icon: '⚡', label: 'Alpha Edge', color: 'cyan', desc: language === 'fr' ? 'Balanced risk-reward' : 'Balanced risk-reward' },
+                  { key: 'syndicate', icon: '🎯', label: 'Syndicate', color: 'yellow', desc: language === 'fr' ? 'Medium risk' : 'Medium risk' },
+                  { key: 'variance', icon: '🚀', label: 'Variance', color: 'purple', desc: language === 'fr' ? 'Higher odds' : 'Higher odds' },
+                ].map(tier => {
+                  const tierData = quantAccumulators[tier.key];
+                  if (!tierData || tierData.length === 0) return null;
+                  const colorMap: Record<string, { border: string; bg: string; text: string; icon: string }> = {
+                    emerald: { border: 'border-emerald-500/30', bg: 'bg-emerald-500/5', text: 'text-emerald-500', icon: '🛡️' },
+                    cyan: { border: 'border-cyan-500/30', bg: 'bg-cyan-500/5', text: 'text-cyan-500', icon: '⚡' },
+                    yellow: { border: 'border-yellow-500/30', bg: 'bg-yellow-500/5', text: 'text-yellow-500', icon: '🎯' },
+                    purple: { border: 'border-purple-500/30', bg: 'bg-purple-500/5', text: 'text-purple-500', icon: '🚀' },
+                  };
+                  const cfg = colorMap[tier.color];
+                  const bestSlip = tierData[0];
+
+                  return (
+                    <motion.button
+                      key={tier.key}
+                      onClick={() => openAccumulator(tier.key)}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      whileTap={{ scale: 0.98 }}
+                      className={`p-5 rounded-2xl border-2 ${cfg.border} ${cfg.bg} text-left hover:scale-[1.02] transition-all`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{tier.icon}</span>
+                          <div>
+                            <p className={`text-lg font-black ${cfg.text}`}>{tier.label}</p>
+                            <p className="text-[10px] text-gray-400">{tier.desc}</p>
+                          </div>
+                        </div>
+                        <div className={`px-3 py-1.5 rounded-full ${cfg.bg} border ${cfg.border}`}>
+                          <span className={`text-sm font-black font-mono ${cfg.text}`}>{bestSlip.combined_odds?.toFixed(2) || '—'}x</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">{language === 'fr' ? 'Meilleur slip' : 'Top Slip'}</p>
+                        {bestSlip.matches?.slice(0, 3).map((m: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-gray-400">{i + 1}.</span>
+                            <span className="font-bold text-gray-700 dark:text-gray-200 truncate">{m.homeTeam || m.home_team}</span>
+                            <span className="text-gray-400">vs</span>
+                            <span className="font-bold text-gray-700 dark:text-gray-200 truncate">{m.awayTeam || m.away_team}</span>
+                          </div>
+                        ))}
+                        {(bestSlip.matches?.length || 0) > 3 && (
+                          <p className="text-[10px] text-gray-400">+{(bestSlip.matches?.length || 0) - 3} more picks</p>
+                        )}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
+                        <span className="text-[10px] text-gray-400">{tierData.length} {language === 'fr' ? 'slips disponibles' : 'slips available'}</span>
+                        <span className={`text-[10px] font-bold ${cfg.text} flex items-center gap-1`}>
+                          {language === 'fr' ? 'Voir tout' : 'View all'} <ChevronRight size={12} />
+                        </span>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
 
         {/* ── VANTAGE MODEL PICKS SECTION ──────────────────────────────────────── */}
         {activeVipTab === 'predictions' && (
-        <div className="mb-6 animate-in slide-in-from-left duration-300">
+        <div className={`mb-6 animate-in slide-in-from-left duration-300 ${showPicksHighlight ? 'ring-2 ring-cyan-400 ring-opacity-50 rounded-2xl' : ''}`}>
+          {/* Sticky Header */}
+          <div className={`${quantExpanded ? 'sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm -mx-2 px-2 py-2 rounded-xl' : ''}`}>
           {/* Header */}
           <button
             onClick={() => setQuantExpanded(v => !v)}
@@ -567,12 +697,22 @@ export const VIP: React.FC<VIPProps> = () => {
               <BarChart2 size={16} className="text-emerald-500" />
               <span>Model Picks</span>
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 ml-1">VANTAGE AI</span>
+              {!quantExpanded && quantPredictions.length > 0 && (
+                <motion.span
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 0.6, repeat: Infinity }}
+                  className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-500 text-white ml-1"
+                >
+                  NEW
+                </motion.span>
+              )}
               {quantPredictions.length > 0 && (
                 <span className="text-[10px] font-normal text-gray-500">{quantPredictions.length} bets</span>
               )}
             </h3>
             {quantExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
           </button>
+          </div>
 
           <AnimatePresence>
             {quantExpanded && (
@@ -611,6 +751,56 @@ export const VIP: React.FC<VIPProps> = () => {
                     🏏 Cricket
                   </button>
                 </div>
+
+                {/* ── AI Quick Stats (Football only) ── */}
+                {activeSport === 'football' && (dailyTip || leagueRadar || accaCopilot) && (
+                  <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+                    {dailyTip && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 min-w-[200px]"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Sparkles size={10} className="text-amber-500" />
+                          <span className="text-[9px] font-bold text-amber-500">TIP</span>
+                        </div>
+                        <p className="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate">{dailyTip.tip}</p>
+                      </motion.div>
+                    )}
+                    {leagueRadar && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-vantage-cyan/10 border border-vantage-cyan/20 min-w-[160px]"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Radar size={10} className="text-vantage-cyan" />
+                          <span className="text-[9px] font-bold text-vantage-cyan">RADAR</span>
+                        </div>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300">Top: {leagueRadar.leagues?.[0]?.name || 'N/A'} {leagueRadar.leagues?.[0]?.avgEv}% EV</p>
+                      </motion.div>
+                    )}
+                    {accaCopilot && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="shrink-0 px-3 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 min-w-[140px]"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Layers size={10} className="text-purple-500" />
+                          <span className="text-[9px] font-bold text-purple-500">ACCA</span>
+                        </div>
+                        <p className="text-[10px] text-gray-600 dark:text-gray-300">Tap cards ↓</p>
+                      </motion.div>
+                    )}
+                    {aiLoading && (
+                      <div className="shrink-0 flex items-center gap-1.5 px-3 py-2">
+                        <Loader2 size={12} className="animate-spin text-vantage-cyan" />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Basketball Feed ── */}
                 {activeSport !== 'football' && (

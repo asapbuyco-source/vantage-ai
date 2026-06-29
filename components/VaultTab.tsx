@@ -363,31 +363,34 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
 
     return (
         <div className="space-y-4 animate-in fade-in duration-300">
+            {/* Header */}
             <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                        <TrendingUp size={20} className="text-emerald-400" />
+                <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 flex items-center justify-center">
+                        <TrendingUp size={22} className="text-emerald-400" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-bold text-white">
-                            {language === 'fr' ? `Jour ${currentDay}` : `Day ${currentDay}`}
+                        <h3 className="text-base font-black text-white flex items-center gap-2">
+                            {language === 'fr' ? `Vault - Jour ${currentDay}` : `Vault - Day ${currentDay}`}
+                            <span className="text-[10px] font-mono text-gray-500 font-normal">{todayKey}</span>
                         </h3>
-                        <span className="text-[10px] text-gray-500 font-mono">{todayKey}</span>
+                        <p className="text-[10px] text-gray-400">
+                            {vaultDay?.picks.length || 0} {language === 'fr' ? 'picks actifs' : 'active picks'}
+                        </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => setShowInfo(!showInfo)}
-                        className={`text-[10px] font-bold flex items-center gap-1 transition-colors ${showInfo ? 'text-amber-500' : 'text-gray-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl transition-all ${showInfo ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                     >
-                        <Info size={14} /> {language === 'fr' ? 'Règles' : 'Rules'}
+                        <Info size={16} />
                     </button>
                     <button
                         onClick={() => setShowHistory(!showHistory)}
-                        className="text-[10px] font-bold text-gray-400 hover:text-white flex items-center gap-1 ml-2"
+                        className={`p-2 rounded-xl transition-all ${showHistory ? 'bg-vantage-cyan/20 text-vantage-cyan' : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'}`}
                     >
-                        <Calendar size={12} /> {showHistory ? 'Hide' : 'History'}
-                        {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        <Calendar size={16} />
                     </button>
                 </div>
             </div>
@@ -400,43 +403,51 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden"
                     >
-                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 flex items-start gap-2 mb-2">
-                            <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
-                            <div>
-                                <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide">
-                                    {language === 'fr' ? 'RÈGLE CRITIQUE : NE PAS COMBINER' : 'CRITICAL RULE: DO NOT ACCUMULATE'}
-                                </h4>
-                                <p className="text-[11px] text-amber-500/80 leading-relaxed mt-1">
-                                    {language === 'fr' 
-                                        ? 'Jouez chaque pick du Vault comme un pari SIMPLE. La taille de mise Kelly (Stake) est calculée pour des événements individuels. Combiner ces paris augmente fortement la variance et peut annuler l\'avantage du modèle.' 
-                                        : 'Play every Vault pick as a SINGLE bet. The Kelly stake size is calculated for individual events. Combining these picks sharply increases variance and can erase the model edge.'}
-                                </p>
+                        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/5 border border-amber-500/30 rounded-2xl p-4">
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                                    <AlertTriangle size={18} className="text-amber-400" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-amber-400 uppercase tracking-wide mb-1">
+                                        {language === 'fr' ? '⚠️ RÈGLE CRITIQUE' : '⚠️ CRITICAL RULE'}
+                                    </h4>
+                                    <p className="text-[11px] text-amber-500/90 leading-relaxed">
+                                        {language === 'fr' 
+                                            ? 'Jouez chaque pick du Vault comme un pari SIMPLE. La taille de mise Kelly est calculée pour des événements individuels. Combiner ces paris augmente la variance.' 
+                                            : 'Play every Vault pick as a SINGLE bet. Kelly stake size is calculated for individual events. Combining picks increases variance and erodes model edge.'}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-                <div className="flex items-start justify-between gap-3 mb-3">
+            {/* Journey Progress */}
+            <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/5 rounded-2xl border border-emerald-500/20 p-4">
+                <div className="flex items-center justify-between mb-4">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                            {language === 'fr' ? 'Parcours du Vault' : 'Vault journey'}
+                            {language === 'fr' ? 'Parcours du Vault' : 'Vault Progress'}
                         </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                            {language === 'fr'
-                                ? 'Suivez chaque étape. Les picks du Vault doivent rester des paris simples.'
-                                : 'Follow each step. Vault picks should stay as single bets.'}
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                            {language === 'fr' ? 'Picks = Paris simples uniquement' : 'Picks = Single bets only'}
                         </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/25 px-2 py-1 text-[10px] font-black text-emerald-400">
-                        {VAULT_DECISION_TIME_LOCAL}
-                    </span>
+                    <div className="text-right">
+                        <span className="text-lg font-black font-mono text-emerald-400">{wonCount}W</span>
+                        <span className="text-lg font-black font-mono text-gray-500 mx-1">-</span>
+                        <span className="text-lg font-black font-mono text-rose-400">{lostCount}L</span>
+                        {pendingCount > 0 && (
+                            <span className="text-lg font-black font-mono text-gray-400 ml-1">({pendingCount}P)</span>
+                        )}
+                    </div>
                 </div>
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-5 gap-2">
                     {journeySteps.map((step, idx) => (
-                        <div key={step.label} className="min-w-0">
-                            <div className={`h-1.5 rounded-full mb-1 ${step.done ? 'bg-emerald-400' : idx === 2 ? 'bg-amber-400/60' : 'bg-slate-700'}`} />
+                        <div key={step.label} className="text-center">
+                            <div className={`w-full h-2 rounded-full mb-2 ${step.done ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' : idx === 2 ? 'bg-amber-500/60' : 'bg-slate-700'}`} />
                             <p className={`text-[9px] font-bold leading-tight ${step.done ? 'text-emerald-300' : 'text-gray-500'}`}>
                                 {step.label}
                             </p>
@@ -445,66 +456,60 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            {/* Bankroll Stats */}
+            <div className="grid grid-cols-2 gap-3">
                 {/* Current Bankroll */}
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700 relative">
+                <div className="bg-gradient-to-br from-slate-800 to-slate-800/50 rounded-2xl p-4 border border-slate-700/50 relative overflow-hidden">
                     {onEditBankroll && (
                         <button 
                             onClick={onEditBankroll}
-                            className="absolute top-2 right-2 p-1 rounded hover:bg-slate-700 text-gray-500 hover:text-white transition-colors"
-                            title="Edit Bankroll"
+                            className="absolute top-3 right-3 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-500 hover:text-white transition-all"
                         >
-                            <Pencil size={10} />
+                            <Pencil size={12} />
                         </button>
                     )}
-                    <div className="text-lg font-bold font-mono text-white">
+                    <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl" />
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                        {language === 'fr' ? 'Bankroll' : 'Bankroll'}
+                    </p>
+                    <div className="text-2xl font-black font-mono text-white">
                         {currentBankroll.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                        {language === 'fr' ? 'Bankroll Actuelle' : 'Current Bankroll'}
+                    <div className="text-[10px] text-gray-500 mt-0.5">FCFA</div>
+                    <div className={`text-[10px] font-bold mt-1 ${todayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {todayPnl >= 0 ? '+' : ''}{todayPnlPct.toFixed(1)}% {language === 'fr' ? "aujourd'hui" : 'today'}
                     </div>
                 </div>
 
                 {/* 30-Day Projection */}
-                <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 rounded-xl p-3 text-center border border-emerald-500/20 relative overflow-hidden">
-                    <div className="absolute -right-4 -top-4 w-12 h-12 bg-emerald-500/10 rounded-full blur-xl" />
-                    <div className="text-lg font-bold font-mono text-emerald-400">
+                <div className="bg-gradient-to-br from-emerald-500/15 to-teal-500/5 rounded-2xl p-4 border border-emerald-500/20 relative overflow-hidden">
+                    <div className="absolute -right-3 -top-3 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl" />
+                    <p className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <TrendingUp size={10} /> {language === 'fr' ? '30J Projection' : '30D Projection'}
+                    </p>
+                    <div className="text-2xl font-black font-mono text-emerald-400">
                         {projectedBankroll30Days.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
-                    <div className="text-[10px] text-emerald-500/80 mt-0.5 font-bold flex items-center justify-center gap-1">
-                        <TrendingUp size={10} />
-                        {language === 'fr' ? 'Projeté (30 Jours)' : '30-Day Projection'}
-                    </div>
-                </div>
-
-                {/* P&L */}
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700">
-                    <div className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {todayPnl >= 0 ? '+' : ''}{todayPnlPct.toFixed(1)}%
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                        {language === 'fr' ? "P&L Aujourd'hui" : "Today's P&L"}
-                    </div>
-                </div>
-
-                {/* Picks Count */}
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700">
-                    <div className="text-sm font-bold font-mono text-vantage-cyan">
-                        {vaultDay?.picks.length || 0}
-                    </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
-                        {language === 'fr' ? 'Picks du jour' : 'Today\'s Picks'}
+                    <div className="text-[10px] text-emerald-500/60 mt-0.5">FCFA</div>
+                    <div className="flex items-center gap-1 mt-1">
+                        <span className="text-[9px] font-bold text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded">+{effectiveRoi.toFixed(1)}%/day</span>
                     </div>
                 </div>
             </div>
 
             {chartData.path && (
-                <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                        {language === 'fr' ? 'Courbe du bankroll' : 'Bankroll Curve'}
-                    </div>
-                    <svg viewBox="0 0 100 50" className="w-full h-16" preserveAspectRatio="none">
-                        <line x1="0" y1="25" x2="100" y2="25" stroke="#334155" strokeWidth="0.3" strokeDasharray="2,2" />
+                <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">
+                        {language === 'fr' ? '📈 Courbe du Bankroll' : '📈 Bankroll Curve'}
+                    </p>
+                    <svg viewBox="0 0 100 50" className="w-full h-20" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="bankrollGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.3" />
+                                <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+                            </linearGradient>
+                        </defs>
+                        <line x1="0" y1="25" x2="100" y2="25" stroke="#334155" strokeWidth="0.5" strokeDasharray="2,2" />
                         <polyline
                             points={chartData.path.replace(/[\d.]+,[\d.]+/g, (m) => {
                                 const [x, y] = m.split(',').map(Number);
@@ -512,32 +517,34 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                             })}
                             fill="none"
                             stroke="#22d3ee"
-                            strokeWidth="1.5"
+                            strokeWidth="2"
                             vectorEffect="non-scaling-stroke"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                         />
                     </svg>
                 </div>
             )}
 
-            <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> {language === 'fr' ? 'Gagnés' : 'Won'}: {wonCount}</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> {language === 'fr' ? 'Perdus' : 'Lost'}: {lostCount}</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-500"></span> {language === 'fr' ? 'En attente' : 'Pending'}: {pendingCount}</span>
-            </div>
-
             {vaultDay?.picks.length === 0 ? (
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-slate-700/50 flex items-center justify-center mx-auto mb-4">
+                        <TrendingUp size={28} className="text-gray-500" />
+                    </div>
                     <div className="text-gray-400 text-sm font-bold mb-1">
                         {language === 'fr' ? 'Aucun pick disponible' : 'No picks available today'}
                     </div>
                     <div className="text-gray-500 text-xs">
                         {language === 'fr'
-                            ? "Les picks faibles, sans edge net ou avec des cotes trop anciennes sont filtres."
-                            : "Weak picks, unclear edges, or stale odds are filtered out."}
+                            ? "Les picks avec faible edge ou cotes anciennes sont filtrés."
+                            : "Picks with weak edge or stale odds are filtered out."}
                     </div>
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                        {language === 'fr' ? '📋 Vos Picks du Jour' : '📋 Today\'s Picks'}
+                    </p>
                     {vaultDay?.picks.map((pick, i) => {
                         const isPending = pick.result === 'pending';
                         const isWon = pick.result === 'won';
@@ -547,74 +554,97 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                         return (
                             <motion.div
                                 key={pick.fixtureId}
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: i * 0.05 }}
-                                className={`rounded-xl border p-3 ${
-                                    isWon ? 'bg-emerald-500/5 border-emerald-500/20' :
-                                    isLost ? 'bg-rose-500/5 border-rose-500/20' :
-                                    isVoid ? 'bg-amber-500/5 border-amber-500/20' :
-                                    'bg-slate-800/30 border-slate-700/50'
+                                className={`rounded-2xl border overflow-hidden ${
+                                    isWon ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/5 border-emerald-500/30' :
+                                    isLost ? 'bg-gradient-to-r from-rose-500/10 to-rose-600/5 border-rose-500/30' :
+                                    isVoid ? 'bg-gradient-to-r from-amber-500/10 to-amber-600/5 border-amber-500/30' :
+                                    'bg-gradient-to-r from-slate-800/50 to-slate-800/30 border-slate-700/50'
                                 }`}
                             >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-bold text-white truncate">
-                                            {pick.homeTeam} vs {pick.awayTeam}
+                                {/* Pick Header */}
+                                <div className="p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-gray-400">#{i + 1}</span>
+                                                <span className="text-sm font-bold text-white truncate">
+                                                    {pick.homeTeam} vs {pick.awayTeam}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                                <span className={`text-[11px] font-black px-2 py-1 rounded-lg ${
+                                                    isWon ? 'bg-emerald-500/20 text-emerald-400' :
+                                                    isLost ? 'bg-rose-500/20 text-rose-400' :
+                                                    isVoid ? 'bg-amber-500/20 text-amber-400' :
+                                                    'bg-vantage-cyan/20 text-vantage-cyan'
+                                                }`}>
+                                                    {pick.market}
+                                                </span>
+                                                <span className="text-[11px] font-mono font-bold text-white">
+                                                    @ {pick.odds.toFixed(2)}
+                                                </span>
+                                                {pick.kellyStakePct > 0 && (
+                                                    <span className="text-[10px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                                                        Kelly {pick.kellyStakePct.toFixed(1)}%
+                                                    </span>
+                                                )}
+                                                {pick.evPct > 0 && (
+                                                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                                                        +{pick.evPct.toFixed(1)}% EV
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1.5 mt-1">
-                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">
-                                                {pick.market}
+                                        <div className={`shrink-0 px-3 py-2 rounded-xl flex items-center gap-1.5 ${
+                                            isWon ? 'bg-emerald-500/20' :
+                                            isLost ? 'bg-rose-500/20' :
+                                            isVoid ? 'bg-amber-500/20' :
+                                            'bg-slate-700/50'
+                                        }`}>
+                                            {isWon && <TrendingUp size={14} className="text-emerald-400" />}
+                                            {isLost && <TrendingDown size={14} className="text-rose-400" />}
+                                            {isVoid && <Minus size={14} className="text-amber-400" />}
+                                            {isPending && <RefreshCw size={14} className="text-gray-400 animate-spin" />}
+                                            <span className={`text-[10px] font-black ${
+                                                isWon ? 'text-emerald-400' :
+                                                isLost ? 'text-rose-400' :
+                                                isVoid ? 'text-amber-400' :
+                                                'text-gray-400'
+                                            }`}>
+                                                {isWon ? 'WON' : isLost ? 'LOST' : isVoid ? 'VOID' : 'PENDING'}
                                             </span>
-                                            <span className="text-[10px] font-mono text-vantage-cyan">
-                                                @ {pick.odds.toFixed(2)}
-                                            </span>
-                                            {pick.kellyStakePct > 0 && (
-                                                <span className="text-[10px] text-gray-500">
-                                                    • {pick.kellyStakePct.toFixed(1)}% Kelly
-                                                </span>
-                                            )}
-                                            {pick.calibrationTier && pick.calibrationTier !== 'stable' && (
-                                                <span className="text-[10px] text-amber-300">
-                                                    {pick.calibrationTier}
-                                                </span>
-                                            )}
-                                            {typeof pick.oddsAgeMinutes === 'number' && (
-                                                <span className="text-[10px] text-gray-500">
-                                                    {Math.round(pick.oddsAgeMinutes)}m odds
-                                                </span>
-                                            )}
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        {isWon && (
-                                            <div className="flex items-center gap-1 text-emerald-400">
-                                                <TrendingUp size={12} /> <span className="text-[10px] font-bold">WON</span>
-                                            </div>
-                                        )}
-                                        {isLost && (
-                                            <div className="flex items-center gap-1 text-rose-400">
-                                                <TrendingDown size={12} /> <span className="text-[10px] font-bold">LOST</span>
-                                            </div>
-                                        )}
-                                        {isVoid && (
-                                            <div className="flex items-center gap-1 text-amber-400">
-                                                <Minus size={12} /> <span className="text-[10px] font-bold">VOID</span>
-                                            </div>
-                                        )}
-                                        {isPending && (
-                                            <div className="flex items-center gap-1 text-gray-400">
-                                                <RefreshCw size={12} className="animate-spin" /> <span className="text-[10px] font-bold">PENDING</span>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
+
+                                {/* Stake Footer */}
                                 {pick.stakeAmount > 0 && (
-                                    <div className="mt-1.5 text-[10px] text-gray-500 font-mono flex items-center gap-2">
-                                        <span>Stake: {pick.stakeAmount.toLocaleString()} FCFA</span>
-                                        {pick.profit !== null && (
-                                            <span className={pick.profit >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                                                {pick.profit >= 0 ? '+' : ''}{pick.profit.toLocaleString()} FCFA
+                                    <div className={`px-3 py-2 border-t flex items-center justify-between ${
+                                        isWon ? 'border-emerald-500/20 bg-emerald-500/5' :
+                                        isLost ? 'border-rose-500/20 bg-rose-500/5' :
+                                        isVoid ? 'border-amber-500/20 bg-amber-500/5' :
+                                        'border-slate-700/50 bg-slate-800/30'
+                                    }`}>
+                                        <div className="flex items-center gap-4">
+                                            <div>
+                                                <p className="text-[9px] text-gray-500 uppercase">Stake</p>
+                                                <p className="text-[11px] font-bold font-mono text-white">{pick.stakeAmount.toLocaleString()} F</p>
+                                            </div>
+                                            {pick.profit !== null && (
+                                                <div>
+                                                    <p className="text-[9px] text-gray-500 uppercase">{language === 'fr' ? 'Gain/Perte' : 'P/L'}</p>
+                                                    <p className={`text-[11px] font-black font-mono ${pick.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                        {pick.profit >= 0 ? '+' : ''}{pick.profit.toLocaleString()} F
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {pick.calibrationTier && pick.calibrationTier !== 'stable' && (
+                                            <span className="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded">
+                                                {pick.calibrationTier}
                                             </span>
                                         )}
                                     </div>
@@ -625,8 +655,8 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                 </div>
             )}
 
-            <AnimatePresence>
-                {showHistory && (
+<AnimatePresence>
+                {showHistory ? (
                     <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
@@ -685,7 +715,7 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                             </div>
                         )}
                     </motion.div>
-                )}
+                ) : null}
             </AnimatePresence>
 
             <button

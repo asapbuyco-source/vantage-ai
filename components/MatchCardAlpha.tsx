@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Clock, Copy, Check } from 'lucide-react';
+import { ChevronDown, Clock, Copy, Check, BrainCircuit } from 'lucide-react';
 import { Match } from '../types';
 import { TeamLogo } from './TeamLogo';
 
@@ -52,11 +52,8 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
       transition={{ delay: idx * 0.05, duration: 0.3 }}
     >
       <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-md shadow-lg h-full flex flex-col">
-        {/* ── Header: league, badge, time, chevron ── */}
-        <button
-          onClick={onToggle}
-          className="w-full px-3 py-2 flex items-center justify-between text-left hover:bg-black/3 dark:hover:bg-white/3 transition-colors"
-        >
+        {/* ── Header: league, badge, time, expand button ── */}
+        <div className="px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest truncate max-w-[80px]">{match.league}</span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 shrink-0">VANTAGE</span>
@@ -64,9 +61,19 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-[9px] text-gray-400 flex items-center gap-0.5 shrink-0"><Clock size={9} />{match.kickoff_local || match.time}</span>
             {(match as any).value_rank === 'high' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
-            <ChevronDown size={14} className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            <button
+              onClick={onToggle}
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold transition-all ${
+                isExpanded
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-slate-100 dark:bg-white/10 text-gray-500 hover:bg-emerald-500/20 hover:text-emerald-600'
+              }`}
+            >
+              {isExpanded ? 'Hide' : 'Analysis'}
+              <ChevronDown size={10} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            </button>
           </div>
-        </button>
+        </div>
 
         {/* ── Teams row ── */}
         <div className="flex items-center justify-between px-3 pb-2">
@@ -116,6 +123,19 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
             )}
           </div>
         </div>
+
+        {/* ── AI Verdict ── */}
+        {(match as any).analysis_en && (
+          <div className="mx-3 mb-2 p-2.5 rounded-xl bg-gradient-to-r from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <BrainCircuit size={10} className="text-cyan-500" />
+              <span className="text-[8px] text-cyan-500 uppercase tracking-wide font-bold">AI Verdict</span>
+            </div>
+            <p className="text-[9px] text-gray-600 dark:text-gray-300 leading-relaxed">
+              {(match as any).analysis_en}
+            </p>
+          </div>
+        )}
 
         {/* ── Expandable Analysis ── */}
         <AnimatePresence>
