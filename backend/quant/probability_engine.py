@@ -167,13 +167,18 @@ def compute_combined(
     w_poisson = weights_override.get('poisson', W_POISSON) if weights_override else W_POISSON
     w_elo = weights_override.get('elo', W_ELO) if weights_override else W_ELO
     w_form = weights_override.get('form', W_FORM) if weights_override else W_FORM
-    # Note: w_h2h is set via get_adaptive_h2h_weight() below, not from weights_override
+    # Note: w_h2h is set via get_adaptive_h2h_weight() above, not from weights_override
 
     W_SM = 0.10
     # FIX-1: SM (Sportmonks prediction) integration is disabled until data_pipeline
     # populates sm_pred_home_win/sm_pred_draw/sm_pred_away_win on MatchData.
     # Default to disabled. When wired, pass sm_probs dict to compute_combined.
     has_sm = False
+
+    # Compute H2H weight up front so it's available for normalization below.
+    # Must be set before the weight normalization block that references it.
+    h2h_total = h2h_home_wins + h2h_away_wins + h2h_draws
+    w_h2h = get_adaptive_h2h_weight(h2h_total, is_derby, h2h_home_wins, h2h_away_wins, h2h_draws)
 
     # FIX #4: Normalize base weights BEFORE applying SM scale.
     # Previously, normalization happened AFTER scale, which restored original
@@ -249,9 +254,6 @@ def compute_combined(
     )
 
     # ── Model 4: H2H (Fix #5) ─────────────────────────────────────────────
-    h2h_total = h2h_home_wins + h2h_away_wins + h2h_draws
-    # Workstream 5: Adaptive H2H weighting
-    w_h2h = get_adaptive_h2h_weight(h2h_total, is_derby, h2h_home_wins, h2h_away_wins, h2h_draws)
     if h2h_total >= 3:  # Only use H2H signal if sufficient samples
         h2h_p_home = h2h_home_wins / h2h_total
         h2h_p_draw = h2h_draws / h2h_total
