@@ -90,7 +90,11 @@ fetchDetails();
     }, [id, predictions, rawFixtures, activeTab]);
 
     const handleBack = () => {
-        navigate(-1);
+        if (window.history.length > 1) {
+            navigate(-1);
+        } else {
+            navigate('/vip');
+        }
     };
 
     const renderStatBar = (label: string, homeVal: number, awayVal: number, isPercentage = false) => {
