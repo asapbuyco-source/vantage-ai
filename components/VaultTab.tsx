@@ -112,7 +112,7 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
         setLoading(true);
         autoGradeVault().then((finalBankroll) => {
             getVaultDay(user.uid, todayKey).then(day => {
-                if (day) {
+                if (day && (day as VaultDay).picks.length > 0) {
                     setVaultDay(day as VaultDay);
                 } else {
                     autoPopulate(finalBankroll);

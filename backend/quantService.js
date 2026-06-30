@@ -37,29 +37,46 @@ async function enrichWithAIAnalysis(predictions) {
 
     const GROQ_MODEL = 'llama-3.1-8b-instant';
     const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+    const DELAY_MS = 2500; // ~24 calls/minute, under 30 rpm limit
 
-    async function callGroq(messages, temperature = 0.15) {
-        const response = await fetch(GROQ_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: GROQ_MODEL,
-                messages,
-                temperature,
-                max_tokens: 150
-            })
-        });
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 
-        if (!response.ok) {
-            const err = await response.text();
-            throw new Error(`Groq API error: ${response.status} - ${err}`);
+    async function callGroq(messages, temperature = 0.15, retries = 3) {
+        for (let attempt = 0; attempt < retries; attempt++) {
+            const response = await fetch(GROQ_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: GROQ_MODEL,
+                    messages,
+                    temperature,
+                    max_tokens: 150
+                })
+            });
+
+            if (response.status === 429) {
+                const err = await response.text();
+                if (attempt < retries - 1) {
+                    logger.warn(`[QuantService] Groq rate limit hit, retrying in 3s (attempt ${attempt + 1}/${retries - 1})...`);
+                    await sleep(3000);
+                    continue;
+                }
+                throw new Error(`Groq API error: 429 - ${err}`);
+            }
+
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error(`Groq API error: ${response.status} - ${err}`);
+            }
+
+            const data = await response.json();
+            return data.choices?.[0]?.message?.content?.trim() || '';
         }
-
-        const data = await response.json();
-        return data.choices?.[0]?.message?.content?.trim() || '';
     }
 
     const enriched = [];
@@ -72,6 +89,9 @@ Home xG: ${pred.expected_goals_home?.toFixed(2) || 'N/A'} | Away xG: ${pred.expe
 Write a 2-sentence professional betting rationale for this pick.
 Be specific (use team names and stats). Tone: confident but measured.
 End with the key risk factor. Max 60 words.`;
+
+        // Rate-limit: delay 2.5s per prediction (2 calls each → ~24 calls/min, under 30 rpm limit)
+        if (enriched.length > 0) await sleep(DELAY_MS);
 
         try {
             const analysis = await callGroq([{ role: 'user', content: prompt }]);
@@ -92,6 +112,8 @@ End with the key risk factor. Max 60 words.`;
             logger.warn(`[QuantService] AI analysis failed for ${pred.fixture_id}: ${pickErr.message}`);
             enriched.push(pred);
         }
+        // Short pause between EN and FR calls to stay under token-per-minute cap
+        await sleep(500);
     }
 return enriched;
 }

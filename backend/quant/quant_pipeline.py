@@ -594,7 +594,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "sport": p["sport"],
             "model": p["model"],
             "timestamp": p["timestamp"],
-            # Restored for free UI rendering (blurred on frontend for VIP items)
             "prediction": p.get("prediction"),
             "prediction_en": p.get("prediction_en", p.get("prediction")),
             "prediction_fr": p.get("prediction_fr", p.get("prediction")),
@@ -613,6 +612,30 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "fh_over05_prob": p.get("fh_over05_prob"),
             "fh_over15_prob": p.get("fh_over15_prob"),
             "fh_btts_prob": p.get("fh_btts_prob"),
+            # Probability fields for analysis display
+            "home_win_prob": p.get("home_win_prob"),
+            "draw_prob": p.get("draw_prob"),
+            "away_win_prob": p.get("away_win_prob"),
+            "over25_prob": p.get("over25_prob"),
+            "over15_prob": p.get("over15_prob"),
+            "btts_prob": p.get("btts_prob"),
+            "double_chance_1x": p.get("double_chance_1x"),
+            "double_chance_x2": p.get("double_chance_x2"),
+            "top_scorelines": p.get("top_scorelines"),
+            "fh_home_win_prob": p.get("fh_home_win_prob"),
+            "fh_draw_prob": p.get("fh_draw_prob"),
+            "fh_away_win_prob": p.get("fh_away_win_prob"),
+            # Vault / EV fields
+            "ev_pct": p.get("ev_pct"),
+            "expected_value": p.get("expected_value"),
+            "kelly_stake": p.get("kelly_stake"),
+            "inefficiency": p.get("inefficiency"),
+            "data_quality": p.get("data_quality"),
+            "odds_fresh": p.get("odds_fresh"),
+            "vault_eligible": p.get("vault_eligible"),
+            "calibration_tier": p.get("calibration_tier"),
+            "calibrated_probability": p.get("calibrated_probability"),
+            "bet_type": p.get("bet_type"),
         }
         for p in predictions
     ]
