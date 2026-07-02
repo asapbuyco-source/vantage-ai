@@ -55,8 +55,8 @@ export const Results: React.FC = () => {
                 if (!snap.exists()) return;
                 const data = snap.data();
                 const allMatches = (data.predictions || []).map(normalizeQuantPrediction);
-                // Only show graded matches on the Results page (won/lost/void)
-                const matches = allMatches.filter(m => m.status === 'won' || m.status === 'lost' || m.status === 'void');
+                // Show all matches on the Results page
+                const matches = allMatches;
                 if (matches.length === 0) return;
 
                 setHistory(prev => {
@@ -66,7 +66,7 @@ export const Results: React.FC = () => {
                         matches,
                         wonCount: matches.filter(m => m.status === 'won').length,
                         lostCount: matches.filter(m => m.status === 'lost').length,
-                        totalGraded: matches.length,
+                        totalGraded: matches.filter(m => m.status === 'won' || m.status === 'lost' || m.status === 'void').length,
                     };
                     return [todayEntry, ...existing];
                 });

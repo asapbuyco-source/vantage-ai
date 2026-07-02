@@ -620,16 +620,15 @@ export const getResultsHistory = async (days: number = 30): Promise<DayResult[]>
     allDays.forEach(({ dateKey, matches }) => {
         if (!matches || matches.length === 0) return;
 
-        // Results page only shows graded matches (won/lost/void)
-        const graded = matches.filter(m => m.status === 'won' || m.status === 'lost' || m.status === 'void');
-        if (graded.length === 0) return;
+        // Results page now shows all matches, even ungraded
+        if (matches.length === 0) return;
 
         results.push({
             date: dateKey,
-            matches: graded,
-            wonCount: graded.filter(m => m.status === 'won').length,
-            lostCount: graded.filter(m => m.status === 'lost').length,
-            totalGraded: graded.length,
+            matches: matches,
+            wonCount: matches.filter(m => m.status === 'won').length,
+            lostCount: matches.filter(m => m.status === 'lost').length,
+            totalGraded: matches.filter(m => m.status === 'won' || m.status === 'lost' || m.status === 'void').length,
         });
     });
 
