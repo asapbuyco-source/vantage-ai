@@ -174,6 +174,7 @@ def compute_and_save_performance() -> dict:
         "overall": overall,
         "weekly": weekly,
         "monthly": monthly,
+        "risk_metrics": compute_risk_metrics(all_preds),
         "computed_at": overall["computed_at"],
     }
 
@@ -184,6 +185,68 @@ def compute_and_save_performance() -> dict:
         print(f"[Perf] Firestore write error: {e}", file=sys.stderr)
 
     return {"status": "success", **result}
+
+
+# ── Phase 3.5: Sharpe / Sortino Ratio ───────────────────────────────────────
+
+def compute_sharpe_ratio(daily_returns: list, risk_free_rate: float = 0.02) -> float:
+    """Annualized Sharpe ratio from daily returns (fractional, e.g. 0.01 = 1%)."""
+    if len(daily_returns) < 5:
+        return 0.0
+    mean = sum(daily_returns) / len(daily_returns)
+    variance = sum((r - mean) ** 2 for r in daily_returns) / (len(daily_returns) - 1)
+    std = variance ** 0.5
+    if std == 0:
+        return 0.0
+    daily_risk_free = risk_free_rate / 252
+    return round(((mean - daily_risk_free) / std) * (252 ** 0.5), 4)
+
+
+def compute_sortino_ratio(daily_returns: list, risk_free_rate: float = 0.02) -> float:
+    """Sortino ratio using only downside deviation."""
+    if len(daily_returns) < 5:
+        return 0.0
+    mean = sum(daily_returns) / len(daily_returns)
+    downside = [r for r in daily_returns if r < 0]
+    if not downside:
+        return float('inf')
+    downside_variance = sum((r - 0) ** 2 for r in downside) / len(downside)
+    downside_std = downside_variance ** 0.5
+    if downside_std == 0:
+        return 0.0
+    daily_risk_free = risk_free_rate / 252
+    return round(((mean - daily_risk_free) / downside_std) * (252 ** 0.5), 4)
+
+
+def compute_risk_metrics(predictions: list) -> dict:
+    """Compute risk-adjusted return metrics from graded predictions."""
+    daily_returns = {}
+    for p in predictions:
+        if p.get("status") not in ("won", "lost"):
+            continue
+        date = p.get("_date", "")
+        odds = float(p.get("pick_time_odds", 0) or p.get("odds", 0) or 0)
+        stake = float(p.get("kelly_stake", 1) or 1) / 100.0
+        if odds <= 1.0 or stake <= 0:
+            continue
+
+        if p["status"] == "won":
+            ret = stake * (odds - 1)
+        else:
+            ret = -stake
+
+        daily_returns[date] = daily_returns.get(date, 0.0) + ret
+
+    returns_list = list(daily_returns.values())
+    sharpe = compute_sharpe_ratio(returns_list)
+    sortino = compute_sortino_ratio(returns_list)
+
+    return {
+        "sharpe_ratio": sharpe,
+        "sortino_ratio": sortino,
+        "trading_days": len(returns_list),
+        "total_return_pct": round(sum(returns_list) * 100, 2),
+    }
 
 
 if __name__ == "__main__":

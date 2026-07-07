@@ -245,6 +245,36 @@ def fetch_odds_for_fixture(fixture_id: int, bookmaker_id: int = 8) -> dict:
                 if str(v.get("value")) == "Home": odds_data["dnb_home_odds"] = float(v["odd"])
                 if str(v.get("value")) == "Away": odds_data["dnb_away_odds"] = float(v["odd"])
 
+        elif market_name == "Goals Over/Under First Half":
+            for v in values:
+                val_str = str(v.get("value"))
+                if val_str == "Over 0.5": odds_data["fh_over05_odds"] = float(v["odd"])
+                elif val_str == "Over 1.5": odds_data["fh_over15_odds"] = float(v["odd"])
+
+        elif market_name == "Match Winner First Half":
+            for v in values:
+                if str(v.get("value")) == "Home": odds_data["fh_home_odds"] = float(v["odd"])
+                elif str(v.get("value")) == "Draw": odds_data["fh_draw_odds"] = float(v["odd"])
+                elif str(v.get("value")) == "Away": odds_data["fh_away_odds"] = float(v["odd"])
+
+        elif market_name == "Asian Handicap":
+            ah_data = {}
+            for v in values:
+                ah_data[str(v.get("value"))] = float(v["odd"])
+            odds_data["asian_handicap_odds"] = ah_data
+
+        elif market_name == "Corners Over/Under":
+            for v in values:
+                val_str = str(v.get("value"))
+                if val_str == "Over 8.5": odds_data["corners_over85_odds"] = float(v["odd"])
+                elif val_str == "Over 9.5": odds_data["corners_over95_odds"] = float(v["odd"])
+
+        elif market_name == "Correct Score":
+            cs_data = {}
+            for v in values:
+                cs_data[str(v.get("value"))] = float(v["odd"])
+            odds_data["correct_score_odds"] = cs_data
+
     if odds_data:
         _cache_set(cache_key, odds_data)
     return odds_data
@@ -447,6 +477,116 @@ def fetch_player_stats(fixture_id: int) -> dict:
             "players": entry.get("players", []),
         })
     return result
+
+
+def fetch_team_season_stats(team_id: int, league_id: int, season: int = 2026) -> dict:
+    """Fetch team season statistics including real xG, goals, clean sheets, etc."""
+    cache_key = f"team_stats_{team_id}_{league_id}_{season}"
+    cached = _cache_get(cache_key, ttl_minutes=360)  # 6-hour cache
+    if cached is not None:
+        return cached
+
+    data = _get("teams/statistics", {
+        "team": team_id, "league": league_id, "season": season
+    }, call_type="statistics")
+
+    result = {}
+    if not data or not data.get("response"):
+        _cache_set(cache_key, result)
+        return result
+
+    resp = data["response"]
+    fixtures_data = resp.get("fixtures", {})
+    goals_data = resp.get("goals", {})
+
+    # Extract xG if available
+    def _extract_stat(stats_list, stat_type):
+        for s in stats_list:
+            if s.get("type") == stat_type:
+                try:
+                    val = s.get("value")
+                    if isinstance(val, str) and "%" in val:
+                        return float(val.replace("%", "")) / 100.0
+                    return float(val)
+                except (ValueError, TypeError):
+                    pass
+        return None
+
+    # Minute-based stats (more reliable when available)
+    minute_stats = resp.get("minutes", {}) if isinstance(resp, dict) else {}
+    xg_value = None
+    for key in minute_stats:
+        if "expected_goals" in key.lower():
+            try:
+                xg_value = float(minute_stats[key].get("total", 0))
+            except (ValueError, TypeError, AttributeError):
+                pass
+            break
+
+    result = {
+        "matches_played": fixtures_data.get("played", {}).get("total", 0) if isinstance(fixtures_data.get("played"), dict) else 0,
+        "wins": fixtures_data.get("wins", {}).get("total", 0) if isinstance(fixtures_data.get("wins"), dict) else 0,
+        "draws": fixtures_data.get("draws", {}).get("total", 0) if isinstance(fixtures_data.get("draws"), dict) else 0,
+        "losses": fixtures_data.get("loses", {}).get("total", 0) if isinstance(fixtures_data.get("loses"), dict) else 0,
+        "goals_for_total": goals_data.get("for", {}).get("total", {}).get("total", 0) if isinstance(goals_data.get("for"), dict) else 0,
+        "goals_against_total": goals_data.get("against", {}).get("total", {}).get("total", 0) if isinstance(goals_data.get("against"), dict) else 0,
+        "goals_for_avg": float(goals_data.get("for", {}).get("average", {}).get("total", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0.0,
+        "goals_against_avg": float(goals_data.get("against", {}).get("average", {}).get("total", 0) or 0) if isinstance(goals_data.get("against"), dict) else 0.0,
+        "clean_sheets": int(goals_data.get("for", {}).get("total", {}).get("home", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0,
+        "failed_to_score": int(goals_data.get("for", {}).get("total", {}).get("away", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0,
+        "xg_for": xg_value or (float(goals_data.get("for", {}).get("average", {}).get("total", 0) or 0) * 0.95) if isinstance(goals_data.get("for"), dict) else 0.0,
+    }
+
+    if result["matches_played"] > 0:
+        result["goals_for_avg"] = round(result["goals_for_total"] / result["matches_played"], 2)
+        result["goals_against_avg"] = round(result["goals_against_total"] / result["matches_played"], 2)
+        if xg_value:
+            result["xg_for"] = round(xg_value / result["matches_played"], 2)
+
+    _cache_set(cache_key, result)
+    return result
+
+
+def fetch_pinnacle_odds(fixture_id: int) -> dict:
+    """Fetch odds from Pinnacle (bookmaker_id=3) — sharpest lines in the market."""
+    cache_key = f"pinnacle_odds_{fixture_id}"
+    cached = _cache_get(cache_key, ttl_minutes=15)
+    if cached is not None:
+        return cached
+
+    data = _get("odds", {"fixture": fixture_id, "bookmaker": 3}, call_type="odds")
+    odds_data = {}
+
+    if not data or not data.get("response"):
+        _cache_set(cache_key, odds_data)
+        return odds_data
+
+    bets = data["response"][0].get("bookmakers", [{}])[0].get("bets", [])
+
+    for bet in bets:
+        name = bet.get("name")
+        values = bet.get("values", [])
+
+        if name == "Match Winner":
+            for v in values:
+                if v.get("value") == "Home": odds_data["pinnacle_home"] = float(v["odd"])
+                elif v.get("value") == "Draw": odds_data["pinnacle_draw"] = float(v["odd"])
+                elif v.get("value") == "Away": odds_data["pinnacle_away"] = float(v["odd"])
+        elif name == "Goals Over/Under":
+            for v in values:
+                vs = str(v.get("value"))
+                if vs == "Over 2.5": odds_data["pinnacle_over25"] = float(v["odd"])
+                elif vs == "Under 2.5": odds_data["pinnacle_under25"] = float(v["odd"])
+                elif vs == "Over 1.5": odds_data["pinnacle_over15"] = float(v["odd"])
+                elif vs == "Over 3.5": odds_data["pinnacle_over35"] = float(v["odd"])
+        elif name == "Both Teams Score":
+            for v in values:
+                if v.get("value") == "Yes": odds_data["pinnacle_btts_yes"] = float(v["odd"])
+                if v.get("value") == "No": odds_data["pinnacle_btts_no"] = float(v["odd"])
+
+    if odds_data:
+        _cache_set(cache_key, odds_data)
+    return odds_data
 
 def fetch_fixture_statistics(fixture_id: int) -> dict:
     """Fetch match statistics (possession, shots, corners, etc.) for a fixture."""

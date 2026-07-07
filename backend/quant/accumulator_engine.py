@@ -14,6 +14,8 @@ Only matches with approved value bets (safe/value category) are eligible.
 
 from dataclasses import dataclass, field
 from itertools import combinations
+from collections import defaultdict
+from ticket_rules import SAME_LEAGUE_PENALTY, SAME_FIXTURE_PENALTY, passes_layering, ticket_quality_score as _canonical_quality_score
 
 
 # ── Accumulator config ─────────────────────────────────────────────────────────
@@ -115,13 +117,13 @@ class Accumulator:
             for l in self.legs:
                 league_counts[l.league] = league_counts.get(l.league, 0) + 1
             duplicate_count = sum(max(0, c - 1) for c in league_counts.values())
-            self.combined_prob *= (0.92 ** duplicate_count)
+            self.combined_prob *= (SAME_LEAGUE_PENALTY ** duplicate_count)
 
             # FIX #7b: Same-fixture cross-market correlation penalty.
             # BTTS and Over 2.5 on the same fixture are highly correlated — 15% reduction.
             fixture_ids = [l.fixture_id for l in self.legs]
             same_fixture_pairs = len(fixture_ids) - len(set(fixture_ids))
-            self.combined_prob *= (0.85 ** same_fixture_pairs)
+            self.combined_prob *= (SAME_FIXTURE_PENALTY ** same_fixture_pairs)
 
             self.combined_odds = round(self.combined_odds, 2)
             self.combined_prob = round(self.combined_prob, 4)
@@ -173,9 +175,16 @@ def _select_legs(bets: list[dict], config: dict, exclude_fixtures: set = None) -
     selected = []
     seen_fixtures = set()
     market_counts = {}
+    hour_counts = {}  # Phase 3.3: Time diversification
 
     for b in pool:
         if b["fixture_id"] in seen_fixtures:
+            continue
+
+        # Phase 3.3: Max 2 legs per kickoff hour for hedging opportunity
+        kickoff = b.get("kickoff_local", "") or b.get("kickoff_utc", "")
+        kickoff_hour = kickoff.split("T")[1][:2] if "T" in kickoff else "00"
+        if hour_counts.get(kickoff_hour, 0) >= 2:
             continue
 
         # Market correlation guard: max 2 legs from same market type,
@@ -188,6 +197,7 @@ def _select_legs(bets: list[dict], config: dict, exclude_fixtures: set = None) -
         selected.append(b)
         seen_fixtures.add(b["fixture_id"])
         market_counts[m_base] = market_counts.get(m_base, 0) + 1
+        hour_counts[kickoff_hour] = hour_counts.get(kickoff_hour, 0) + 1
 
         if len(selected) >= max_legs:
             break
@@ -195,22 +205,109 @@ def _select_legs(bets: list[dict], config: dict, exclude_fixtures: set = None) -
     return selected
 
 
+def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None) -> list[dict]:
+    """
+    Phase 4.1: Combinatorial optimizer using branch-and-bound.
+    Finds the globally optimal leg combination instead of greedy selection.
+    Falls back to greedy if pool is too large (>30 candidates).
+    """
+    if exclude_fixtures is None:
+        exclude_fixtures = set()
+
+    min_prob = config["min_prob"]
+    max_legs = config["max_legs"]
+    sort_key = config["sort_key"]
+
+    pool = [b for b in bets if b["model_prob"] >= min_prob and b["fixture_id"] not in exclude_fixtures]
+
+    if len(pool) > 30:
+        return _select_legs(bets, config, exclude_fixtures)
+
+    best_combo = []
+    best_score = 0.0
+    seen_fixtures_set = set()
+
+    def score_combo(combo: list) -> float:
+        if not combo:
+            return 0.0
+        total_prob = 1.0
+        total_odds = 1.0
+        for b in combo:
+            total_prob *= b["model_prob"]
+            total_odds *= b["odds"]
+        league_counts = defaultdict(int)
+        for b in combo:
+            league_counts[b.get("league", "")] += 1
+        dup = sum(max(0, c - 1) for c in league_counts.values())
+        total_prob *= (0.92 ** dup)
+        fids = [b["fixture_id"] for b in combo]
+        same_fixture_pairs = len(fids) - len(set(fids))
+        total_prob *= (0.85 ** same_fixture_pairs)
+        ev = (total_prob * total_odds) - 1.0
+        return total_prob * 0.5 + max(0, ev) * 0.5
+
+    def valid(combo: list, new_bet: dict) -> bool:
+        if new_bet["fixture_id"] in {b["fixture_id"] for b in combo}:
+            return False
+        market_counts = defaultdict(int)
+        hour_counts = defaultdict(int)
+        for b in combo + [new_bet]:
+            m_base = _market_base(b["market"])
+            market_counts[m_base] += 1
+            if m_base == "goals_total" and market_counts[m_base] > 1:
+                return False
+            if market_counts[m_base] > 2:
+                return False
+            kickoff = b.get("kickoff_local", "") or b.get("kickoff_utc", "")
+            kickoff_hour = kickoff.split("T")[1][:2] if "T" in kickoff else "00"
+            hour_counts[kickoff_hour] += 1
+            if hour_counts[kickoff_hour] > 2:
+                return False
+        return True
+
+    def backtrack(combo: list, start_idx: int):
+        nonlocal best_combo, best_score
+        score = score_combo(combo)
+        if len(combo) >= config["min_legs"] and score > best_score:
+            best_combo = combo[:]
+            best_score = score
+
+        if len(combo) >= max_legs:
+            return
+
+        remaining = len(pool) - start_idx
+        if len(combo) + remaining < config["min_legs"]:
+            return
+
+        max_possible = score
+        for i in range(start_idx, len(pool)):
+            if valid(combo, pool[i]):
+                combo.append(pool[i])
+                backtrack(combo, i + 1)
+                combo.pop()
+            if max_possible < best_score * 0.5 and i > start_idx + 5:
+                break
+
+    backtrack([], 0)
+    return best_combo if best_combo else _select_legs(bets, config, exclude_fixtures)
+
+
 def generate_accumulators(value_bets: list[dict]) -> dict[str, list[dict]]:
     """
     Generate 4 named accumulators from the value bet pool.
-    Returns a dict keyed by tier name, each containing a list of accumulator dicts.
+    Returns a dict keyed by tier name, each containing up to 3 accumulator dicts.
 
-    FIX-9: Cross-tier fixture deduplication. Once a fixture is used in a higher-tier
-    accumulator (baseline > alpha_edge > syndicate > variance_play), it is excluded
-    from lower tiers. This prevents users from accidentally doubling their risk on
-    the same match outcome across multiple recommended tickets.
+    FIX-9: Cross-tier fixture deduplication.
+    Phase 4.1: Branch-and-bound optimizer (falls back to greedy for large pools).
+    Phase 4.2: Multi-alternative generation (top 3 per tier).
     """
     results = {tier: [] for tier in TIER_CONFIG}
     used_fixtures = set()
 
     for tier_key, config in TIER_CONFIG.items():
-        for _ in range(config["count"]):
-            legs = _select_legs(value_bets, config, used_fixtures)
+        count = config.get("count", 1)
+        for _ in range(min(count, 3)):  # Phase 4.2: generate up to 3 alternatives
+            legs = _optimize_legs(value_bets, config, used_fixtures)
 
             if len(legs) >= config["min_legs"]:
                 acca = Accumulator(

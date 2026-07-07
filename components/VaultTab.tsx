@@ -14,6 +14,7 @@ const MAX_VAULT_PICKS = 7;
 const VAULT_STRATEGY_VERSION = 'vault-sim-v2';
 const VAULT_STRATEGY_NAME = 'Simulator EV Quality Top 7';
 const VAULT_DECISION_TIME_LOCAL = '19:00 Africa/Lagos';
+const CIRCUIT_BREAKER_THRESHOLD = 0.50;
 
 const vaultCategoryPriority: Record<string, number> = {
     safe: 2,
@@ -101,14 +102,28 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
     const [vaultHistory, setVaultHistory] = useState<VaultDay[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
+    const [circuitBroken, setCircuitBroken] = useState(false);
 
     const todayKey = getGlobalTodayKey();
     const vaultStartDate = userProfile?.vaultProgress?.startDate || user?.metadata?.creationTime?.split('T')[0] || todayKey;
     const currentDay = dayNumber(vaultStartDate);
     const bankrollStart = userProfile?.portfolioBankroll || DEFAULT_BANKROLL;
+    const startingBankroll = userProfile?.vaultProgress?.startingBankroll || DEFAULT_BANKROLL;
+
+    const isCircuitBroken = () => {
+        if (!startingBankroll || startingBankroll <= 0) return false;
+        const drawdown = (startingBankroll - bankrollStart) / startingBankroll;
+        return drawdown >= CIRCUIT_BREAKER_THRESHOLD;
+    };
 
     useEffect(() => {
         if (!user || !userProfile) return;
+
+        if (isCircuitBroken()) {
+            setCircuitBroken(true);
+            return;
+        }
+
         setLoading(true);
         autoGradeVault().then((finalBankroll) => {
             getVaultDay(user.uid, todayKey).then(day => {
@@ -394,6 +409,34 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                     </button>
                 </div>
             </div>
+
+            {/* Circuit Breaker Warning */}
+            {circuitBroken && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4"
+                >
+                    <div className="flex items-start gap-3">
+                        <AlertTriangle size={20} className="text-rose-400 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="text-rose-300 text-sm font-bold">
+                                {language === 'fr' ? 'Circuit Breaker Activé' : 'Circuit Breaker Activated'}
+                            </p>
+                            <p className="text-rose-400/70 text-xs mt-1">
+                                {language === 'fr'
+                                    ? `Votre bankroll a chuté de ${((startingBankroll - bankrollStart) / startingBankroll * 100).toFixed(0)}% depuis ${startingBankroll.toLocaleString()} FCFA. Les nouveaux picks sont suspendus pour protéger votre capital.`
+                                    : `Your bankroll has dropped ${((startingBankroll - bankrollStart) / startingBankroll * 100).toFixed(0)}% from ${startingBankroll.toLocaleString()} FCFA. New picks paused to protect your capital.`}
+                            </p>
+                            <p className="text-rose-400/50 text-[10px] mt-2">
+                                {language === 'fr'
+                                    ? 'Reprendra quand la bankroll remontera au-dessus du seuil de sécurité.'
+                                    : 'Will resume when bankroll recovers above the safety threshold.'}
+                            </p>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
 
             <AnimatePresence>
                 {showInfo && (
@@ -718,6 +761,7 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                 ) : null}
             </AnimatePresence>
 
+            {!circuitBroken && (
             <button
                 onClick={() => autoPopulate(currentBankroll)}
                 className="w-full py-2.5 rounded-xl border border-dashed border-slate-700 text-[10px] font-bold text-gray-500 hover:text-white hover:border-slate-500 transition-colors flex items-center justify-center gap-1.5"
@@ -725,6 +769,15 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                 <RefreshCw size={12} />
                 {language === 'fr' ? 'Régénérer les picks' : 'Refresh picks from today'}
             </button>
+            )}
+            {circuitBroken && (
+            <button disabled
+                className="w-full py-2.5 rounded-xl border border-dashed border-rose-500/30 text-[10px] font-bold text-rose-400/50 flex items-center justify-center gap-1.5 cursor-not-allowed"
+            >
+                <AlertTriangle size={12} />
+                {language === 'fr' ? 'Picks suspendus — Circuit Breaker' : 'Picks paused — Circuit Breaker'}
+            </button>
+            )}
         </div>
     );
 };

@@ -155,8 +155,8 @@ def filter_bets(bets: list[ValueBet], league_tier: int = 1) -> list[ValueBet]:
     # Home/Away Win removed — 1X2 markets suppressed due to -43% ROI.
     MARKET_BONUS = {
         "Under 1.5 Goals": 1.18,   # 73% ROI — most profitable market, significantly under-allocated
+        "Over 1.5 Goals": 1.15,    # Raised from 1.08 — 84% win rate confirmed in 14-day audit, needs higher allocation
         "Under 3.5 Goals": 1.10,   # 41% ROI but small sample
-        "Over 1.5 Goals": 1.08,    # 72.1% hit rate, near-breakeven (-2.2% ROI) — high reliability
         "BTTS": 1.05,              # 50% hit rate, +2.2% ROI — consistent edge
         "Over 2.5 Goals": 1.02,    # baseline — already dominant (40% of picks)
         "BTTS No": 1.02,           # 25% ROI but reliable, small boost
@@ -199,6 +199,26 @@ def grade_risk(bet: ValueBet) -> str:
         if bet.model_prob >= 0.55 and bet.expected_value >= 0.05:
             return "value"
     return "risky"
+
+
+def check_btts_blanking_risk(pred: dict) -> tuple[bool, str]:
+    """Check if BTTS bet is at risk of one team blanking."""
+    market = (pred.get("bet_type") or "").lower()
+    if "btts" not in market or "no" in market:
+        return False, ""
+    
+    home_avg_scored = float(pred.get("home_avg_scored", 0) or 0)
+    away_avg_scored = float(pred.get("away_avg_scored", 0) or 0)
+    
+    reasons = []
+    if home_avg_scored < 0.8:
+        reasons.append(f"{pred.get('home_team', 'Home')} avg {home_avg_scored:.1f} goals")
+    if away_avg_scored < 0.8:
+        reasons.append(f"{pred.get('away_team', 'Away')} avg {away_avg_scored:.1f} goals")
+    
+    if reasons:
+        return True, f"BTTS blanking risk: {', '.join(reasons)}"
+    return False, ""
 
 
 if __name__ == "__main__":

@@ -9,8 +9,8 @@ where:
   p = probability of winning
   q = probability of losing (1 - p)
 
-A fractional Kelly (25%) is used to be conservative.
-Default stake is capped at 3% of bankroll, with stricter caps for fragile markets.
+A fractional Kelly (12.5%, 1/8th) is used to be conservative.
+Default stake is capped at 2% of bankroll, with stricter caps for fragile markets.
 """
 
 KELLY_FRACTION = 0.125  # Reduced from 0.25 to 1/8th Kelly

@@ -1,0 +1,84 @@
+
+==============================================================================
+  VANTAGE AI - PREDICTION AUDIT REPORT
+==============================================================================
+  Generated: 2026-07-07 11:17:36 UTC
+  Period: 2026-06-30 to 2026-07-06 (7 days)
+  Mode: Full Audit
+
+------------------------------------------------------------------------------
+  1. OVERALL PERFORMANCE
+------------------------------------------------------------------------------
+  Total Predictions: 31
+  Graded: 30
+  Won: 18 | Lost: 12 | Void: 0 | No Result: 1
+  Win Rate: 60.0%
+  ROI: +21.1%
+  Profit: +1.55 units on 7.33 staked
+
+------------------------------------------------------------------------------
+  2. PERFORMANCE BY MARKET TYPE
+------------------------------------------------------------------------------
+  Market                           Bets   Wins Losses     Win%   Profit
+  Over 1.5 Goals                      9      8      1    88.9%
+  BTTS                                6      3      3    50.0%
+  Double Chance (X2)                  5      2      3    40.0%
+  Under 2.5 Goals                     4      2      2    50.0%
+  Double Chance (1X)                  3      1      2    33.3%
+  Double Chance (12)                  2      2      0   100.0%
+  Over 2.5 Goals                      1      0      1     0.0%
+
+------------------------------------------------------------------------------
+  3. PERFORMANCE BY LEAGUE (top 10 by volume)
+------------------------------------------------------------------------------
+  League                           Bets   Wins Losses     Win%
+  FIFA World Cup                      9      6      3    66.7%
+  Eredivisie                          7      4      3    57.1%
+  Brasileirão Série B                 7      4      3    57.1%
+  CAF Confederation Cup               4      2      2    50.0%
+  Ecuadorian Serie A                  3      2      1    66.7%
+
+------------------------------------------------------------------------------
+  4. PERFORMANCE BY CONFIDENCE TIER
+------------------------------------------------------------------------------
+  high (>=70%)        : 18/30 = 60.0%
+
+------------------------------------------------------------------------------
+  5. CORNER PREDICTION VALIDATION
+------------------------------------------------------------------------------
+  Matches with corner data: 16
+  over85: 16 predictions | 2 actual wins (12.5%) | Brier: 0.6423
+  over95: 16 predictions | 2 actual wins (12.5%) | Brier: 0.5838
+  Avg absolute error: 8.73 corners
+  Avg bias: -7.7 corners
+  Recommendation: WEAK: Corner predictions need improvement (Brier=0.642). Actual hit rate: 12.5% vs predicted: 74.8%. Consider tuning the xG-to-corners multiplier (currently 3.7x).
+
+------------------------------------------------------------------------------
+  6. LOSS PATTERN ANALYSIS
+------------------------------------------------------------------------------
+  Total losses: 12
+  Close losses (1 goal/event short): 4 (33.3%)
+  Overconfident (>=65% prob but lost): 5 (41.7%)
+  Fixable - Minor (value bet existed): 0 (0.0%)
+  Fixable - Moderate (alternative market): 4 (33.3%)
+  Fixable - Major / Unfixable: 8 (66.7%)
+
+  Close Losses (top 10):
+  Date         Match                               Bet                    Score  Detail
+  2026-06-30   France vs Sweden                    BTTS                   3-0    BTTS Yes failed: away team blanked (1 team short)
+  2026-07-01   USA vs Bosnia & Herzegovina         BTTS                   2-0    BTTS Yes failed: away team blanked (1 team short)
+  2026-07-04   Paraguay vs France                  BTTS                   0-1    BTTS Yes failed: home team blanked (1 team short)
+  2026-07-06   Miramar vs Atenas                   Over 2.5 Goals         1-1    Over 2.5 needed 3 goals, got 2 (1 goal short)
+
+------------------------------------------------------------------------------
+  7. KEY RECOMMENDATIONS
+------------------------------------------------------------------------------
+  1. CORNERS: WEAK: Corner predictions need improvement (Brier=0.642). Actual hit rate: 12.5% vs predicted: 74.8%. Consider tuning the xG-to-corners multiplier (currently 3.7x).
+  2. CALIBRATION: 5/12 losses (42%) were overconfident. Apply stricter calibration to high-probability predictions.
+  3. MARKET: 'Double Chance (X2)' is your worst-performing market (40% win rate). Consider reducing weight or excluding it.
+  4. MARKET: 'Over 1.5 Goals' is your best market (89% win rate). Increase allocation and feature more prominently.
+  5. CLOSE LOSSES: 4 losses (33%) were by a single goal. Consider adding a 'saver' recommendation: for Over 2.5 picks with high confidence, suggest hedging with Over 1.5 as insurance.
+
+==============================================================================
+  END OF REPORT
+==============================================================================

@@ -104,6 +104,18 @@ class CombinedProbabilities:
     fh_home_win: float = 0.0  # First Half Home Win
     fh_draw: float = 0.0      # First Half Draw
     fh_away_win: float = 0.0  # First Half Away Win
+    # Over/Under 0.5 & 4.5 Goals (extreme goal lines)
+    over05: float = 0.0
+    under05: float = 0.0
+    over45: float = 0.0
+    under45: float = 0.0
+    # Corner markets (derived in quant_pipeline, stored here for EV engine)
+    over85_corners: float = 0.0
+    over95_corners: float = 0.0
+    # HT/FT compound markets (Phase 4.3)
+    hthome_fthome: float = 0.0
+    htdraw_fthome: float = 0.0
+    hthome_ftdraw: float = 0.0
 
 
 def _normalize(p_home: float, p_draw: float, p_away: float) -> tuple[float, float, float]:
@@ -319,6 +331,65 @@ def compute_combined(
     over15  = max(over15,  over25)
     under15 = 1.0 - over15
 
+    # Phase 2.4: Over/Under 0.5 & 4.5 Goals (extreme goal lines)
+    over05 = 1.0 - poisson.under05  # P(≥1 goal)
+    under05 = poisson.under05       # P(0 goals)
+    over45 = 1.0 - poisson.under45  # P(≥5 goals)
+    under45 = poisson.under45       # P(≤4 goals)
+
+    # Phase 4.3: HT/FT compound probabilities
+    # Uses first-half Poisson + conditional second-half Poisson (simplified: halves are ~independent)
+    mu_home_2h = adj_mu_home * 0.50
+    mu_away_2h = adj_mu_away * 0.50
+
+    def _poisson_grid_2h(mu_h: float, mu_a: float) -> dict:
+        grid = {}
+        for h in range(8):
+            for a in range(8):
+                ph = (mu_h ** h) * math.exp(-mu_h) / math.factorial(h)
+                pa = (mu_a ** a) * math.exp(-mu_a) / math.factorial(a)
+                grid[(h, a)] = ph * pa
+        return grid
+
+    fh_grid = _poisson_grid_2h(adj_mu_home * 0.50, adj_mu_away * 0.50)
+    sh_grid = _poisson_grid_2h(mu_home_2h, mu_away_2h)
+
+    # Aggregate HT/FT probabilities
+    ht_home_lead = 0.0
+    ht_draw = 0.0
+    ht_away_lead = 0.0
+    for (h, a), p in fh_grid.items():
+        if h > a: ht_home_lead += p
+        elif h == a: ht_draw += p
+        else: ht_away_lead += p
+
+    # Conditional: P(home wins full time | HT state) ~ P(home outscored in 2H)
+    def _ft_outcome_2h(state_lead: str) -> tuple:
+        w, d, l = 0.0, 0.0, 0.0
+        for (h, a), p in sh_grid.items():
+            if state_lead == "home":
+                if h >= a: w += p  # home maintains or extends lead
+                elif h + 1 == a and a - h <= 1: d += p
+                else: l += p
+            elif state_lead == "draw":
+                if h > a: w += p
+                elif h == a: d += p
+                else: l += p
+            else:  # away
+                if a >= h: l += p  # away maintains
+                elif a + 1 == h and h - a <= 1: d += p
+                else: w += p
+        total = w + d + l
+        return (w/total, d/total, l/total) if total > 0 else (0, 0, 0)
+
+    hw2h, hd2h, hl2h = _ft_outcome_2h("home")
+    dw2h, dd2h, dl2h = _ft_outcome_2h("draw")
+    aw2h, ad2h, al2h = _ft_outcome_2h("away")
+
+    hthome_fthome = ht_home_lead * hw2h
+    htdraw_fthome = ht_draw * dw2h
+    hthome_ftdraw = ht_home_lead * hd2h
+
     # ── Compound markets ───────────────────────────────────────────────────
     dc_1x = p_home + p_draw
     dc_x2 = p_away + p_draw
@@ -388,6 +459,15 @@ def compute_combined(
         fh_home_win=round(fh["fh_home_win"], 4),
         fh_draw=round(fh["fh_draw"], 4),
         fh_away_win=round(fh["fh_away_win"], 4),
+        # Over/Under 0.5 & 4.5 Goals
+        over05=round(over05, 4),
+        under05=round(under05, 4),
+        over45=round(over45, 4),
+        under45=round(under45, 4),
+        # HT/FT compounds
+        hthome_fthome=round(hthome_fthome, 4),
+        htdraw_fthome=round(htdraw_fthome, 4),
+        hthome_ftdraw=round(hthome_ftdraw, 4),
     )
     return cp
 

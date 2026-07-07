@@ -137,6 +137,30 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── VIP-gated: Live in-play value bets ─────────────────────────────────
+    match /live_ev/{docId} {
+      allow read: if isVip();
+      allow write: if false;
+    }
+
+    // Public: shows only count of available in-play bets (no markets/odds)
+    match /live_ev_preview/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ── VIP-gated: Unified vault (all sports) ──────────────────────────────
+    match /unified_vault/{dateStr} {
+      allow read: if isVip();
+      allow write: if false;
+    }
+
+    // ── Backend-only: Historical training data ─────────────────────────────
+    match /historical_training/{dateStr} {
+      allow read: if false;
+      allow write: if false;
+    }
+
     match /match_news/{dateStr} {
       allow read: if true;
       allow write: if false;

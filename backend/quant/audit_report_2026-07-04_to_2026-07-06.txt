@@ -1,0 +1,69 @@
+
+==============================================================================
+  VANTAGE AI - PREDICTION AUDIT REPORT
+==============================================================================
+  Generated: 2026-07-07 11:45:17 UTC
+  Period: 2026-07-04 to 2026-07-06 (3 days)
+  Mode: Grade Only
+
+------------------------------------------------------------------------------
+  1. OVERALL PERFORMANCE
+------------------------------------------------------------------------------
+  Total Predictions: 18
+  Graded: 17
+  Won: 8 | Lost: 9 | Void: 0 | No Result: 1
+  Win Rate: 47.1%
+  ROI: +22.1%
+  Profit: +0.70 units on 3.19 staked
+
+------------------------------------------------------------------------------
+  2. PERFORMANCE BY MARKET TYPE
+------------------------------------------------------------------------------
+  Market                           Bets   Wins Losses     Win%   Profit
+  Over 1.5 Goals                      4      3      1    75.0%
+  Under 2.5 Goals                     3      1      2    33.3%
+  Double Chance (X2)                  3      1      2    33.3%
+  BTTS                                2      1      1    50.0%
+  Double Chance (1X)                  2      0      2     0.0%
+  Double Chance (12)                  2      2      0   100.0%
+  Over 2.5 Goals                      1      0      1     0.0%
+
+------------------------------------------------------------------------------
+  3. PERFORMANCE BY LEAGUE (top 10 by volume)
+------------------------------------------------------------------------------
+  League                           Bets   Wins Losses     Win%
+  Eredivisie                          4      2      2    50.0%
+  CAF Confederation Cup               4      2      2    50.0%
+  Brasileirão Série B                 4      1      3    25.0%
+  Ecuadorian Serie A                  3      2      1    66.7%
+  FIFA World Cup                      2      1      1    50.0%
+
+------------------------------------------------------------------------------
+  4. PERFORMANCE BY CONFIDENCE TIER
+------------------------------------------------------------------------------
+  high (>=70%)        : 8/17 = 47.1%
+
+------------------------------------------------------------------------------
+  6. LOSS PATTERN ANALYSIS
+------------------------------------------------------------------------------
+  Total losses: 9
+  Close losses (1 goal/event short): 2 (22.2%)
+  Overconfident (>=65% prob but lost): 3 (33.3%)
+  Fixable - Minor (value bet existed): 0 (0.0%)
+  Fixable - Moderate (alternative market): 2 (22.2%)
+  Fixable - Major / Unfixable: 7 (77.8%)
+
+  Close Losses (top 10):
+  Date         Match                               Bet                    Score  Detail
+  2026-07-04   Paraguay vs France                  BTTS                   0-1    BTTS Yes failed: home team blanked (1 team short)
+  2026-07-06   Miramar vs Atenas                   Over 2.5 Goals         1-1    Over 2.5 needed 3 goals, got 2 (1 goal short)
+
+------------------------------------------------------------------------------
+  7. KEY RECOMMENDATIONS
+------------------------------------------------------------------------------
+  1. CALIBRATION: 3/9 losses (33%) were overconfident. Apply stricter calibration to high-probability predictions.
+  2. CLOSE LOSSES: 2 losses (22%) were by a single goal. Consider adding a 'saver' recommendation: for Over 2.5 picks with high confidence, suggest hedging with Over 1.5 as insurance.
+
+==============================================================================
+  END OF REPORT
+==============================================================================

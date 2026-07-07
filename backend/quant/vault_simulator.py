@@ -4,7 +4,7 @@ vault_simulator.py
 Replays the full quant pipeline against historical Sportmonks data and simulates
 the Vault strategy exactly as implemented in the frontend (VaultTab.tsx):
 
-  - Quarter-Kelly staking (0.25 fraction, 5% hard cap)
+  - 1/8th Kelly staking (0.125 fraction, 2% hard cap)
   - Max 7 picks per day (top by composite score, matching Vault auto-populate)
   - Risk filters applied (probability, EV, odds range, inefficiency, staleness)
   - Safety downgrades (over→lower, win→DC, draw→DC for low confidence)
@@ -133,7 +133,7 @@ def run_vault_simulation(days: int, starting_bankroll: float, use_cache: bool = 
     print(f"\n{'='*70}")
     print(f"  VAULT SIMULATOR — {days}-DAY BACKTEST")
     print(f"  Starting Bankroll: {starting_bankroll:,.0f} FCFA")
-    print(f"  Strategy: Quarter-Kelly (0.25x), 3% default cap, max {MAX_DAILY_PICKS} picks/day")
+    print(f"  Strategy: 1/8th Kelly (0.125x), 2% default cap, max {MAX_DAILY_PICKS} picks/day")
     print(f"  Cache: {'ON' if cache else 'OFF'}")
     print(f"{'='*70}\n")
 

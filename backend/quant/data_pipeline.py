@@ -146,6 +146,18 @@ class OddsData:
     # Asian Handicap -0.5 (equivalent to DNB but priced differently)
     ah_home_minus05: float = 0.0
     ah_away_plus05: float = 0.0
+    # First Half odds (Phase 2.1)
+    fh_over05_odds: float = 0.0
+    fh_over15_odds: float = 0.0
+    fh_home_odds: float = 0.0
+    fh_draw_odds: float = 0.0
+    fh_away_odds: float = 0.0
+    # Corner odds (Phase 2.5)
+    corners_over85_odds: float = 0.0
+    corners_over95_odds: float = 0.0
+    # Correct Score & Asian Handicap (Phase 2.2-2.3) — dict fields
+    correct_score_odds: dict = field(default_factory=dict)
+    asian_handicap_odds: dict = field(default_factory=dict)
     # Line movement tracking (Upgrade #3)
     opening_home_odds: float = 0.0
     opening_away_odds: float = 0.0
@@ -189,6 +201,16 @@ class MatchData:
     sm_pred_draw: float = 0.0
     sm_pred_away_win: float = 0.0
     sm_pred_available: bool = False
+    # Pinnacle odds (sharpest lines for EV verification)
+    pinnacle_home: float = 0.0
+    pinnacle_draw: float = 0.0
+    pinnacle_away: float = 0.0
+    pinnacle_over25: float = 0.0
+    pinnacle_under25: float = 0.0
+    pinnacle_over15: float = 0.0
+    pinnacle_over35: float = 0.0
+    pinnacle_btts_yes: float = 0.0
+    pinnacle_btts_no: float = 0.0
 
 
 # ── API Helpers ───────────────────────────────────────────────────────────────
@@ -409,6 +431,18 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                     dc_x2_odds=odds_dict.get("dc_x2_odds", 0.0),
                     dnb_home_odds=odds_dict.get("dnb_home_odds", 0.0),
                     dnb_away_odds=odds_dict.get("dnb_away_odds", 0.0),
+                    # Phase 2: First Half odds
+                    fh_over05_odds=odds_dict.get("fh_over05_odds", 0.0),
+                    fh_over15_odds=odds_dict.get("fh_over15_odds", 0.0),
+                    fh_home_odds=odds_dict.get("fh_home_odds", 0.0),
+                    fh_draw_odds=odds_dict.get("fh_draw_odds", 0.0),
+                    fh_away_odds=odds_dict.get("fh_away_odds", 0.0),
+                    # Phase 2: Corner odds
+                    corners_over85_odds=odds_dict.get("corners_over85_odds", 0.0),
+                    corners_over95_odds=odds_dict.get("corners_over95_odds", 0.0),
+                    # Phase 2: Correct Score & Asian Handicap
+                    correct_score_odds=odds_dict.get("correct_score_odds", {}),
+                    asian_handicap_odds=odds_dict.get("asian_handicap_odds", {}),
                     odds_fetched_at=datetime.now(timezone.utc).isoformat()
                 )
         except Exception as e:
@@ -430,8 +464,8 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
 
         # ── Enrich: Form & xG (No more rate limits) ──────────────
         try:
-            home_form_str, home_avg_sc, home_avg_con = fetch_team_form_and_xg(home_id, limit=10)
-            away_form_str, away_avg_sc, away_avg_con = fetch_team_form_and_xg(away_id, limit=10)
+            home_form_str, home_avg_sc, home_avg_con = fetch_team_form_and_xg(home_id, limit=20)
+            away_form_str, away_avg_sc, away_avg_con = fetch_team_form_and_xg(away_id, limit=20)
             
             home_form = home_form_str[:9] if home_form_str else "N/A"
             away_form = away_form_str[:9] if away_form_str else "N/A"
@@ -475,12 +509,52 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                 md.expected_goals_home = max(0.75, league_avg / 2)
                 md.expected_goals_away = max(0.60, league_avg / 2)
                 xg_source = "League-Avg"
-                
+
         except Exception as e:
             print(f"[DataPipeline] Form/xG fetch error for {fixture_id}: {e}", file=sys.stderr)
             md.expected_goals_home = max(0.75, _league_avg(lid) / 2)
             md.expected_goals_away = max(0.60, _league_avg(lid) / 2)
             xg_source = "League-Avg (Error)"
+
+        # ── Enrich: Team Season Stats (real xG) ──────────────────────────
+        try:
+            from api_football_client import fetch_team_season_stats
+            home_season = fetch_team_season_stats(home_id, lid)
+            away_season = fetch_team_season_stats(away_id, lid)
+
+            if home_season and home_season.get("xg_for", 0) > 0:
+                md.home_stats.avg_xg_created = home_season.get("xg_for", 0)
+                md.home_stats.avg_xg_conceded = home_season.get("goals_against_avg", 0)
+                md.home_stats.clean_sheet_rate = home_season.get("clean_sheets", 0) / max(home_season.get("matches_played", 1), 1)
+                # Use real xG for expected goals instead of form-average proxy
+                if home_season.get("xg_for", 0) > 0:
+                    md.expected_goals_home = max(0.5, home_season["xg_for"])
+                    xg_source = "API-xG"
+
+            if away_season and away_season.get("xg_for", 0) > 0:
+                md.away_stats.avg_xg_created = away_season.get("xg_for", 0)
+                md.away_stats.avg_xg_conceded = away_season.get("goals_against_avg", 0)
+                md.away_stats.clean_sheet_rate = away_season.get("clean_sheets", 0) / max(away_season.get("matches_played", 1), 1)
+
+            if away_season and away_season.get("goals_for_avg", 0) > 0:
+                md.expected_goals_away = max(0.5, away_season["goals_for_avg"])
+        except Exception as e:
+            print(f"[DataPipeline] Team stats fetch error for {fixture_id}: {e}", file=sys.stderr)
+
+        # ── Enrich: Pinnacle Odds (sharpest lines for EV verification) ───
+        try:
+            from api_football_client import fetch_pinnacle_odds
+            pinnacle = fetch_pinnacle_odds(fixture_id)
+            if pinnacle:
+                md.pinnacle_home = pinnacle.get("pinnacle_home", 0.0)
+                md.pinnacle_draw = pinnacle.get("pinnacle_draw", 0.0)
+                md.pinnacle_away = pinnacle.get("pinnacle_away", 0.0)
+                md.pinnacle_over25 = pinnacle.get("pinnacle_over25", 0.0)
+                md.pinnacle_under25 = pinnacle.get("pinnacle_under25", 0.0)
+                md.pinnacle_btts_yes = pinnacle.get("pinnacle_btts_yes", 0.0)
+                md.pinnacle_btts_no = pinnacle.get("pinnacle_btts_no", 0.0)
+        except Exception as e:
+            print(f"[DataPipeline] Pinnacle odds fetch error for {fixture_id}: {e}", file=sys.stderr)
 
         # ── Enrich: Injuries (New Feature) ──────────────
         try:

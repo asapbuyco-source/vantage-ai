@@ -271,16 +271,9 @@ export const initScheduler = () => {
     tasks.set('cricket', cricketTask);
     logger.info('🏏 Cricket prediction scheduled at 08:00 Lagos');
 
-    // Quant pipeline at 07:45 Lagos time
-    const quantTask = cron.schedule('45 7 * * *',
-        withLock('quant_pipeline', 60, async () => {
-            logger.info('[Scheduler] Running quant pipeline...');
-            await triggerQuantPipeline();
-        }),
-        { timezone: 'Africa/Lagos' }
-    );
-    tasks.set('quant', quantTask);
-    logger.info('📊 Quant pipeline scheduled at 07:45 Lagos');
+    // Quant pipeline at 07:45 Lagos time — REMOVED (duplicate of 07:00 football generation)
+    // Both triggerFootballGeneration() and triggerQuantPipeline() call runQuantPipeline()
+    // with the same logic. Running twice wastes ~150 API-Football credits daily.
 
     // Quant grading at 22:00 Lagos time
     const quantGradingTask = cron.schedule('0 22 * * *',
@@ -329,8 +322,152 @@ export const initScheduler = () => {
     // NOTE: Live momentum engine and player stats client have been disabled.
     // They consumed ~15,000+ API-Football credits/day running every 2-5 minutes,
     // leaving no quota for grading. Predictions and grading are the priority.
+    //
+    // REPLACED WITH: Lightweight live_score_writer.py (1 API call every 2 min = ~480/day).
+    // Previously 15,000+ credits/day → now ~480 credits/day. Safe within 7,500 quota.
 
-    // Tomorrow's fixtures at 21:00 Lagos time
+    // Live score writer every 2 minutes (lightweight, 1 API call per run)
+    if (process.env.API_FOOTBALL_KEY) {
+        const liveScoreTask = cron.schedule('*/2 * * * *',
+            withLock('live_scores', 1, async () => {
+                try {
+                    const { spawn } = await import('child_process');
+                    const { default: path } = await import('path');
+                    const script = path.join(__dirname, 'quant', 'live_score_writer.py');
+                    const python = process.env.PYTHON_BIN || 'python3';
+
+                    const child = spawn(python, [script], {
+                        cwd: path.join(__dirname, 'quant'),
+                        env: { ...process.env },
+                        timeout: 30000,
+                    });
+
+                    let stdout = '';
+                    let stderr = '';
+                    child.stdout.on('data', d => stdout += d);
+                    child.stderr.on('data', d => stderr += d);
+
+                    child.on('close', code => {
+                        if (code !== 0) {
+                            logger.warn({ stderr }, '[LiveScores] Non-zero exit');
+                        }
+                    });
+                } catch (e) {
+                    logger.warn({ error: e.message }, '[LiveScores] Spawn error');
+                }
+            }),
+            { timezone: 'Africa/Lagos' }
+        );
+        tasks.set('liveScores', liveScoreTask);
+        logger.info('⚽ Live scores scheduled every 2 minutes (~480 API calls/day)');
+    }
+
+    // Unified vault at 08:15 Lagos (after all sports pipelines complete)
+    const unifiedVaultTask = cron.schedule('15 8 * * *',
+        withLock('unified_vault', 10, async () => {
+            try {
+                const { spawn } = await import('child_process');
+                const { default: path } = await import('path');
+                const script = path.join(__dirname, 'quant', 'unified_vault.py');
+                const python = process.env.PYTHON_BIN || 'python3';
+
+                const child = spawn(python, [script], {
+                    cwd: path.join(__dirname, 'quant'),
+                    env: { ...process.env },
+                    timeout: 30000,
+                });
+
+                let stdout = '';
+                let stderr = '';
+                child.stdout.on('data', d => stdout += d);
+                child.stderr.on('data', d => stderr += d);
+
+                child.on('close', code => {
+                    if (code !== 0) {
+                        logger.warn({ stderr }, '[Scheduler] Unified vault non-zero exit');
+                    } else {
+                        logger.info({ stdout: stdout.trim() }, '[Scheduler] Unified vault built');
+                    }
+                });
+            } catch (e) {
+                logger.error({ error: e }, '[Scheduler] Unified vault error');
+            }
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('unifiedVault', unifiedVaultTask);
+    logger.info('🏦 Unified vault (all sports) scheduled at 08:15 Lagos');
+
+    // Live in-play EV every 5 minutes
+    if (process.env.API_FOOTBALL_KEY) {
+        const liveEvTask = cron.schedule('*/5 * * * *',
+            withLock('live_ev', 4, async () => {
+                try {
+                    const { spawn } = await import('child_process');
+                    const { default: path } = await import('path');
+                    const script = path.join(__dirname, 'quant', 'live_ev_engine.py');
+                    const python = process.env.PYTHON_BIN || 'python3';
+
+                    const child = spawn(python, [script], {
+                        cwd: path.join(__dirname, 'quant'),
+                        env: { ...process.env },
+                        timeout: 30000,
+                    });
+
+                    let stdout = '';
+                    child.stdout.on('data', d => stdout += d);
+                    child.stderr.on('data', d => { /* silent */ });
+
+                    child.on('close', code => {
+                        try {
+                            const result = JSON.parse(stdout.trim() || '{}');
+                            if (result.live_bets > 0) {
+                                logger.info({ result }, `[LiveEV] ${result.live_bets} in-play bets found`);
+                            }
+                        } catch {}
+                    });
+                } catch (e) {
+                    logger.warn({ error: e.message }, '[LiveEV] Spawn error');
+                }
+            }),
+            { timezone: 'Africa/Lagos' }
+        );
+        tasks.set('liveEv', liveEvTask);
+        logger.info('🎯 Live in-play EV scheduled every 5 minutes');
+    }
+
+    // Historical data collection at 03:00 Lagos (low traffic, once daily)
+    if (process.env.API_FOOTBALL_KEY) {
+        const historicalTask = cron.schedule('0 3 * * *',
+            withLock('historical_data', 120, async () => {
+                try {
+                    const { spawn } = await import('child_process');
+                    const { default: path } = await import('path');
+                    const script = path.join(__dirname, 'quant', 'historical_data_pipeline.py');
+                    const python = process.env.PYTHON_BIN || 'python3';
+
+                    const child = spawn(python, [script, '--days', '7'], {
+                        cwd: path.join(__dirname, 'quant'),
+                        env: { ...process.env },
+                        timeout: 120000,
+                    });
+
+                    let stdout = '';
+                    child.stdout.on('data', d => stdout += d);
+                    child.stderr.on('data', d => { /* silent */ });
+
+                    child.on('close', code => {
+                        logger.info({ exitCode: code }, '[Historical] Data collection complete');
+                    });
+                } catch (e) {
+                    logger.warn({ error: e.message }, '[Historical] Spawn error');
+                }
+            }),
+            { timezone: 'Africa/Lagos' }
+        );
+        tasks.set('historicalData', historicalTask);
+        logger.info('📚 Historical data collection at 03:00 Lagos (7 days per run)');
+    }
     const tomorrowTask = cron.schedule('0 21 * * *',
         withLock('tomorrow_fixtures', 60, async () => {
             logger.info('[Scheduler] Running tomorrow fixtures job...');
