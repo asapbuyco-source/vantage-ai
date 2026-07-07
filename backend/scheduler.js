@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import admin from 'firebase-admin';
 import pino from 'pino';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import {
     runBasketballPipeline,
     runCricketPipeline,
@@ -11,6 +13,10 @@ import {
     runArbScanner
 } from './quantService.js';
 import { sendTipOfTheDayPush, generateDailyTipFromPredictions } from './pushService.js';
+
+// ESM-compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const logger = pino({
     level: process.env.LOG_LEVEL || 'info',
