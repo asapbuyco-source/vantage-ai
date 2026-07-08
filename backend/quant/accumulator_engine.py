@@ -85,6 +85,8 @@ class AccumulatorLeg:
     model_prob: float
     expected_value: float
     league: str = "unknown"
+    kickoff_utc: str = ""
+    kickoff_local: str = ""
 
 
 @dataclass
