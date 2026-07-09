@@ -13,10 +13,11 @@ Two ID namespaces are tracked:
 TIER_1 = {
     8:    "English Premier League",
     2:    "UEFA Champions League",
+    3:    "UEFA Europa League",
+    5:    "UEFA Europa League (Legacy ID)",
     564:  "La Liga",
     82:   "Bundesliga",
     384:  "Serie A",
-    5:    "UEFA Europa League",
     294:  "FIFA World Cup (Legacy)",
     1:    "FIFA World Cup",
 }
@@ -25,7 +26,8 @@ TIER_1 = {
 TIER_2 = {
     301:  "Ligue 1",
     462:  "Primeira Liga",
-    7:    "UEFA Conference League",
+    848:  "UEFA Europa Conference League",
+    7:    "UEFA Conference League (Legacy ID)",
     72:   "Eredivisie",
     9:    "Championship",
     1204: "Scottish Premiership",
@@ -53,6 +55,9 @@ TIER_3 = {
     85:   "2. Bundesliga (Germany)",
     395:  "Serie B (Italy)",
     302:  "Ligue 2 (France)",
+    255:  "USL Championship (USA)",    # Summer league: Mar-Oct
+    401:  "Premier Soccer League (South Africa)",  # Aug-May
+    344:  "Primera División (Venezuela)",
     # ── Summer-active leagues (Jun-Aug window) ──
     268:  "Uruguayan Primera División", # Feb-Dec
     266:  "Chilean Primera División",   # Feb-Nov
@@ -74,6 +79,15 @@ TIER_4 = {
     254:  "Brasileirão Série B",
     14:   "England National League",
     51:   "Liga Portugal 2",
+    256:  "USL League Two (USA)",     # Summer development league
+    388:  "1. Division (Cyprus)",
+    667:  "Friendlies Clubs",         # Pre-season — low data quality but available
+    259:  "Canadian Championship",
+    653:  "Second League - Group 4 (Romania)",
+    248:  "Kakkonen - Lohko B (Finland)",
+    328:  "Esiliiga A (Estonia)",
+    243:  "Liga Pro Serie B (Ecuador)",
+    917:  "Copa Ecuador",
 }
 
 # ── All approved leagues (merged) ─────────────────────────────────────────
@@ -142,6 +156,12 @@ _APPROVED_NAMES_TIER: list[tuple[str, int, float]] = [
     ("copa america", 3, 0.80),
     ("irish premier", 3, 0.70),
     ("world cup qualif", 3, 0.80),
+    ("usl league two", 4, 0.55),
+    ("friendlies clubs", 4, 0.45),
+    ("friendlies", 4, 0.45),
+    ("canadian championship", 4, 0.55),
+    ("premier soccer league", 3, 0.70),
+    ("primera divisi", 3, 0.70),
 ]
 
 
