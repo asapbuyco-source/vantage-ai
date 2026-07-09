@@ -10,6 +10,7 @@ import { BetSlip } from './components/BetSlip';
 import { Onboarding } from './components/Onboarding';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Home } from './pages/Home';
+import { TicketWizard } from './components/TicketWizard';
 import { Profile } from './pages/Profile';
 import { LandingPage } from './pages/LandingPage';
 import { PublicStats } from './pages/PublicStats';
@@ -413,7 +414,7 @@ function AppContent() {
                     <Route path="/arb" element={<VIP />} />
                     <Route path="/learn" element={<Learn />} />
                     <Route path="/guide" element={<Learn />} />
-                    <Route path="/concierge" element={<Learn />} />
+                    <Route path="/concierge" element={<TicketWizard />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/stats" element={<PublicStats />} />
