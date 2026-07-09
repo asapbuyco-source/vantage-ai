@@ -149,6 +149,7 @@ class OddsData:
     # First Half odds (Phase 2.1)
     fh_over05_odds: float = 0.0
     fh_over15_odds: float = 0.0
+    fh_btts_odds: float = 0.0
     fh_home_odds: float = 0.0
     fh_draw_odds: float = 0.0
     fh_away_odds: float = 0.0

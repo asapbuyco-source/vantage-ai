@@ -238,6 +238,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
     # Filtering is ONLY applied when building accumulators.
     predictions: list[dict] = []
     bet_pool: list[dict] = []  # Only value bets go here (for accumulators)
+    high_prob_pool: list[dict] = []  # 85%+ prob bets for Safe Stack
 
     for match in matches[:MAX_PREDICTIONS_PER_DAY]:
         try:
@@ -585,6 +586,21 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "kickoff_local": match.kickoff_local,
                 })
 
+            # ── Safe Stack pool: ANY high-probability bet (85%+) from all markets ──
+            if best_bet and best_bet.model_prob >= 0.85:
+                high_prob_pool.append({
+                    "fixture_id": match.fixture_id,
+                    "league": match.league,
+                    "home_team": match.home_team,
+                    "away_team": match.away_team,
+                    "market": best_bet.market,
+                    "odds": best_bet.odds,
+                    "model_prob": best_bet.model_prob,
+                    "expected_value": best_bet.expected_value,
+                    "kickoff_utc": match.kickoff_utc,
+                    "kickoff_local": match.kickoff_local,
+                })
+
             emoji = {"high": "🟢", "medium": "🟡", "low": "⚪", "none": "⚫"}.get(value_rank, "⚫")
             bet_label = best_bet.market if best_bet else "N/A"
             ev_label = f"EV {best_bet.expected_value:.1%}" if best_bet else "No odds"
@@ -600,7 +616,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
         return {"status": "skipped", "reason": "no_matches_analyzed", "date": date_str, "matches_analyzed": len(matches)}
 
     # ── Step 10: Generate accumulators ─────────────────────────────────────
-    accas_dict = generate_accumulators(bet_pool)
+    accas_dict = generate_accumulators(bet_pool, high_prob_pool)
     
     total_accas = sum(len(v) for v in accas_dict.values())
     _safe_print(f"[QuantPipeline] 🎰 Generated {total_accas} named accumulators across 4 tiers.")

@@ -103,11 +103,8 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
       return (b.confidence || 0) - (a.confidence || 0);
     });
 
-    // Top-tier picks (high/medium value rank OR safe/value category)
-    const topPicks = sorted.filter(m =>
-      m.value_rank === 'high' || m.value_rank === 'medium' ||
-      m.category === 'safe' || m.category === 'value'
-    );
+    // Top-tier picks: safe category only (value bets go to vault)
+    const topPicks = sorted.filter(m => m.category === 'safe');
 
     // Hook: dynamic free picks based on admin setting
     const hook = topPicks.slice(0, freePicksCount);

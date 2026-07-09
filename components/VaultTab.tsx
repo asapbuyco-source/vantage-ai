@@ -62,14 +62,29 @@ function getVaultKickoffUtc(match: any): string {
     return match.kickoff_utc ?? match.kickoffUtc ?? match.kickoff ?? '';
 }
 
+// Only markets with proven high hit rates enter the vault
+const VAULT_APPROVED_MARKETS = ['over 1.5', 'under 3.5'];
+
+function isVaultMarketApproved(match: any): boolean {
+    const market = (match.prediction || match.bet_type || '').toLowerCase();
+    return VAULT_APPROVED_MARKETS.some(m => market.includes(m));
+}
+
 function selectVaultPicks(predictions: any[]): any[] {
     return [...predictions]
         .filter(isVaultEligible)
+        .filter(isVaultMarketApproved)
         .filter(m => getVaultEvPct(m) >= 2)
         .filter(m => getVaultOdds(m) > 1 && getVaultProbability(m) > 0 && getVaultKellyPct(m) > 0)
         .sort((a, b) => {
+            // Over 1.5 always first — proven 84% hit rate
+            const aO15 = (a.prediction || a.bet_type || '').toLowerCase().includes('over 1.5') ? 1 : 0;
+            const bO15 = (b.prediction || b.bet_type || '').toLowerCase().includes('over 1.5') ? 1 : 0;
+            if (aO15 !== bO15) return bO15 - aO15;
+            // Then category priority
             const categoryDiff = (vaultCategoryPriority[b.category ?? ''] ?? -1) - (vaultCategoryPriority[a.category ?? ''] ?? -1);
             if (categoryDiff !== 0) return categoryDiff;
+            // Then quality score
             return getVaultQualityScore(b) - getVaultQualityScore(a);
         })
         .slice(0, MAX_VAULT_PICKS);

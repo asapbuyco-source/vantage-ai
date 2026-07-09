@@ -15,7 +15,7 @@ Only matches with approved value bets (safe/value category) are eligible.
 from dataclasses import dataclass, field
 from itertools import combinations
 from collections import defaultdict
-from ticket_rules import SAME_LEAGUE_PENALTY, SAME_FIXTURE_PENALTY, passes_layering, ticket_quality_score as _canonical_quality_score
+from ticket_rules import SAME_LEAGUE_PENALTY, SAME_FIXTURE_PENALTY
 
 
 # ── Accumulator config ─────────────────────────────────────────────────────────
@@ -71,6 +71,19 @@ TIER_CONFIG = {
         "count": 1,
         "risk_level": "extreme",
         "risk_warning": "Extreme variance — 5-leg accumulator. Bankroll suicide without a separate dedicated fund.",
+    },
+    "safe_stack": {
+        "label": "The Safe Stack",
+        "description": "High-probability combo — stacks 85%+ bets for reliable returns",
+        "icon": "🔒",
+        "max_legs": 5,
+        "min_legs": 3,
+        "min_prob": 0.85,     # Only 85%+ probability bets
+        "min_combined_odds": 2.00,
+        "sort_key": "prob",   # sort by probability
+        "count": 1,
+        "risk_level": "low",
+        "risk_warning": "High hit rate per leg — variance compounds across legs but each leg is individually strong.",
     },
 }
 
@@ -294,22 +307,21 @@ def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None)
     return best_combo if best_combo else _select_legs(bets, config, exclude_fixtures)
 
 
-def generate_accumulators(value_bets: list[dict]) -> dict[str, list[dict]]:
+def generate_accumulators(value_bets: list[dict], high_prob_pool: list[dict] = None) -> dict[str, list[dict]]:
     """
-    Generate 4 named accumulators from the value bet pool.
+    Generate named accumulators from the value bet pool.
+    The 'safe_stack' tier uses high_prob_pool (85%+ probability bets from all predictions).
     Returns a dict keyed by tier name, each containing up to 3 accumulator dicts.
-
-    FIX-9: Cross-tier fixture deduplication.
-    Phase 4.1: Branch-and-bound optimizer (falls back to greedy for large pools).
-    Phase 4.2: Multi-alternative generation (top 3 per tier).
     """
     results = {tier: [] for tier in TIER_CONFIG}
     used_fixtures = set()
 
     for tier_key, config in TIER_CONFIG.items():
         count = config.get("count", 1)
-        for _ in range(min(count, 3)):  # Phase 4.2: generate up to 3 alternatives
-            legs = _optimize_legs(value_bets, config, used_fixtures)
+        pool = high_prob_pool if tier_key == "safe_stack" and high_prob_pool else value_bets
+
+        for _ in range(min(count, 3)):
+            legs = _optimize_legs(pool, config, used_fixtures)
 
             if len(legs) >= config["min_legs"]:
                 acca = Accumulator(

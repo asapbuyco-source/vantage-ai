@@ -38,6 +38,9 @@ WATCH_KEYWORDS = ["under 1.5", "under 2.5", "under 3.5", "double chance (x2)", "
 # PHASE 1: Suppressed markets (DC X2 removed)
 SUPPRESSED_MARKETS = {"double chance (x2)", "dc x2"}
 
+# Only proven high-hit-rate markets enter the vault
+VAULT_APPROVED_MARKETS = ["over 1.5", "under 3.5"]
+
 # PHASE 1: Tighter calibration factors (applied at bet level)
 TIGHTER_CALIBRATION = {
     "over25": 0.80,
@@ -168,6 +171,10 @@ def apply_phase1_filters(candidates: list) -> list:
         if any(s in market_lower for s in SUPPRESSED_MARKETS):
             continue
 
+        # Vault market whitelist: only proven high-hit-rate markets
+        if not any(m in market_lower for m in VAULT_APPROVED_MARKETS):
+            continue
+
         # Phase 1.3: BTTS blanking filter
         if "btts" in market_lower and "no" not in market_lower and "both teams to score" in market_lower:
             pass  # handled below
@@ -195,12 +202,12 @@ def apply_phase1_filters(candidates: list) -> list:
 
         filtered.append(c)
 
-    # Phase 1.5: Sort with Over 1.5 priority boost
+    # Phase 1.5: Sort with Over 1.5 priority first, then category, then quality
     tier_priority = {"safe": 3, "value": 2}
     filtered.sort(key=lambda c: (
+        1 if "over 1.5" in c.get("market", "").lower() else 0,  # O1.5 always first
         tier_priority.get(c.get("category", ""), 0),
-        (c.get("expected_value", 0) * 0.4 + c["probability"] * 0.4 + c.get("inefficiency", 0) * 0.2)
-        * c.get("priority_boost", 1.0),
+        (c.get("expected_value", 0) * 0.4 + c["probability"] * 0.4 + c.get("inefficiency", 0) * 0.2),
     ), reverse=True)
 
     return filtered

@@ -155,7 +155,7 @@ def filter_bets(bets: list[ValueBet], league_tier: int = 1) -> list[ValueBet]:
     # Home/Away Win removed — 1X2 markets suppressed due to -43% ROI.
     MARKET_BONUS = {
         "Under 1.5 Goals": 1.18,   # 73% ROI — most profitable market, significantly under-allocated
-        "Over 1.5 Goals": 1.15,    # Raised from 1.08 — 84% win rate confirmed in 14-day audit, needs higher allocation
+        "Over 1.5 Goals": 1.30,    # Boosted from 1.15 — 84% hit rate confirmed, vault anchor
         "Under 3.5 Goals": 1.10,   # 41% ROI but small sample
         "BTTS": 1.05,              # 50% hit rate, +2.2% ROI — consistent edge
         "Over 2.5 Goals": 1.02,    # baseline — already dominant (40% of picks)

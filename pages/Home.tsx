@@ -163,10 +163,7 @@ export const Home: React.FC<HomeProps> = () => {
       if (rankDiff !== 0) return rankDiff;
       return (b.confidence || 0) - (a.confidence || 0);
     });
-    const topPicks = sorted.filter(m =>
-      m.value_rank === 'high' || m.value_rank === 'medium' ||
-      m.category === 'safe' || m.category === 'value'
-    );
+    const topPicks = sorted.filter(m => m.category === 'safe');
     return new Set(topPicks.slice(0, freePicksCount).map(m => m.id));
   }, [predictions, freePicksCount]);
 
