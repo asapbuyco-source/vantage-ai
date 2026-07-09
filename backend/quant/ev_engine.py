@@ -380,8 +380,8 @@ def evaluate_all_markets(
         if market in ["Home Win", "Away Win", "Draw", "Double Chance (X2)"]:
             continue  # Disabled: 1X2 = -40% ROI, DC X2 = 38% win rate
 
-        # STEP 1: Cap EV at 10% to prevent wild overconfidence
-        capped_ev = min(ev, 0.10)
+        # STEP 1: Cap EV at 15% to prevent wild overconfidence while preserving true edge signals
+        capped_ev = min(ev, 0.15)
 
         results.append(ValueBet(
             market=market,

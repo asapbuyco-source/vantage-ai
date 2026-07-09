@@ -4,76 +4,68 @@ live_score_writer.py
 Fetches live fixtures from API-Football and writes them to Firestore
 collection `live_scores/current` for the frontend LiveScores page.
 
-Runs every 2 minutes via scheduler cron job (~30 calls/hour, ~240/day).
-Previously the live momentum engine burned 15,000+ credits/day at 
-every 2-5 minutes. This version is far more efficient.
-
-Usage:
-    python live_score_writer.py
+Runs every 2 minutes via scheduler cron job.
 """
 
-import os, sys, json, math
+import os, sys, json, traceback
 from datetime import datetime, timezone, timedelta
-
-if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
-    sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
-
-try:
-    import certifi
-    os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = certifi.where()
-except ImportError:
-    pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-try:
-    import firebase_admin
-    from firebase_admin import firestore as fs, credentials
-except ImportError:
-    print(json.dumps({"status": "error", "error": "firebase-admin not installed"}))
-    sys.exit(1)
-
-LAGOS_TZ = timezone(timedelta(hours=1))
 LIVE_STATES = {"1H", "2H", "HT", "ET", "BT", "P", "LIVE", "SUSP", "INT"}
 
 
-def init_firestore():
-    if not firebase_admin._apps:
-        sa_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "")
-        if sa_raw:
-            sa_dict = json.loads(sa_raw)
-            if "private_key" in sa_dict:
-                sa_dict["private_key"] = sa_dict["private_key"].replace('\\n', '\n')
-            firebase_admin.initialize_app(credentials.Certificate(sa_dict))
-    return fs.client()
-
-
-def fetch_live_and_write():
-    """Fetch live fixtures and write to Firestore."""
-    db = init_firestore()
+def _init_db():
+    """Initialize Firestore, falling back gracefully."""
+    try:
+        import firebase_admin
+        from firebase_admin import firestore as fs, credentials
+    except ImportError:
+        print("[LiveScores] firebase-admin not installed", file=sys.stderr)
+        return None
 
     try:
-        from api_football_client import fetch_live_fixtures, RateLimitError
-    except ImportError as e:
-        print(json.dumps({"status": "error", "error": str(e)}))
+        if not firebase_admin._apps:
+            sa_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT", "")
+            if sa_raw:
+                sa_dict = json.loads(sa_raw)
+                if "private_key" in sa_dict:
+                    sa_dict["private_key"] = sa_dict["private_key"].replace('\\n', '\n')
+                firebase_admin.initialize_app(credentials.Certificate(sa_dict))
+            else:
+                firebase_admin.initialize_app()
+        return fs.client()
+    except Exception as e:
+        print(f"[LiveScores] Firebase init failed: {e}", file=sys.stderr)
+        return None
+
+
+def main():
+    db = _init_db()
+    if not db:
+        print(json.dumps({"status": "error", "error": "no_db"}))
         return
 
+    fixtures = None
     try:
+        from api_football_client import fetch_live_fixtures, RateLimitError
         fixtures = fetch_live_fixtures()
     except RateLimitError:
         print(json.dumps({"status": "rate_limited"}))
         return
     except Exception as e:
-        print(json.dumps({"status": "error", "error": str(e)}))
+        print(f"[LiveScores] API fetch error: {e}", file=sys.stderr)
+        print(json.dumps({"status": "error", "error": str(e)[:200]}))
         return
 
     if not fixtures:
-        # No live matches — write empty state
-        db.collection("live_scores").document("current").set({
-            "matches": [],
-            "count": 0,
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
-        }, merge=True)
+        try:
+            db.collection("live_scores").document("current").set({
+                "matches": [], "count": 0,
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+            }, merge=True)
+        except Exception:
+            pass
         print(json.dumps({"status": "ok", "matches": 0}))
         return
 
@@ -81,24 +73,13 @@ def fetch_live_and_write():
     for item in fixtures:
         fixture = item.get("fixture", {})
         status = fixture.get("status", {})
-
         if status.get("short") not in LIVE_STATES:
             continue
 
         teams = item.get("teams", {})
         goals = item.get("goals", {})
         league = item.get("league", {})
-        events = item.get("events", [])
-
-        recent_events = []
-        for ev in (events or [])[-5:]:
-            recent_events.append({
-                "minute": ev.get("time", {}).get("elapsed"),
-                "type": ev.get("type"),
-                "detail": ev.get("detail"),
-                "team": ev.get("team", {}).get("name"),
-                "player": ev.get("player", {}).get("name"),
-            })
+        evts = (item.get("events") or [])[-5:]
 
         matches.append({
             "id": str(fixture.get("id")),
@@ -113,30 +94,36 @@ def fetch_live_and_write():
             "stateShort": status.get("short"),
             "stateLong": status.get("long"),
             "minute": status.get("elapsed"),
-            "events": recent_events,
+            "events": [{"minute": e.get("time", {}).get("elapsed"), "type": e.get("type"),
+                        "detail": e.get("detail"), "team": e.get("team", {}).get("name"),
+                        "player": e.get("player", {}).get("name")} for e in evts],
             "startedAt": fixture.get("timestamp"),
         })
 
-    doc = {
-        "matches": matches,
-        "count": len(matches),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
-    }
-
     try:
-        db.collection("live_scores").document("current").set(doc, merge=True)
-        print(json.dumps({"status": "ok", "matches": len(matches)}))
+        db.collection("live_scores").document("current").set({
+            "matches": matches, "count": len(matches),
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }, merge=True)
     except Exception as e:
-        print(json.dumps({"status": "error", "error": str(e)}))
+        print(f"[LiveScores] Firestore write error: {e}", file=sys.stderr)
+
+    print(json.dumps({"status": "ok", "matches": len(matches)}))
 
 
 if __name__ == "__main__":
-    # Load env
+    # Only load .env if FIREBASE_SERVICE_ACCOUNT isn't already in environment (Railway has it set)
     try:
         from dotenv import load_dotenv
-        load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
-        load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env.local"))
+        if not os.environ.get("FIREBASE_SERVICE_ACCOUNT"):
+            root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+            load_dotenv(os.path.join(root, ".env"))
+            load_dotenv(os.path.join(root, ".env.local"))
     except ImportError:
         pass
 
-    fetch_live_and_write()
+    try:
+        main()
+    except Exception as e:
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)

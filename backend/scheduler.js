@@ -355,7 +355,8 @@ export const initScheduler = () => {
 
                     child.on('close', code => {
                         if (code !== 0) {
-                            logger.warn({ stderr }, '[LiveScores] Non-zero exit');
+                            const errMsg = stderr.trim() || stdout.trim() || '(no output)';
+                            logger.warn({ code, error: errMsg }, '[LiveScores] Non-zero exit');
                         }
                     });
                 } catch (e) {
@@ -390,7 +391,8 @@ export const initScheduler = () => {
 
                 child.on('close', code => {
                     if (code !== 0) {
-                        logger.warn({ stderr }, '[Scheduler] Unified vault non-zero exit');
+                        const errMsg = stderr.trim() || stdout.trim() || '(no output)';
+                        logger.warn({ code, error: errMsg }, '[Scheduler] Unified vault non-zero exit');
                     } else {
                         logger.info({ stdout: stdout.trim() }, '[Scheduler] Unified vault built');
                     }
@@ -421,10 +423,16 @@ export const initScheduler = () => {
                     });
 
                     let stdout = '';
+                    let stderr = '';
                     child.stdout.on('data', d => stdout += d);
-                    child.stderr.on('data', d => { /* silent */ });
+                    child.stderr.on('data', d => stderr += d);
 
                     child.on('close', code => {
+                        if (code !== 0) {
+                            const errMsg = stderr.trim() || stdout.trim() || '(no output)';
+                            logger.warn({ code, error: errMsg }, '[LiveEV] Non-zero exit');
+                            return;
+                        }
                         try {
                             const result = JSON.parse(stdout.trim() || '{}');
                             if (result.live_bets > 0) {
