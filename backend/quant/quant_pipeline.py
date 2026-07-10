@@ -582,6 +582,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "odds": best_bet.odds,
                     "model_prob": best_bet.model_prob,
                     "expected_value": best_bet.expected_value,
+                    "category": category,
                     "kickoff_utc": match.kickoff_utc,
                     "kickoff_local": match.kickoff_local,
                 })
@@ -597,6 +598,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "odds": best_bet.odds,
                     "model_prob": best_bet.model_prob,
                     "expected_value": best_bet.expected_value,
+                    "category": "safe",
                     "kickoff_utc": match.kickoff_utc,
                     "kickoff_local": match.kickoff_local,
                 })

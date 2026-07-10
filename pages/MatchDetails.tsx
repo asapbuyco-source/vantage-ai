@@ -360,10 +360,24 @@ fetchDetails();
                             </>
                         )}
 
-                        {/* PICKS TAB - More predictions for this match */}
+                        {/* PICKS TAB - More predictions for this match (VIP only) */}
                         {activeTab === 'picks' && (
                             <>
-                                {allMatchPicks.length === 0 ? (
+                                {!isVipUser ? (
+                                    <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
+                                        <div className="w-16 h-16 bg-vantage-purple/10 rounded-full flex items-center justify-center">
+                                            <Crown size={28} className="text-vantage-purple" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+                                                {language === 'fr' ? 'Contenu VIP' : 'VIP Content'}
+                                            </h3>
+                                            <p className="text-sm text-gray-500 max-w-[240px]">
+                                                {language === 'fr' ? 'Passez à Vantage Premium pour voir tous les paris disponibles pour ce match.' : 'Upgrade to Vantage Premium to see all available bets for this match.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : allMatchPicks.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
                                         <div className="w-14 h-14 bg-slate-100 dark:bg-white/10 rounded-full flex items-center justify-center">
                                             <BarChart3 size={24} className="text-gray-400" />

@@ -141,9 +141,42 @@ export const Home: React.FC<HomeProps> = () => {
     } catch (e) { /* user cancelled */ }
   };
 
+  const getHighestProbPick = (match: Match): { market: string; prob: number } => {
+    const markets = [
+      { name: 'Over 0.5 Goals', prob: match.over05_prob ?? 0 },
+      { name: 'Over 1.5 Goals', prob: match.over15_prob ?? 0 },
+      { name: 'Over 2.5 Goals', prob: match.over25_prob ?? 0 },
+      { name: 'Over 3.5 Goals', prob: match.over35_prob ?? 0 },
+      { name: 'Over 4.5 Goals', prob: match.over45_prob ?? 0 },
+      { name: 'Under 1.5 Goals', prob: match.under15_prob ?? 0 },
+      { name: 'Under 2.5 Goals', prob: match.under25_prob ?? 0 },
+      { name: 'Under 3.5 Goals', prob: match.under35_prob ?? 0 },
+      { name: 'Under 4.5 Goals', prob: match.under45_prob ?? 0 },
+      { name: 'BTTS', prob: match.btts_prob ?? 0 },
+      { name: 'Home Win', prob: match.home_win_prob ?? 0 },
+      { name: 'Draw', prob: match.draw_prob ?? 0 },
+      { name: 'Away Win', prob: match.away_win_prob ?? 0 },
+      { name: 'DC 1X', prob: match.double_chance_1x ?? 0 },
+      { name: 'DC X2', prob: match.double_chance_x2 ?? 0 },
+      { name: 'DC 12', prob: match.double_chance_12 ?? 0 },
+      { name: '1H Over 0.5', prob: match.fh_over05_prob ?? 0 },
+      { name: '1H Over 1.5', prob: match.fh_over15_prob ?? 0 },
+      { name: '1H BTTS', prob: match.fh_btts_prob ?? 0 },
+    ];
+    return markets.reduce((best, m) => m.prob > best.prob ? m : best, { market: '', prob: 0 });
+  };
+
   const getPredictionText = (match: Match) => {
+    const highest = getHighestProbPick(match);
+    if (highest.market) return highest.market;
     if (language === 'fr') return match.prediction_fr || match.prediction || '';
     return match.prediction_en || match.prediction || '';
+  };
+
+  const getPredictionProb = (match: Match) => {
+    const highest = getHighestProbPick(match);
+    if (highest.prob > 0) return Math.round(highest.prob * 100);
+    return match.confidence || 0;
   };
 
   const [showSortDropdown, setShowSortDropdown] = useState(false);
@@ -179,9 +212,12 @@ export const Home: React.FC<HomeProps> = () => {
     }
 
     if (isToday) {
-      // Don't filter out started matches — show them with live scores.
-      // Only filter out if status is explicitly 'void' (cancelled).
       result = result.filter(match => match.status !== 'void');
+    }
+
+    // Non-VIP users: only see 'safe' category bets (value bets are vault-only)
+    if (!isVip) {
+      result = result.filter(match => match.category === 'safe');
     }
 
     if (searchQuery.trim()) {
@@ -249,7 +285,8 @@ export const Home: React.FC<HomeProps> = () => {
       return (rankPri[b.value_rank as keyof typeof rankPri] || 0) - (rankPri[a.value_rank as keyof typeof rankPri] || 0) ||
         ((b.confidence || 0) - (a.confidence || 0));
     });
-    return ranked.find(m => m.value_rank === 'high' || m.value_rank === 'medium') || ranked[0];
+    return ranked.find(m => (m.value_rank === 'high' || m.value_rank === 'medium') && m.category === 'safe')
+      || ranked.find(m => m.category === 'safe') || ranked[0];
   }, [predictions]);
 
   const sortLabels: Record<SortKey, string> = {
@@ -346,7 +383,7 @@ export const Home: React.FC<HomeProps> = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">
-                {language === 'fr' ? "Meilleur Pick du Jour" : "Today's Top Pick"}
+                {language === 'fr' ? "Pick Haute Probabilité" : "Highest Probability Pick"}
               </p>
               <p className="text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">
                 {topPick.homeTeam} vs {topPick.awayTeam}
@@ -356,7 +393,7 @@ export const Home: React.FC<HomeProps> = () => {
               {isVip ? (
                 <>
                   <p className="text-xs font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">{pred}</p>
-                  <p className="text-[10px] font-bold font-mono text-emerald-500 mt-0.5">{topPick.confidence}%</p>
+                  <p className="text-[10px] font-bold font-mono text-emerald-500 mt-0.5">{getPredictionProb(topPick)}%</p>
                 </>
               ) : (
                 <p className="text-xs font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/20 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -568,7 +605,7 @@ export const Home: React.FC<HomeProps> = () => {
               <AnimatePresence>
                 {groupedMatches[groupKey].slice(0, visibleCount).map((match, idx) => {
                   const pred = getPredictionText(match);
-                  const confidence = match.confidence || 0;
+                  const confidence = getPredictionProb(match);
                   const xgH = match.expected_goals_home ?? 0;
                   const xgA = match.expected_goals_away ?? 0;
                   const homeProb = Math.round((match.home_win_prob || 0) * 100);

@@ -21,6 +21,7 @@ const CYCLE: Record<string, MatchStatus> = { won: 'lost', lost: 'pending', pendi
 export const Results: React.FC = () => {
     const { language, showToast } = useAppContext();
     const { isAdmin } = useAuth();
+    const isVip = useAuth().userProfile?.isVip || false;
 
     const [history, setHistory] = useState<DayResult[]>([]);
     const [loading, setLoading] = useState(true);
@@ -411,7 +412,9 @@ export const Results: React.FC = () => {
                                                                 <span className="font-bold text-slate-900 dark:text-white truncate text-xs">
                                                                     {match.homeTeam || match.home_team} vs {match.awayTeam || match.away_team}
                                                                 </span>
-                                                                <span className="text-[10px] text-gray-500 truncate">{match.league} · {pred}</span>
+                                                                <span className="text-[10px] text-gray-500 truncate">
+                                                    {match.league} · {(isAdmin || isVip) ? pred : (language === 'fr' ? 'Réservé VIP' : 'VIP Only')}
+                                                </span>
                                                             </div>
                                                         </div>
                                                         <div className="flex flex-col items-end shrink-0 ml-2">

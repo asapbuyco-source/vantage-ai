@@ -98,6 +98,7 @@ class AccumulatorLeg:
     model_prob: float
     expected_value: float
     league: str = "unknown"
+    category: str = "safe"
     kickoff_utc: str = ""
     kickoff_local: str = ""
 
@@ -310,15 +311,18 @@ def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None)
 def generate_accumulators(value_bets: list[dict], high_prob_pool: list[dict] = None) -> dict[str, list[dict]]:
     """
     Generate named accumulators from the value bet pool.
+    Regular tiers use 'safe' category bets only (proven 76%+ hit rate).
     The 'safe_stack' tier uses high_prob_pool (85%+ probability bets from all predictions).
-    Returns a dict keyed by tier name, each containing up to 3 accumulator dicts.
     """
+    # Only use safe-category bets for accumulators (value bets are too volatile for parlays)
+    safe_pool = [b for b in value_bets if b.get("category") == "safe"]
+
     results = {tier: [] for tier in TIER_CONFIG}
     used_fixtures = set()
 
     for tier_key, config in TIER_CONFIG.items():
         count = config.get("count", 1)
-        pool = high_prob_pool if tier_key == "safe_stack" and high_prob_pool else value_bets
+        pool = high_prob_pool if tier_key == "safe_stack" and high_prob_pool else safe_pool
 
         for _ in range(min(count, 3)):
             legs = _optimize_legs(pool, config, used_fixtures)
