@@ -395,6 +395,16 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
         pred["score"] = f"{hg}-{ag}"
         pred["graded_at"] = datetime.now(timezone.utc).isoformat()
 
+        # ── Grade the safest (highest-probability) bet too ──────────────────
+        safest = pred.get("_safest_bet")
+        if safest and isinstance(safest, list) and len(safest) == 2:
+            safest_market, safest_prob = safest
+            pred["safest_bet"] = safest_market
+            pred["safest_bet_prob"] = round(safest_prob, 4)
+            pred["safest_bet_result"] = _grade_bet(safest_market, hg, ag)
+        elif safest and isinstance(safest, str):
+            pred["safest_bet_result"] = _grade_bet(safest, hg, ag)
+
         # ── CLV Tracking ──────────────────────────────────────────────────
         closing_odds_map = result.get("closing_odds", {})
         closing_odd = closing_odds_map.get(market, 0.0)
@@ -441,6 +451,12 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
                 pred["score"] = f"{hg}-{ag}"
                 pred["graded_at"] = datetime.now(timezone.utc).isoformat()
                 pred["graded_by"] = "team_name_match"
+                # Grade safest bet too
+                safest = pred.get("_safest_bet")
+                if safest and isinstance(safest, list) and len(safest) == 2:
+                    pred["safest_bet"] = safest[0]
+                    pred["safest_bet_prob"] = round(safest[1], 4)
+                    pred["safest_bet_result"] = _grade_bet(safest[0], hg, ag)
                 graded_count += 1
                 print(f"[Grading] ✅ Team-name match: {pred.get('home_team')} vs {pred.get('away_team')} -> {pred['score']}")
             else:
