@@ -10,6 +10,7 @@ import {
 import { GlassCard } from '../components/GlassCard';
 import { useAppContext } from '../context/AppContext';
 import { useData } from '../context/DataContext';
+import { getPrimaryPredictionText, getPrimaryPredictionProb } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TeamLogo } from '../components/TeamLogo';
 import { NavigationTab, Match } from '../types';
@@ -89,19 +90,10 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const getPredictionText = (match: any) => {
-    if (language === 'fr') return match.prediction_fr || match.prediction;
-    return match.prediction_en || match.prediction;
-  };
 
-  // ── Categorize matches into tiers ─────────────────────────────────────
   const { hookPicks, vipTeasers, dataCards, leagueBreakdown } = useMemo(() => {
-    const rankPriority: Record<string, number> = { high: 4, medium: 3, low: 2, none: 1 };
-    const sorted = [...predictions].sort((a, b) => {
-      const rankDiff = (rankPriority[b.value_rank] || 0) - (rankPriority[a.value_rank] || 0);
-      if (rankDiff !== 0) return rankDiff;
-      return (b.confidence || 0) - (a.confidence || 0);
-    });
+    // Sort by highest probability pick first (probability-first site)
+    const sorted = [...predictions].sort((a, b) => getPrimaryPredictionProb(b) - getPrimaryPredictionProb(a));
 
     // Top-tier picks: safe category only (value bets go to vault)
     const topPicks = sorted.filter(m => m.category === 'safe');
@@ -134,13 +126,13 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
   })();
 
   const renderRichMatchCard = (match: any, idx: number, blurred: boolean = false) => {
-    const pred = getPredictionText(match);
+    const pred = getPrimaryPredictionText(match, language);
     const xgH = match.expected_goals_home ?? 0;
     const xgA = match.expected_goals_away ?? 0;
     const homeWinProb = Math.round((match.home_win_prob || 0) * 100);
     const drawProb = Math.round((match.draw_prob || 0) * 100);
     const awayWinProb = Math.round((match.away_win_prob || 0) * 100);
-    const confidence = match.confidence || 0;
+    const confidence = getPrimaryPredictionProb(match);
 
     return (
       <motion.div

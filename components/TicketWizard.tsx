@@ -129,9 +129,9 @@ function violatesCorrelationGuard(selected: Match[], candidate: Match, riskLevel
 function ticketQualityScore(match: Match): number {
     const confidence = match.confidence ?? 0;
     const prob = getModelProbability(match);
-    const ev = getExpectedValue(match);
     const odds = match.odds ?? 0;
-    return confidence + prob * 35 + ev * 120 - Math.max(0, odds - 2.5) * 4;
+    // Accumulators compound variance, so we strictly prioritize pure probability and confidence over single-event EV
+    return confidence * 2 + prob * 100 - Math.max(0, odds - 2.0) * 10;
 }
 
 export const TicketWizard: React.FC<TicketWizardProps> = () => {

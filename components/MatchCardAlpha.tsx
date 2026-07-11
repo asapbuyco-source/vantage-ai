@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Clock, Copy, Check, BrainCircuit } from 'lucide-react';
 import { Match } from '../types';
 import { TeamLogo } from './TeamLogo';
+import { getTopProbPicks } from '../utils';
 
 interface MatchCardAlphaProps {
   match: Match;
@@ -43,6 +44,10 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
   const topScorelines = match.top_scorelines;
   const topScore = topScorelines?.[0];
 
+  const topPicks = getTopProbPicks(match);
+  const displayPickName = topPicks.length > 0 ? topPicks.map(p => p.name).join(' / ') : (match.bet_type || match.prediction);
+  const displayPickProb = topPicks.length > 0 ? Math.round(topPicks[0].prob * 100) : (match.confidence ?? Math.round((match.probability ?? 0) * 100));
+
   return (
     <motion.div
       key={match.fixture_id ?? String(idx)}
@@ -66,7 +71,7 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
               className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold transition-all ${
                 isExpanded
                   ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-slate-100 dark:bg-white/10 text-gray-500 hover:bg-emerald-500/20 hover:text-emerald-600'
+                  : 'bg-emerald-500 text-white animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]'
               }`}
             >
               {isExpanded ? 'Hide' : 'Analysis'}
@@ -96,46 +101,39 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
         </div>
 
         {/* ── Top Prediction (always visible, highlighted) ── */}
-        <div className="mx-3 mb-2 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-          <div className="flex items-center justify-between">
+        <div 
+          onClick={onToggle}
+          className="mx-3 mb-2 p-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 cursor-pointer hover:bg-emerald-500/10 transition-colors"
+        >
+          <div className="flex items-center justify-between mb-1.5">
             <div className="flex flex-col min-w-0 mr-2">
               <span className="text-[8px] text-gray-500 uppercase tracking-wide">Top Pick</span>
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate" title={match.bet_type || match.prediction}>
-                {match.bet_type || match.prediction}
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate" title={displayPickName}>
+                {displayPickName}
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 ${evColor}`}>
-                +{(match.ev_pct ?? (ev * 100)).toFixed(1)}%
-              </span>
-              <span className="text-xs font-bold font-mono text-green-400">{match.confidence ?? Math.round((match.probability ?? 0) * 100)}%</span>
+              <span className="text-xs font-bold font-mono text-green-400">{displayPickProb}%</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {Number(match.odds) > 1 && (
-              <span className="text-[9px] font-mono text-gray-500 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">{Number(match.odds).toFixed(2)}x</span>
-            )}
-            {kelly > 0 && (
-              <span className="text-[9px] font-mono text-blue-400 bg-blue-500/5 px-1.5 py-0.5 rounded">Kelly {kelly.toFixed(1)}%</span>
-            )}
-            {match.vault_eligible && (
-              <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>
-            )}
+          <div className="flex items-center justify-between mt-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              {Number(match.odds) > 1 && (
+                <span className="text-[9px] font-mono text-gray-500 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">{Number(match.odds).toFixed(2)}x</span>
+              )}
+              {kelly > 0 && (
+                <span className="text-[9px] font-mono text-blue-400 bg-blue-500/5 px-1.5 py-0.5 rounded">Kelly {kelly.toFixed(1)}%</span>
+              )}
+              {match.vault_eligible && (
+                <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-500 opacity-80 shrink-0">
+              <span>{isExpanded ? 'Hide' : 'View More'}</span>
+              <ChevronDown size={10} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+            </div>
           </div>
         </div>
-
-        {/* ── AI Verdict ── */}
-        {(match as any).analysis_en && (
-          <div className="mx-3 mb-2 p-2.5 rounded-xl bg-gradient-to-r from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <BrainCircuit size={10} className="text-cyan-500" />
-              <span className="text-[8px] text-cyan-500 uppercase tracking-wide font-bold">AI Verdict</span>
-            </div>
-            <p className="text-[9px] text-gray-600 dark:text-gray-300 leading-relaxed">
-              {(match as any).analysis_en}
-            </p>
-          </div>
-        )}
 
         {/* ── Expandable Analysis ── */}
         <AnimatePresence>
@@ -147,6 +145,19 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
+              {/* ── AI Verdict ── */}
+              {(match as any).analysis_en && (
+                <div className="mx-3 mb-2 p-2.5 rounded-xl bg-gradient-to-r from-cyan-500/5 to-blue-500/5 border border-cyan-500/20">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <BrainCircuit size={10} className="text-cyan-500" />
+                    <span className="text-[8px] text-cyan-500 uppercase tracking-wide font-bold">AI Verdict</span>
+                  </div>
+                  <p className="text-[9px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                    {(match as any).analysis_en}
+                  </p>
+                </div>
+              )}
+
               <div className="mx-3 mb-3 p-3 bg-slate-50 dark:bg-black/30 rounded-xl border border-slate-200 dark:border-white/5 space-y-3">
                 
                 {/* ── 1X2 Probability Bars ── */}

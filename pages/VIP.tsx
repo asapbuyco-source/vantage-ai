@@ -18,6 +18,7 @@ import { PortfolioOnboarding } from '../components/PortfolioOnboarding';
 import { Sparkline } from '../components/Sparkline';
 import { Screener } from '../components/Screener';
 import { MatchCardAlpha } from '../components/MatchCardAlpha';
+import { getPrimaryPredictionProb, getPrimaryPredictionText } from '../utils';
 
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
@@ -107,11 +108,10 @@ export const VIP: React.FC<VIPProps> = () => {
   const [accaCopilot, setAccaCopilot] = useState<any>(null);
   const [dailyTip, setDailyTip] = useState<any>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  // Sort predictions by rank priority (same logic as before but now uses DataContext data)
+  // Sort predictions by highest probability (shows highest confidence picks first)
   const quantPredictions = useMemo(() => {
     const sorted = [...predictions].map(normalizeQuantPrediction) as Match[];
-    const rankPriority: Record<string, number> = { high: 4, medium: 3, low: 2, none: 1 };
-    sorted.sort((a, b) => (rankPriority[b.value_rank ?? ''] || 0) - (rankPriority[a.value_rank ?? ''] || 0));
+    sorted.sort((a, b) => getPrimaryPredictionProb(b) - getPrimaryPredictionProb(a));
     return sorted;
   }, [predictions]);
 
@@ -301,10 +301,8 @@ export const VIP: React.FC<VIPProps> = () => {
     }
   };
 
-  const getPredictionText = (match: Match) => {
-    if (language === 'fr') return match.prediction_fr || match.prediction;
-    return match.prediction_en || match.prediction;
-  };
+  // Uses shared util: shows highest prob market name, falls back to AI prediction text
+  const getPredictionText = (match: Match) => getPrimaryPredictionText(match, language);
 
   const getAnalysisText = (match: Match) => {
     if (language === 'fr') return match.analysis_fr || match.analysis;

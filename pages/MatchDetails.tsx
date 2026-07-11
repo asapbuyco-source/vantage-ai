@@ -360,7 +360,7 @@ fetchDetails();
                             </>
                         )}
 
-                        {/* PICKS TAB - More predictions for this match (VIP only) */}
+                        {/* PICKS TAB - Market probabilities (VIP only) */}
                         {activeTab === 'picks' && (
                             <>
                                 {!isVipUser ? (
@@ -373,83 +373,120 @@ fetchDetails();
                                                 {language === 'fr' ? 'Contenu VIP' : 'VIP Content'}
                                             </h3>
                                             <p className="text-sm text-gray-500 max-w-[240px]">
-                                                {language === 'fr' ? 'Passez à Vantage Premium pour voir tous les paris disponibles pour ce match.' : 'Upgrade to Vantage Premium to see all available bets for this match.'}
+                                                {language === 'fr' ? 'Passez à Vantage Premium pour voir les probabilités détaillées de chaque marché.' : 'Upgrade to Vantage Premium to see detailed market-by-market probabilities.'}
                                             </p>
                                         </div>
                                     </div>
-                                ) : allMatchPicks.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-3">
-                                        <div className="w-14 h-14 bg-slate-100 dark:bg-white/10 rounded-full flex items-center justify-center">
-                                            <BarChart3 size={24} className="text-gray-400" />
-                                        </div>
-                                        <h3 className="text-sm font-bold text-gray-500">
-                                            {language === 'fr' ? 'Aucun autre pari disponible' : 'No other predictions available'}
-                                        </h3>
-                                        <p className="text-xs text-gray-400">
-                                            {language === 'fr' ? "L'IA n'a identifié qu'un seul pari de valeur pour ce match." : "The AI has identified only one value bet for this match."}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-                                                {language === 'fr' ? `+ ${allMatchPicks.length} autres paris` : `+ ${allMatchPicks.length} more picks`}
-                                            </h3>
-                                            <span className="text-[10px] text-gray-400">
-                                                {language === 'fr' ? "Triés par EV" : "Sorted by EV"}
-                                            </span>
-                                        </div>
-                                        {allMatchPicks
-                                            .sort((a, b) => ((b.expected_value || 0) - (a.expected_value || 0)))
-                                            .map((pick, idx) => {
-                                                const pickEv = (pick.expected_value || 0) * 100;
-                                                const pickConf = pick.confidence || ((pick.calibrated_probability || pick.probability || 0) * 100);
-                                                const pickOdds = pick.odds || 0;
-                                                const pickLabel = language === 'fr' ? (pick.prediction_fr || pick.prediction_en || pick.prediction) : (pick.prediction_en || pick.prediction);
-                                                const evColor = pickEv >= 10 ? 'text-emerald-400' : pickEv >= 5 ? 'text-yellow-400' : 'text-orange-400';
+                                ) : match && (
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                                    {language === 'fr' ? 'Probabilités par Marché' : 'Market Probabilities'}
+                                </h3>
 
-                                                return (
-                                                    <div
-                                                        key={pick.id || idx}
-                                                        className="p-4 rounded-xl bg-white/5 dark:bg-white/5 border border-white/10 hover:border-vantage-cyan/30 transition-colors"
-                                                    >
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-gray-500 uppercase">
-                                                                {pick.category || 'value'}
-                                                            </span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className={`text-[10px] font-bold font-mono ${evColor}`}>
-                                                                    +{pickEv.toFixed(1)}% EV
-                                                                </span>
-                                                                {pick.vault_eligible && (
-                                                                    <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center justify-between">
-                                                            <div>
-                                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{pickLabel}</p>
-                                                                <p className="text-[10px] text-gray-400 mt-0.5">
-                                                                    {language === 'fr' ? 'Confiance' : 'Confidence'}: {pickConf.toFixed(0)}%
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right">
-                                                                <p className="text-lg font-black font-mono text-vantage-cyan">{pickOdds > 0 ? pickOdds.toFixed(2) : '—'}</p>
-                                                                <p className="text-[10px] text-gray-400">{pick.bet_type || ''}</p>
-                                                            </div>
-                                                        </div>
-                                                        {(pick as any).analysis_en && (
-                                                            <div className="mt-2 pt-2 border-t border-white/5">
-                                                                <p className="text-[10px] text-gray-400 leading-relaxed">
-                                                                    {(language === 'fr' ? (pick as any).analysis_fr : (pick as any).analysis_en)}
-                                                                </p>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
+                                {/* 1X2 Probability Bars */}
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Match Result (1X2)</span>
+                                    {(() => {
+                                        const markets = [
+                                            { label: 'Home Win', prob: (match.home_win_prob || 0) * 100 },
+                                            { label: 'Draw', prob: (match.draw_prob || 0) * 100 },
+                                            { label: 'Away Win', prob: (match.away_win_prob || 0) * 100 },
+                                        ];
+                                        const highest = Math.max(...markets.map(m => m.prob));
+                                        return markets.map(r => (
+                                            <div key={r.label} className="flex items-center gap-2">
+                                                <span className="text-[10px] text-gray-400 w-16">
+                                                    {r.label}
+                                                    {r.prob === highest && r.prob > 0 && (
+                                                        <span className="text-[7px] text-emerald-400 ml-0.5 font-bold">TOP</span>
+                                                    )}
+                                                </span>
+                                                <div className="flex-1 h-2 rounded-full bg-white/10">
+                                                    <div className={`h-2 rounded-full ${r.prob === highest ? 'bg-emerald-500' : 'bg-vantage-cyan'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
+                                                </div>
+                                                <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+
+                                {/* Goals Over/Under */}
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Goals Over/Under</span>
+                                    {(() => {
+                                        const markets = [
+                                            { label: 'Over 1.5', prob: (match.over15_prob || 0) * 100 },
+                                            { label: 'Over 2.5', prob: (match.over25_prob || 0) * 100 },
+                                            { label: 'Over 3.5', prob: (match.over35_prob || 0) * 100 },
+                                            { label: 'Under 2.5', prob: (match.under25_prob || 0) * 100 },
+                                            { label: 'Under 3.5', prob: (match.under35_prob || 0) * 100 },
+                                        ].filter(r => r.prob > 0);
+                                        const highest = Math.max(...markets.map(m => m.prob));
+                                        return markets.map(r => (
+                                            <div key={r.label} className="flex items-center gap-2">
+                                                <span className="text-[10px] text-gray-400 w-16">
+                                                    {r.label}
+                                                    {r.prob === highest && r.prob > 0 && (
+                                                        <span className="text-[7px] text-emerald-400 ml-0.5 font-bold">TOP</span>
+                                                    )}
+                                                </span>
+                                                <div className="flex-1 h-2 rounded-full bg-white/10">
+                                                    <div className={`h-2 rounded-full ${r.prob === highest ? 'bg-emerald-500' : r.prob >= 70 ? 'bg-vantage-cyan' : 'bg-amber-500'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
+                                                </div>
+                                                <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+
+                                {/* BTTS */}
+                                {(match.btts_prob || 0) > 0 && (
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Both Teams to Score</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] text-gray-400 w-16">BTTS Yes</span>
+                                        <div className="flex-1 h-2 rounded-full bg-white/10">
+                                            <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min((match.btts_prob || 0) * 100, 100)}%` }} />
+                                        </div>
+                                        <span className="text-[10px] font-mono text-white w-10 text-right">{((match.btts_prob || 0) * 100).toFixed(0)}%</span>
                                     </div>
+                                </div>
                                 )}
+
+                                {/* First Half */}
+                                {(match.fh_over05_prob || match.fh_over15_prob) > 0 && (
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">First Half</span>
+                                    {[
+                                        { label: 'FH Over 0.5', prob: (match.fh_over05_prob || 0) * 100 },
+                                        { label: 'FH Over 1.5', prob: (match.fh_over15_prob || 0) * 100 },
+                                    ].filter(r => r.prob > 0).map(r => (
+                                        <div key={r.label} className="flex items-center gap-2">
+                                            <span className="text-[10px] text-gray-400 w-20">{r.label}</span>
+                                            <div className="flex-1 h-2 rounded-full bg-white/10">
+                                                <div className={`h-2 rounded-full ${r.prob >= 70 ? 'bg-emerald-500' : 'bg-vantage-cyan'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                )}
+
+                                {/* Top Scorelines */}
+                                {match.top_scorelines && match.top_scorelines.length > 0 && (
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Most Likely Scorelines</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {match.top_scorelines.slice(0, 4).map((sl: any, i: number) => (
+                                            <span key={i} className="text-[10px] font-mono bg-white/10 px-2 py-1 rounded text-gray-300">
+                                                {sl.scoreline || sl} ({(sl.prob ? (sl.prob * 100).toFixed(1) : '—')}%)
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                )}
+                            </div>
+                            )}
                             </>
                         )}
 

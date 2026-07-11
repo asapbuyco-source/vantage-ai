@@ -77,19 +77,18 @@ function selectVaultPicks(predictions: any[]): any[] {
         .filter(m => getVaultEvPct(m) >= 2)
         .filter(m => getVaultOdds(m) > 1 && getVaultProbability(m) > 0 && getVaultKellyPct(m) > 0)
         .sort((a, b) => {
-            // Over 1.5 always first — proven 84% hit rate
+            // 1. Over 1.5 always first — proven 84% hit rate vault anchor
             const aO15 = (a.prediction || a.bet_type || '').toLowerCase().includes('over 1.5') ? 1 : 0;
             const bO15 = (b.prediction || b.bet_type || '').toLowerCase().includes('over 1.5') ? 1 : 0;
             if (aO15 !== bO15) return bO15 - aO15;
-            // Then category priority
+            // 2. Then safe > value category
             const categoryDiff = (vaultCategoryPriority[b.category ?? ''] ?? -1) - (vaultCategoryPriority[a.category ?? ''] ?? -1);
             if (categoryDiff !== 0) return categoryDiff;
-            // Then quality score
+            // 3. Then quality score
             return getVaultQualityScore(b) - getVaultQualityScore(a);
         })
         .slice(0, MAX_VAULT_PICKS);
 }
-
 
 function calcBankrollEnd(picks: VaultPick[], startBankroll: number): number {
     let bankroll = startBankroll;
@@ -166,6 +165,17 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
             // Sort days chronologically to compound correctly
             const daysToGrade = snap.docs.map(d => d.data() as VaultDay).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
+            // Optimization: Fetch all needed predictions in parallel to massively speed up loading time
+            const dateKeysToFetch = [...new Set(daysToGrade.map(d => d.dateKey))];
+            const predictionsByDate = await Promise.all(
+                dateKeysToFetch.map(async date => {
+                    const picks = await getPredictionsForDate(date);
+                    return { date, picks };
+                })
+            ).then(results => Object.fromEntries(results.map(r => [r.date, r.picks])));
+
+            const savesToAwait: Promise<void>[] = [];
+
             for (const day of daysToGrade) {
                 let dayUpdated = false;
 
@@ -176,17 +186,17 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                     for (let pick of day.picks) {
                         if (pick.result === 'pending') {
                             if (!pick.lockedAt) {
-                                pick.stakeAmount = Math.round(currentBankroll * ((pick.kellyStakePct || 0) / 100));
+                                pick.stakeAmount = Math.min(Math.round(currentBankroll * 0.05), Math.round(currentBankroll * ((pick.kellyStakePct || 0) / 100)));
                             }
                         }
                     }
                     dayUpdated = true;
                 }
 
-                // Fetch graded predictions for that day
-                const masterPicks = await getPredictionsForDate(day.dateKey);
+                // Fetch graded predictions for that day from pre-fetched map
+                const masterPicks = predictionsByDate[day.dateKey];
                 if (!masterPicks || masterPicks.length === 0) {
-                    if (dayUpdated) await saveVaultDay(user.uid, day.dateKey, day);
+                    if (dayUpdated) savesToAwait.push(saveVaultDay(user.uid, day.dateKey, day));
                     continue;
                 }
 
@@ -194,7 +204,7 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
 
                 for (let pick of day.picks) {
                     if (pick.result === 'pending') {
-                        const masterPick = masterPicks.find(m => String(m.id) === String(pick.fixtureId) || String(m.fixture_id) === String(pick.fixtureId));
+                        const masterPick = masterPicks.find((m: any) => String(m.id) === String(pick.fixtureId) || String(m.fixture_id) === String(pick.fixtureId));
                         if (masterPick && masterPick.status && masterPick.status !== 'pending') {
                             const statusStr = masterPick.status.toLowerCase();
                             
@@ -231,9 +241,12 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                         currentBankroll = dayBankroll;
                         profileNeedsUpdate = true;
                     }
-                    await saveVaultDay(user.uid, day.dateKey, day);
+                    savesToAwait.push(saveVaultDay(user.uid, day.dateKey, day));
                 }
             }
+            
+            // Execute all saves concurrently
+            await Promise.all(savesToAwait);
 
             if (profileNeedsUpdate) {
                 await updateUserProfile(user.uid, { portfolioBankroll: currentBankroll });
@@ -289,7 +302,8 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
             providerSource: m.provider_source ?? 'sportmonks',
             source: 'vault_strategy',
             kellyStakePct: getVaultKellyPct(m),
-            stakeAmount: Math.round(startingBankroll * (getVaultKellyPct(m) / 100)),
+            // Cap stake at max 5% of bankroll to protect capital
+            stakeAmount: Math.min(Math.round(startingBankroll * 0.05), Math.round(startingBankroll * (getVaultKellyPct(m) / 100))),
             result: 'pending',
             profit: null,
             confirmed: true
