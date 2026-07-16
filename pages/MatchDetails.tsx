@@ -479,7 +479,7 @@ fetchDetails();
                                     <div className="flex flex-wrap gap-2">
                                         {match.top_scorelines.slice(0, 4).map((sl: any, i: number) => (
                                             <span key={i} className="text-[10px] font-mono bg-white/10 px-2 py-1 rounded text-gray-300">
-                                                {sl.scoreline || sl} ({(sl.prob ? (sl.prob * 100).toFixed(1) : '—')}%)
+                                                {sl.score || sl.scoreline || String(sl[0])} ({sl.prob != null ? (sl.prob * 100).toFixed(1) : (sl[1] != null ? (sl[1] * 100).toFixed(1) : '—')}%)
                                             </span>
                                         ))}
                                     </div>
