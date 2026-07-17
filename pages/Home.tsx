@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Zap, Activity, ArrowRight, Lock, Globe, Clock, Calendar, Sun, Moon,
   Trophy, AlertTriangle, Hourglass, Search, SlidersHorizontal, ChevronDown,
-  Flame, TrendingUp, ChevronRight, Shield, BarChart3, Radio, Copy, Check, Share2, Target
+  Flame, TrendingUp, ChevronRight, Shield, BarChart3, Copy, Check, Share2, Target
 } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { CircularProgress } from '../components/CircularProgress';
@@ -17,7 +17,7 @@ import { TeamLogo } from '../components/TeamLogo';
 import { getAppSettings } from '../services/db';
 import { TicketWizard } from '../components/TicketWizard';
 import { MotionDiv } from '../components/MotionDiv';
-import { getTopProbPicks, getPrimaryPredictionText, getPrimaryPredictionProb } from '../utils';
+import { getTopProbPicks, getPrimaryPredictionText, getPrimaryPredictionProb, getTopPickText } from '../utils';
 
 interface HomeProps {}
 
@@ -79,7 +79,7 @@ export const Home: React.FC<HomeProps> = () => {
   const { user, userProfile, isAdmin } = useAuth();
   const {
     activeDate, predictions, rawFixtures, basketballPredictions, cricketPredictions,
-    winRateStats, loading, isSystemGenerating, systemError, liveCount
+    winRateStats, loading, isSystemGenerating, systemError
   } = useData();
 
   const isVip = userProfile?.isVip || isAdmin;
@@ -174,11 +174,6 @@ export const Home: React.FC<HomeProps> = () => {
 
     if (isToday) {
       result = result.filter(match => match.status !== 'void');
-    }
-
-    // Non-VIP users: only see 'safe' category bets (value bets are vault-only)
-    if (!isVip) {
-      result = result.filter(match => match.category === 'safe');
     }
 
     if (searchQuery.trim()) {
@@ -341,7 +336,7 @@ export const Home: React.FC<HomeProps> = () => {
 
       {/* ── Zone A: Top Pick Hero ── */}
       {topPick && (() => {
-        const pred = getPrimaryPredictionText(topPick, language);
+        const pred = getTopPickText(topPick);
         return (
           <button
             onClick={() => !isVip ? navigate('/vip') : navigate(`/match/${topPick.id}`)}
@@ -393,29 +388,6 @@ export const Home: React.FC<HomeProps> = () => {
           )}
         </div>
       </div>
-
-      {liveCount > 0 && (
-        <motion.button
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          onClick={() => navigate('/live')}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all text-left"
-        >
-          <span className="relative flex h-3 w-3 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-red-500">
-              🔴 {liveCount} {language === 'fr' ? `Match${liveCount > 1 ? 's' : ''} en Direct` : `Live Match${liveCount > 1 ? 'es' : ''} Now`}
-            </p>
-            <p className="text-[10px] text-red-400/70">
-              {language === 'fr' ? 'Voir les scores en temps réel →' : 'View live scores →'}
-            </p>
-          </div>
-          <Radio size={18} className="shrink-0 text-red-500" />
-        </motion.button>
-      )}
 
       {/* ─── SORT & FILTER TOOLBAR ─── */}
       <div className="space-y-3 sticky top-[72px] z-20 bg-vantage-lightBg dark:bg-vantage-bg backdrop-blur-md py-2 -mx-2 px-2">
@@ -560,7 +532,7 @@ export const Home: React.FC<HomeProps> = () => {
           Object.keys(groupedMatches).map(groupKey => (
             <div key={groupKey} className="space-y-3">
               {groupKey !== 'All Matches' && (
-                <div className="sticky top-0 z-10 py-2 bg-gradient-to-b from-vantage-lightBg/95 to-vantage-lightBg/50 dark:from-vantage-bg/95 dark:to-vantage-bg/50 backdrop-blur-md">
+                <div className="sticky top-[72px] z-10 py-2 bg-gradient-to-b from-vantage-lightBg/95 to-vantage-lightBg/50 dark:from-vantage-bg/95 dark:to-vantage-bg/50 backdrop-blur-md">
                   <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-200/50 dark:bg-white/10 border border-slate-300 dark:border-white/10">
                     <Trophy size={12} className="text-vantage-purple" />
                     <span className="text-[10px] font-bold text-slate-800 dark:text-white uppercase tracking-wider">{groupKey}</span>
@@ -683,6 +655,11 @@ export const Home: React.FC<HomeProps> = () => {
                             </div>
                           </div>
                         )}
+                        <div className="px-3 pb-2 flex justify-center">
+                          <span className="text-[8px] text-gray-400 flex items-center gap-1">
+                            <ChevronRight size={10} /> {language === 'fr' ? 'Voir les détails' : 'Tap to view'}
+                          </span>
+                        </div>
                       </div>
                     </motion.div>
                   );

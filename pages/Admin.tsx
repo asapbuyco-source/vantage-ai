@@ -23,15 +23,18 @@ export const Admin: React.FC<AdminProps> = () => {
 
     const [activeAdminTab, setActiveAdminTab] = useState<'users' | 'payouts' | 'assets' | 'bots'>('users');
     const [users, setUsers] = useState<UserProfile[]>([]);
+    const [userLastDoc, setUserLastDoc] = useState<any>(null);
     const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
     const [assets, setAssets] = useState<TeamAsset[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [selectPlanFor, setSelectPlanFor] = useState<string | null>(null);
 
     // Mounted Ref for Async Safety
     const isMounted = useRef(false);
+    const lastCursorRef = useRef<any>(null);
 
     // Gemini & DB State
     const [geminiTest, setGeminiTest] = useState<{ status: 'OK' | 'ERROR'; latency: number; message: string } | null>(null);
@@ -244,34 +247,47 @@ export const Admin: React.FC<AdminProps> = () => {
 
     const [userStats, setUserStats] = useState({ total: 0, vip: 0, admin: 0, free: 0 });
 
-    const fetchUsers = useCallback(async () => {
-        setLoading(true);
+    const fetchUsers = useCallback(async (append = false) => {
+        if (!append) setLoading(true); else setLoadingMore(true);
         try {
-            // getAllUsers() returns { users: UserProfile[], lastDoc: any } — destructure correctly
+            const cursorDoc = append ? lastCursorRef.current : null;
             const [result, countData] = await Promise.all([
-                getAllUsers(null, 1000),
-                getUserCount()
+                getAllUsers(cursorDoc, 50),
+                append ? Promise.resolve(null) : getUserCount()
             ]);
             const data: UserProfile[] = Array.isArray((result as any)?.users)
                 ? (result as any).users
                 : Array.isArray(result)
                     ? (result as any)
                     : [];
+            const nextDoc = (result as any)?.lastDoc || null;
+            lastCursorRef.current = nextDoc;
             if (isMounted.current) {
-                setUsers(data);
-                setUserStats({
-                    total: countData.total,
-                    vip: countData.vip,
-                    admin: data.filter(u => u.isAdmin).length,
-                    free: countData.total - countData.vip
-                });
+                if (append) {
+                    setUsers(prev => [...prev, ...data]);
+                } else {
+                    setUsers(data);
+                }
+                setUserLastDoc(nextDoc);
+                if (countData) {
+                    setUserStats({
+                        total: countData.total,
+                        vip: countData.vip,
+                        admin: data.filter(u => u.isAdmin).length,
+                        free: countData.total - countData.vip
+                    });
+                }
             }
         } catch (e) {
             console.error("Failed to load users in Admin page", e);
         } finally {
-            if (isMounted.current) setLoading(false);
+            if (isMounted.current) { setLoading(false); setLoadingMore(false); }
         }
     }, [getAllUsers]);
+
+    const loadMoreUsers = useCallback(() => {
+        if (userLastDoc) fetchUsers(true);
+    }, [fetchUsers, userLastDoc]);
 
     const fetchPayouts = useCallback(async () => {
         setLoading(true);
@@ -1201,7 +1217,7 @@ export const Admin: React.FC<AdminProps> = () => {
                                 User Database
                                 <span className="bg-slate-100 dark:bg-white/10 text-xs px-2 py-0.5 rounded-full">{filteredUsers.length}</span>
                             </h2>
-                            <button onClick={fetchUsers} className="p-2 bg-slate-100 dark:bg-white/5 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10">
+                            <button onClick={() => fetchUsers()} className="p-2 bg-slate-100 dark:bg-white/5 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10">
                                 <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                             </button>
                         </div>
@@ -1310,6 +1326,17 @@ export const Admin: React.FC<AdminProps> = () => {
                                 ))
                             )}
                         </div>
+                        {userLastDoc && (
+                            <div className="pt-2 flex justify-center">
+                                <button
+                                    onClick={() => loadMoreUsers()}
+                                    disabled={loadingMore}
+                                    className="px-6 py-2 text-xs font-bold bg-vantage-cyan/10 text-vantage-cyan border border-vantage-cyan/20 rounded-xl hover:bg-vantage-cyan/20 disabled:opacity-50 transition-colors"
+                                >
+                                    {loadingMore ? 'Loading...' : 'Load More Users'}
+                                </button>
+                            </div>
+                        )}
                     </GlassCard>
                 </div>
             )}

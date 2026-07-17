@@ -38,18 +38,11 @@ export const getTopProbPicks = (match: Match): ProbPick[] => {
   const topPick = markets[0];
   const picks = [topPick];
 
-  // Variety: also show the second-highest probability market as a higher-risk alternative
   if (topPick.name === 'Over 1.5 Goals' || topPick.name === 'Over 0.5 Goals') {
     const nextBest = markets.find(m => m.name !== 'Over 1.5 Goals' && m.name !== 'Over 0.5 Goals');
-    if (nextBest && nextBest.prob > 0 && !picks.includes(nextBest)) {
-      picks.push(nextBest);
-    }
+    if (nextBest && nextBest.prob > 0 && !picks.includes(nextBest)) picks.push(nextBest);
   } else if (markets.length > 1 && markets[1].prob > 0) {
-    if (topPick.prob - markets[1].prob <= 0.02) {
-      if (!picks.includes(markets[1])) {
-        picks.push(markets[1]);
-      }
-    }
+    if (topPick.prob - markets[1].prob <= 0.02) picks.push(markets[1]);
   }
 
   return picks;
@@ -61,6 +54,12 @@ export const getPrimaryPredictionText = (match: Match, language: string): string
     return topPicks.map(p => p.name).join(' / ');
   }
   if (language === 'fr') return match.prediction_fr || match.prediction || '';
+  return match.prediction_en || match.prediction || '';
+};
+
+export const getTopPickText = (match: Match): string => {
+  const picks = getTopProbPicks(match);
+  if (picks.length > 0) return picks[0].name;
   return match.prediction_en || match.prediction || '';
 };
 

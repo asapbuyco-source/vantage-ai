@@ -28,7 +28,7 @@ interface AuthContextType {
     logout: () => Promise<void>;
     deleteAccount: () => Promise<void>;
     clearError: () => void;
-    getAllUsers: (lastDoc?: any, pageSize?: number) => Promise<{ users: UserProfile[]; lastDoc: any }>;
+    getAllUsers: (lastDoc?: any, pageSize?: number) => Promise<{ users: UserProfile[]; lastDoc: any; error?: string }>;
     toggleUserVip: (uid: string, currentStatus: boolean, plan?: 'daily'|'weekly'|'monthly'|'quarterly'|'annual') => Promise<void>;
     toggleUserAdmin: (uid: string, currentStatus: boolean) => Promise<void>;
     toggleUserBlock: (uid: string, currentStatus: boolean) => Promise<void>;
@@ -406,12 +406,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await updateDoc(doc(db, "profiles", uid), { isBlocked: !currentStatus });
     };
 
-    const getAllUsers = async (lastDoc?: any, pageSize: number = 100): Promise<{ users: UserProfile[]; lastDoc: any }> => {
-        if (!isAdmin) return { users: [], lastDoc: null };
+    const getAllUsers = async (lastDoc?: any, pageSize: number = 100): Promise<{ users: UserProfile[]; lastDoc: any; error?: string }> => {
+        if (!isAdmin) return { users: [], lastDoc: null, error: 'Not authorized' };
         try {
-            let q = query(collection(db, "profiles"), limit(pageSize));
+            let q = query(
+                collection(db, "profiles"),
+                orderBy("__name__", "desc"),
+                limit(pageSize)
+            );
             if (lastDoc) {
-                q = query(collection(db, "profiles"), startAfter(lastDoc), limit(pageSize));
+                q = query(
+                    collection(db, "profiles"),
+                    orderBy("__name__", "desc"),
+                    startAfter(lastDoc),
+                    limit(pageSize)
+                );
             }
             const querySnapshot = await getDocs(q);
             const profiles: UserProfile[] = [];
@@ -421,8 +430,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 newLastDoc = doc;
             });
             return { users: profiles, lastDoc: newLastDoc };
-        } catch (e) {
-            return { users: [], lastDoc: null };
+        } catch (e: any) {
+            console.error('[Admin] Failed to fetch users:', e.message);
+            return { users: [], lastDoc: null, error: e.message };
         }
     };
 

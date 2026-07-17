@@ -285,7 +285,6 @@ export const Results: React.FC = () => {
                         const wonCount = effectiveMatches.filter(m => m.status === 'won').length;
                         const lostCount = effectiveMatches.filter(m => m.status === 'lost').length;
                         const gradedCount = wonCount + lostCount;
-                        const dayRate = gradedCount > 0 ? Math.round((wonCount / gradedCount) * 100) : 0;
 
                         const isExpanded = expandedDay === day.date;
                         const hasUnsavedChanges = !!localEdits[day.date] && Object.keys(localEdits[day.date]).length > 0;
@@ -307,9 +306,8 @@ export const Results: React.FC = () => {
                                         <GlassCard className={`transition-all ${isExpanded ? 'border-vantage-cyan/40' : 'border-white/5'}`}>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black font-orbitron
-                                                        ${dayRate >= 70 ? 'bg-green-500/15 text-green-500' : dayRate >= 50 ? 'bg-yellow-500/15 text-yellow-500' : 'bg-red-500/15 text-red-500'}`}>
-                                                        {dayRate}%
+                                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black font-orbitron bg-slate-100 dark:bg-white/5 text-slate-400">
+                                                        {isExpanded ? '−' : '+'}
                                                     </div>
                                                     <div className="text-left">
                                                         <p className="text-sm font-bold text-slate-900 dark:text-white">{formatDate(day.date)}
