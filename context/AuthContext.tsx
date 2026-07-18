@@ -440,13 +440,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
             let q = query(
                 collection(db, "profiles"),
-                orderBy("__name__", "desc"),
+                orderBy("uid", "desc"),
                 limit(pageSize)
             );
             if (lastDoc) {
                 q = query(
                     collection(db, "profiles"),
-                    orderBy("__name__", "desc"),
+                    orderBy("uid", "desc"),
                     startAfter(lastDoc),
                     limit(pageSize)
                 );
