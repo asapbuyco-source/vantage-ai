@@ -70,11 +70,28 @@ def _ensure_club_elo_seeded():
 # ── League Average Goals Helper ────────────────────────────────────────────────
 _LEAGUE_AVG_CACHE = {}
 
+# Per-league average total goals per game (approximate — update from API data)
+_LEAGUE_GPG = {
+    # Tier 1
+    2:   2.85, 3: 2.75, 5: 2.75, 8: 2.80, 39: 2.80, 78: 3.10, 82: 3.10,
+    135: 2.60, 140: 2.50, 384: 2.60, 564: 2.50,
+    # Tier 2
+    61:  2.70, 72: 3.20, 98: 2.80, 138: 2.75, 169: 3.30, 262: 2.70, 301: 2.70,
+    462: 2.50, 1204: 2.70, 848: 2.65,
+    # Tier 3
+    71:  2.35, 85: 2.60, 103: 2.80, 113: 2.70, 176: 2.60, 244: 2.50, 253: 2.80,
+    255: 2.60, 288: 2.55, 292: 2.50, 302: 2.30, 325: 2.20, 395: 2.20,
+    401: 2.30, 567: 2.10, 570: 2.70,
+    # Tier 4 (low-scoring / high variance)
+    10:  2.40, 12: 2.30, 14: 2.50, 51: 2.20, 254: 2.00, 256: 2.60, 388: 2.40,
+    667: 2.80,  # friendlies — high variance
+}
+
 def _league_avg(league_id: int) -> float:
     """Return average total goals for a league (cached)."""
     if league_id in _LEAGUE_AVG_CACHE:
         return _LEAGUE_AVG_CACHE[league_id]
-    avg = 2.65  # default
+    avg = _LEAGUE_GPG.get(league_id, 2.65)  # per-league fallback, else default
     _LEAGUE_AVG_CACHE[league_id] = avg
     return avg
 
@@ -525,20 +542,22 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
 
             if home_season and home_season.get("xg_for", 0) > 0:
                 md.home_stats.avg_xg_created = home_season.get("xg_for", 0)
-                md.home_stats.avg_xg_conceded = home_season.get("goals_against_avg", 0)
-                md.home_stats.clean_sheet_rate = home_season.get("clean_sheets", 0) / max(home_season.get("matches_played", 1), 1)
-                # Use real xG for expected goals instead of form-average proxy
-                if home_season.get("xg_for", 0) > 0:
-                    md.expected_goals_home = max(0.5, home_season["xg_for"])
-                    xg_source = "API-xG"
 
-            if away_season and away_season.get("xg_for", 0) > 0:
-                md.away_stats.avg_xg_created = away_season.get("xg_for", 0)
-                md.away_stats.avg_xg_conceded = away_season.get("goals_against_avg", 0)
-                md.away_stats.clean_sheet_rate = away_season.get("clean_sheets", 0) / max(away_season.get("matches_played", 1), 1)
+            # ── Low-xG penalty ──────────────────────────────────────────
+            if home_avg_sc is not None and home_avg_sc < 1.0:
+                deficit = (1.0 - home_avg_sc) / 1.0
+                penalty = 1.0 - deficit * 0.15
+                md.expected_goals_home *= max(0.80, penalty)
+            if away_avg_sc is not None and away_avg_sc < 1.0:
+                deficit = (1.0 - away_avg_sc) / 1.0
+                penalty = 1.0 - deficit * 0.15
+                md.expected_goals_away *= max(0.80, penalty)
 
-            if away_season and away_season.get("goals_for_avg", 0) > 0:
-                md.expected_goals_away = max(0.5, away_season["goals_for_avg"])
+            # ── League-specific xG cap ──────────────────────────────────
+            league_gpg = _league_avg(lid)
+            if league_gpg < 2.4:
+                md.expected_goals_home = min(md.expected_goals_home, league_gpg * 0.75)
+                md.expected_goals_away = min(md.expected_goals_away, league_gpg * 0.70)
         except Exception as e:
             print(f"[DataPipeline] Team stats fetch error for {fixture_id}: {e}", file=sys.stderr)
 

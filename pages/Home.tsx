@@ -616,30 +616,35 @@ export const Home: React.FC<HomeProps> = () => {
                           </div>
                         )}
 
-                        {/* Prediction + confidence bar — gated for non-free, non-VIP */}
+                        {/* Prediction — show each pick with its percentage */}
                         {unlocked ? (
-                          <div className="mx-3 mb-3 p-2.5 rounded-xl bg-gradient-to-r from-vantage-cyan/5 to-transparent border border-vantage-cyan/15 overflow-hidden relative">
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-200 dark:bg-white/5">
-                              <motion.div className="h-full bg-gradient-to-r from-vantage-cyan to-emerald-400" initial={{ width: 0 }} animate={{ width: `${Math.min(confidence, 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} />
+                          <div className="mx-3 mb-3 p-2.5 rounded-xl bg-gradient-to-r from-vantage-cyan/5 to-transparent border border-vantage-cyan/15 overflow-hidden">
+                            <span className="text-[8px] text-gray-500 uppercase tracking-wide block mb-1.5">{t('free.pred_label') || 'Prediction'}</span>
+                            <div className="space-y-1">
+                              {getTopProbPicks(match).map((p, pi) => (
+                                <div key={pi} className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold text-vantage-cyan truncate">{p.name}</span>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <div className="w-12 h-1 rounded-full bg-slate-200 dark:bg-white/10">
+                                      <motion.div className="h-full rounded-full bg-gradient-to-r from-vantage-cyan to-emerald-400" initial={{ width: 0 }} animate={{ width: `${Math.round(p.prob * 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} style={{ width: `${Math.round(p.prob * 100)}%` }} />
+                                    </div>
+                                    <span className="text-[10px] font-bold font-mono text-emerald-400 w-8 text-right">{Math.round(p.prob * 100)}%</span>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex flex-col min-w-0 mr-2">
-                                <span className="text-[8px] text-gray-500 uppercase tracking-wide">{t('free.pred_label') || 'Prediction'}</span>
-                                <span className="text-[11px] font-bold text-vantage-cyan truncate">{pred || (language === 'fr' ? 'Analyse en cours' : 'Analyzing')}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {match.odds > 1 && <span className="text-[9px] font-mono text-gray-400 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">{Number(match.odds).toFixed(2)}x</span>}
-                                <span className="text-sm font-black font-mono text-emerald-400">{confidence}%</span>
-                                {isVip && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setTicketPicks(prev => { if (prev.some(p => p.id === match.id)) return prev; return [...prev, { id: match.id, home: match.homeTeam || match.home_team || '', away: match.awayTeam || match.away_team || '', pick: pred || '', odds: Number(match.odds) || 0 }]; }); }}
-                                    className="p-1 rounded-lg bg-vantage-cyan/10 hover:bg-vantage-cyan/20 text-vantage-cyan transition-colors"
-                                    title={language === 'fr' ? 'Ajouter au ticket' : 'Add to ticket'}
-                                  >
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                  </button>
-                                )}
-                              </div>
+                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-vantage-cyan/10">
+                              {match.odds > 1 && <span className="text-[9px] font-mono text-gray-400">{Number(match.odds).toFixed(2)}x</span>}
+                              <span className="text-[9px] font-mono text-gray-400">{confidence}% match</span>
+                              {isVip && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setTicketPicks(prev => { if (prev.some(p => p.id === match.id)) return prev; return [...prev, { id: match.id, home: match.homeTeam || match.home_team || '', away: match.awayTeam || match.away_team || '', pick: pred || '', odds: Number(match.odds) || 0 }]; }); }}
+                                  className="p-1 rounded-lg bg-vantage-cyan/10 hover:bg-vantage-cyan/20 text-vantage-cyan transition-colors"
+                                  title={language === 'fr' ? 'Ajouter au ticket' : 'Add to ticket'}
+                                >
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                </button>
+                              )}
                             </div>
                           </div>
                         ) : (

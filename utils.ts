@@ -51,7 +51,7 @@ export const getTopProbPicks = (match: Match): ProbPick[] => {
 export const getPrimaryPredictionText = (match: Match, language: string): string => {
   const topPicks = getTopProbPicks(match);
   if (topPicks.length > 0) {
-    return topPicks.map(p => p.name).join(' / ');
+    return topPicks.map(p => `${p.name} ${Math.round(p.prob * 100)}%`).join(' / ');
   }
   if (language === 'fr') return match.prediction_fr || match.prediction || '';
   return match.prediction_en || match.prediction || '';
@@ -59,7 +59,7 @@ export const getPrimaryPredictionText = (match: Match, language: string): string
 
 export const getTopPickText = (match: Match): string => {
   const picks = getTopProbPicks(match);
-  if (picks.length > 0) return picks[0].name;
+  if (picks.length > 0) return `${picks[0].name} ${Math.round(picks[0].prob * 100)}%`;
   return match.prediction_en || match.prediction || '';
 };
 

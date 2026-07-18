@@ -1375,7 +1375,7 @@ export const Admin: React.FC<AdminProps> = () => {
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <span className="text-lg font-bold font-orbitron text-vantage-purple block">{p.amount} FCFA</span>
+                                                <span className="text-lg font-bold font-orbitron text-vantage-purple block">${p.amount}</span>
                                                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${p.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500' :
                                                     p.status === 'paid' ? 'bg-green-500/10 text-green-500' :
                                                         'bg-red-500/10 text-red-500'

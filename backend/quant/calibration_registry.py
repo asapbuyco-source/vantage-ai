@@ -63,11 +63,34 @@ def get_season_phase_multiplier(month: int) -> float:
 # The fixed over25 × 0.82 works for EPL average (2.7 GPG) but is wrong for Serie A (2.4 GPG) or Bundesliga (3.1 GPG).
 # Tuple format: (league_id, over25_adj, btts_adj) relative to base calibration
 LEAGUE_GOALS_MODIFIER = {
-    39:   (1.00, 1.00),   # EPL — baseline
-    140:  (0.96, 0.97),   # La Liga — lower scoring
-    78:   (1.06, 1.04),   # Bundesliga — higher scoring
-    135:  (0.95, 0.96),   # Serie A — defensive
-    61:   (1.02, 1.01),   # Ligue 1 — near baseline
+    # ── Elite (very well calibrated) ─────────────────────────────────
+    39:   (1.00, 1.00),   # EPL — baseline (~2.8 GPG)
+    140:  (0.96, 0.97),   # La Liga — lower scoring (~2.5 GPG)
+    78:   (1.06, 1.04),   # Bundesliga — higher scoring (~3.1 GPG)
+    135:  (0.95, 0.96),   # Serie A — defensive (~2.6 GPG)
+    61:   (1.02, 1.01),   # Ligue 1 — near baseline (~2.7 GPG)
+    # ── High-scoring leagues ─────────────────────────────────────────
+    72:   (1.06, 1.04),   # Eredivisie (~3.2 GPG)
+    169:  (1.07, 1.05),   # Chinese Super League (~3.3 GPG)
+    98:   (1.04, 1.02),   # J1 League (~2.8 GPG, high variance)
+    # ── Low/medium-scoring second-tier ───────────────────────────────
+    395:  (0.92, 0.94),   # Serie B Italy (~2.2 GPG)
+    302:  (0.94, 0.95),   # Ligue 2 (~2.3 GPG)
+    567:  (0.90, 0.90),   # Segunda Division (~2.1 GPG)
+    85:   (0.96, 0.97),   # 2. Bundesliga (~2.6 GPG)
+    # ── Defensive / low-scoring leagues ──────────────────────────────
+    254:  (0.85, 0.86),   # Brasileirao Serie B (~2.0 GPG) — very defensive
+    10:   (0.95, 0.96),   # England League 1 (~2.4 GPG)
+    12:   (0.94, 0.95),   # England League 2 (~2.3 GPG)
+    14:   (0.96, 0.97),   # National League (~2.5 GPG)
+    51:   (0.93, 0.94),   # Liga Portugal 2 (~2.2 GPG)
+    401:  (0.94, 0.95),   # PSL South Africa (~2.3 GPG)
+    255:  (0.96, 0.97),   # USL Championship (~2.6 GPG)
+    # ── South American (home-heavy, high variance) ──────────────────
+    71:   (0.98, 0.97),   # Brasileirao Serie A — fewer goals than European peers
+    325:  (0.96, 0.95),   # Argentine Primera — physical, low scoring
+    266:  (0.97, 0.96),   # Chile Primera
+    281:  (0.96, 0.95),   # Peru Liga 1
 }
 
 

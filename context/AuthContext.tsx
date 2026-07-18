@@ -13,7 +13,6 @@ import {
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, increment, addDoc, orderBy, runTransaction, limit, getDocs, query, where, startAfter } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
 import { UserProfile, PayoutRequest } from '../types';
-import { verifyFapshiPayment } from "../services/fapshi";
 
 interface AuthContextType {
     user: User | null;
@@ -84,6 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         } catch (e) {
             console.error("Error processing referral:", e);
+            throw e; // surface to caller so UI can surface the failure
         }
     };
 
@@ -109,6 +109,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     const newCode = generateReferralCode(profileData.displayName || profileData.email);
                     await updateDoc(userRef, { referralCode: newCode });
                     profileData.referralCode = newCode;
+                }
+                // Backfill revenuecatId for existing users (needed for Google Play subscriptions)
+                if (!profileData.revenuecatId) {
+                    await updateDoc(userRef, { revenuecatId: firebaseUser.uid });
+                    profileData.revenuecatId = firebaseUser.uid;
                 }
                 if (profileData.isVip && profileData.vipExpiry) {
                     if (new Date() > new Date(profileData.vipExpiry)) {
@@ -137,7 +142,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     referralCode: generateReferralCode(firebaseUser.displayName || firebaseUser.email),
                     referralCount: 0,
                     referralEarnings: 0,
-                    lifetimeEarnings: 0
+                    lifetimeEarnings: 0,
+                    revenuecatId: firebaseUser.uid,
                 };
                 await setDoc(userRef, skeletonProfile);
                 profileData = skeletonProfile;
@@ -166,7 +172,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 referralCode: newReferralCode,
                 referralCount: 0,
                 referralEarnings: 0,
-                lifetimeEarnings: 0
+                lifetimeEarnings: 0,
+                revenuecatId: firebaseUser.uid,
             };
             await setDoc(userRef, profileData);
 
@@ -182,7 +189,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             if (referralCodeInput && referralCodeInput.length > 3) {
-                await processReferral(firebaseUser.uid, referralCodeInput);
+                try {
+                    await processReferral(firebaseUser.uid, referralCodeInput);
+                } catch (refErr) {
+                    console.warn('[Auth] Referral processing failed — profile created but no referral credited:', refErr);
+                }
             }
         }
     };
@@ -190,9 +201,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Safe Authentication Initialization
     useEffect(() => {
         let unsubscribe: () => void;
+        let settled = false;
+        const timeout = window.setTimeout(() => {
+            if (settled) return;
+            console.warn("[Auth] Firebase auth initialization timed out; showing signed-out UI.");
+            setUser(null);
+            setUserProfile(null);
+            setError("Authentication is taking longer than expected. You can retry login.");
+            setLoading(false);
+        }, 8000);
 
         try {
             unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+                settled = true;
+                window.clearTimeout(timeout);
                 if (currentUser) {
                     setUser(currentUser);
                     await fetchProfile(currentUser);
@@ -202,17 +224,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
                 setLoading(false);
             }, (authError) => {
+                settled = true;
+                window.clearTimeout(timeout);
                 console.error("Auth Listener Error:", authError);
                 setError("Authentication service unavailable. Please check your connection.");
                 setLoading(false);
             });
         } catch (e: any) {
+            settled = true;
+            window.clearTimeout(timeout);
             console.error("Critical Auth Error:", e);
             setError("System Configuration Error. Please verify API keys.");
             setLoading(false);
         }
 
-        return () => { if (unsubscribe) unsubscribe(); };
+        return () => {
+            window.clearTimeout(timeout);
+            if (unsubscribe) unsubscribe();
+        };
     }, []);
 
     const signInWithGoogle = async (referralCode?: string) => {
@@ -302,7 +331,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const requestPayout = async (amount: number, phoneNumber: string) => {
         if (!user || !userProfile) return;
-        if (amount < 1000) throw new Error("Minimum payout is 1000 FCFA");
+        if (amount < 5) throw new Error("Minimum payout is $5");
 
         try {
             const userRef = doc(db, "profiles", user.uid);
@@ -437,6 +466,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const verifyTransaction = async (transId: string): Promise<boolean> => {
+        console.warn("[Payments] External transaction verification is disabled. VIP is fulfilled by RevenueCat webhooks.", transId);
+        return false;
+        /*
         if (!user) return false;
         const cleanTransId = transId.split(',')[0].trim();
 
@@ -478,6 +510,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error("Verification failed:", e);
             return false;
         }
+        */
     };
 
 

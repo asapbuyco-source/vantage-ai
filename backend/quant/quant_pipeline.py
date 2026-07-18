@@ -402,6 +402,10 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 and category in ("safe", "value")
                 and value_rank in ("high", "medium")
                 and match.league_tier < 5  # tier-5 / unknown leagues are analysis-only
+                and (
+                    "over 1.5" in best_bet.market.lower()
+                    or "under 3.5" in best_bet.market.lower()
+                )  # VAULT_APPROVED: only proven high-hit-rate markets
             )
 
             # Phase 1.5: Promote Over 1.5 Goals — boost vault priority
@@ -535,21 +539,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "btts_confidence": round(probs.btts_confidence, 4),
                 # Legacy alias for backward compat with existing dashboard
                 "model_confidence": round(probs.goals_confidence, 4),
-                # ── Safest pick: highest-probability market for user display/grading ──
-                "_safest_bet": max(
-                    [("Over 0.5 Goals", probs.over05), ("Over 1.5 Goals", probs.over15),
-                     ("Over 2.5 Goals", probs.over25), ("Over 3.5 Goals", probs.over35),
-                     ("Over 4.5 Goals", probs.over45), ("Under 1.5 Goals", probs.under15),
-                     ("Under 2.5 Goals", probs.under25), ("Under 3.5 Goals", probs.under35),
-                     ("Under 4.5 Goals", probs.under45), ("BTTS", probs.btts),
-                     ("Home Win", probs.home_win), ("Draw", probs.draw),
-                     ("Away Win", probs.away_win), ("DC 1X", probs.double_chance_1x),
-                     ("DC X2", probs.double_chance_x2), ("DC 12", probs.double_chance_12),
-                     ("1H Over 0.5", probs.fh_over05), ("1H Over 1.5", probs.fh_over15),
-                     ("1H BTTS", probs.fh_btts), ("1H Home Win", probs.fh_home_win),
-                     ("1H Draw", probs.fh_draw), ("1H Away Win", probs.fh_away_win)],
-                    key=lambda x: x[1]
-                ),
                 # ── Classification ──────────────────────────────────────────
                 "category": category,
                 "value_rank": value_rank,  # high / medium / low / none
@@ -586,8 +575,16 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             }
             predictions.append(pred)
 
-            # ── Add to accumulator pool ONLY if it has real value ───────────
-            if best_bet and vault_eligible:
+            # ── Add to accumulator pool — separate eligibility from vault ───
+            acca_eligible = bool(
+                best_bet
+                and best_bet.odds > 1.0
+                and odds_fresh
+                and category in ("safe", "value")
+                and value_rank in ("high", "medium")
+                and match.league_tier < 5
+            )
+            if best_bet and acca_eligible:
                 bet_pool.append({
                     "fixture_id": match.fixture_id,
                     "league": match.league,
@@ -597,7 +594,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "odds": best_bet.odds,
                     "model_prob": best_bet.model_prob,
                     "expected_value": best_bet.expected_value,
-                    "category": category,
                     "kickoff_utc": match.kickoff_utc,
                     "kickoff_local": match.kickoff_local,
                 })
@@ -613,7 +609,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "odds": best_bet.odds,
                     "model_prob": best_bet.model_prob,
                     "expected_value": best_bet.expected_value,
-                    "category": "safe",
                     "kickoff_utc": match.kickoff_utc,
                     "kickoff_local": match.kickoff_local,
                 })
