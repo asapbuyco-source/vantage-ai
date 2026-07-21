@@ -292,6 +292,41 @@ export const initScheduler = () => {
     tasks.set('quantGrading', quantGradingTask);
     logger.info('📊 Quant grading scheduled at 22:00 Lagos');
 
+    // Banker of the Day summary at 22:15 Lagos (after grading)
+    const bankerSummaryTask = cron.schedule('15 22 * * *',
+        withLock('banker_summary', 5, async () => {
+            try {
+                const { spawn } = await import('child_process');
+                const { default: path } = await import('path');
+                const script = path.join(__dirname, 'quant', 'banker_summary.py');
+                const python = process.env.PYTHON_BIN || 'python3';
+
+                const child = spawn(python, [script], {
+                    cwd: path.join(__dirname, 'quant'),
+                    env: { ...process.env },
+                    timeout: 15000,
+                });
+
+                let stdout = '';
+                child.stdout.on('data', d => stdout += d);
+                child.stderr.on('data', d => { /* silent */ });
+
+                child.on('close', code => {
+                    if (code === 0) {
+                        logger.info({ stdout: stdout.trim() }, '[Banker] Summary updated');
+                    } else {
+                        logger.warn({ code }, '[Banker] Summary failed');
+                    }
+                });
+            } catch (e) {
+                logger.warn({ error: e.message }, '[Banker] Spawn error');
+            }
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('bankerSummary', bankerSummaryTask);
+    logger.info('🏦 Banker summary scheduled at 22:15 Lagos');
+
     // Blog generation at 08:30 Lagos time
     const blogTask = cron.schedule('30 8 * * *',
         withLock('blog_generation', 30, async () => {

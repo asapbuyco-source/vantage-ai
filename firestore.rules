@@ -161,6 +161,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Banker of the Day — public read, admin SDK write
+    match /banker_picks/{dateStr} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Banker performance summary — public read, admin SDK write
+    match /banker_summary/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /match_news/{dateStr} {
       allow read: if true;
       allow write: if false;

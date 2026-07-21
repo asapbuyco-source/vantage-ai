@@ -305,32 +305,30 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
         return {"status": "skipped", "reason": "already_graded", "date": date_str}
 
     target_date = datetime.strptime(date_str, "%Y-%m-%d")
-    next_date_str = (target_date + timedelta(days=1)).strftime("%Y-%m-%d")
+    # Extended window: ±2 days to catch late finishes and cross-midnight fixtures
+    date_window = [(target_date + timedelta(days=d)).strftime("%Y-%m-%d") for d in range(-2, 3)]
 
-    print(f"[Grading] Fetching results for {date_str} and {next_date_str} (extended window)...")
+    print(f"[Grading] Fetching results for {date_window[0]} to {date_window[-1]} ({len(date_window)}-day window)...")
     results_map = {}
 
-    # ── Step 1: Load from local grading cache (populated by morning pipeline) ──
+    # ── Step 1: Load from local grading cache ────────────────────────────────
     try:
         from api_football_client import load_grading_cache
-        res1 = load_grading_cache(date_str) or {}
-        res2 = load_grading_cache(next_date_str) or {}
-        results_map = {**res1, **res2}
+        for dw in date_window:
+            cached = load_grading_cache(dw) or {}
+            results_map.update(cached)
         if results_map:
-            print(f"[Grading] ✅ Loaded {len(results_map)} results from grading cache.")
+            print(f"[Grading] ✅ Loaded {len(results_map)} results from grading cache ({len(date_window)}-day window).")
     except Exception as e:
         print(f"[Grading] Cache load error: {e}", file=sys.stderr)
 
-    # ── Step 2: Try API-Football (if cache is empty) ──────────────────────────
-    if not results_map:
+    # ── Step 2: Try API-Football (if cache is empty or too small) ────────────
+    if len(results_map) < len(predictions):
         try:
             from api_football_client import fetch_fixtures_by_date, RateLimitError
-            af1 = fetch_fixtures_by_date(date_str) or []
-            af2 = fetch_fixtures_by_date(next_date_str) or []
-            af_fixtures = af1 + af2
-            
-            if af_fixtures:
-                for item in af_fixtures:
+            for dw in date_window:
+                fixtures = fetch_fixtures_by_date(dw) or []
+                for item in fixtures:
                     fixture = item.get("fixture", {})
                     match_id = str(fixture.get("id") or "")
                     if not match_id:
@@ -339,8 +337,7 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
                     if status not in ["FT", "AET", "PEN"]:
                         continue
                     goals = item.get("goals", {})
-                    hg = goals.get("home")
-                    ag = goals.get("away")
+                    hg, ag = goals.get("home"), goals.get("away")
                     if hg is None or ag is None:
                         continue
                     try:
@@ -354,13 +351,9 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
                         }
                     except Exception:
                         pass
-                print(f"[Grading] Found {len(results_map)} finished fixtures from API-Football.")
+            print(f"[Grading] Found {len(results_map)} finished fixtures from API-Football.")
         except Exception as e:
-            err_str = str(e)
-            if "rate limit" in err_str.lower() or "request limit" in err_str.lower():
-                print(f"[Grading] ⚠️  API-Football rate limited. Switching to football-data.org fallback.", file=sys.stderr)
-            else:
-                print(f"[Grading] API-Football fetch failed: {e}", file=sys.stderr)
+            print(f"[Grading] API-Football fetch failed: {e}", file=sys.stderr)
 
     # ── Step 3: Fallback to football-data.org (free, no daily cap) ───────────
     if not results_map:
@@ -520,9 +513,40 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
     except Exception as e:
         print(f"[Grading] Elo update failed (non-fatal): {e}", file=sys.stderr)
 
+    # ── Grade Banker of the Day ────────────────────────────────────────────
+    try:
+        banker_doc = db.collection("banker_picks").document(date_str).get()
+        if banker_doc.exists:
+            banker = banker_doc.to_dict()
+            pick = banker.get("pick", {})
+            fid = str(pick.get("fixture_id", ""))
+            result = results_map.get(fid)
+            if result:
+                hg, ag = result["home_goals"], result["away_goals"]
+                market = pick.get("market", "")
+                banker_status = _grade_bet(market, hg, ag)
+                pick["status"] = banker_status
+                pick["score"] = f"{hg}-{ag}"
+                pick["result"] = "won" if banker_status == "won" else ("lost" if banker_status == "lost" else "void")
+                banker["pick"] = pick
+                banker["graded_at"] = datetime.now(timezone.utc).isoformat()
+                db.collection("banker_picks").document(date_str).set(banker, merge=True)
+                icon = "✅" if banker_status == "won" else ("❌" if banker_status == "lost" else "⚪")
+                print(f"[Grading] 🏦 Banker of the Day: {pick.get('home_team','?')} vs {pick.get('away_team','?')} — {market} — {icon} {banker_status} ({hg}-{ag})")
+    except Exception as e:
+        print(f"[Grading] Banker grading failed (non-fatal): {e}", file=sys.stderr)
+
     clv_str = f" | Avg CLV: {avg_clv:+.2%} ({clv_count} bets)" if avg_clv is not None else ""
     neg_ev_str = f" | {negative_ev_count} predictions filtered (negative EV)" if negative_ev_count > 0 else ""
-    print(f"[Grading] Graded {graded_count}/{len(predictions)} predictions for {date_str}.{clv_str}{neg_ev_str}")
+    not_found = len(pending_preds)
+    already_graded = len(predictions) - len(to_grade)
+    diag_parts = [f"graded={graded_count}", f"not_found={not_found}", f"negative_ev={negative_ev_count}"]
+    if already_graded > 0: diag_parts.append(f"already_graded={already_graded}")
+    print(f"[Grading] {graded_count}/{len(predictions)} predictions for {date_str}.{clv_str}{neg_ev_str}")
+    print(f"[Grading] 📊 Diagnostic: {', '.join(diag_parts)} | Results cache size: {len(results_map)}")
+    if not_found > 0:
+        sample_ids = [fid[:6] for fid, _ in pending_preds[:3]]
+        print(f"[Grading] ⚠️  {not_found} predictions had no matching result. Sample fixture IDs: {sample_ids}")
     return {"status": "success", "total": len(predictions), "graded": graded_count,
             "date": date_str, "avg_clv": avg_clv, "clv_sample_size": clv_count,
             "negative_ev_filtered": negative_ev_count}

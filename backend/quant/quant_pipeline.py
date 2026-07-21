@@ -238,6 +238,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
     # Filtering is ONLY applied when building accumulators.
     predictions: list[dict] = []
     bet_pool: list[dict] = []  # Only value bets go here (for accumulators)
+    acc_pool: list[dict] = []  # Highest-probability picks per fixture (for accumulators)
     high_prob_pool: list[dict] = []  # 85%+ prob bets for Safe Stack
 
     for match in matches[:MAX_PREDICTIONS_PER_DAY]:
@@ -546,6 +547,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "score": None,
                 "sport": "football",
                 "model": "quant",
+                "model_version": "2026-07-v5",  # Audit trail: bump when weights/calibration change
                 "generated_by": "quant_pipeline",
                 "timestamp": _now_iso(),
                 # All approved bets for this match (metadata)
@@ -598,17 +600,36 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "kickoff_local": match.kickoff_local,
                 })
 
-            # ── Safe Stack pool: ANY high-probability bet (85%+) from all markets ──
-            if best_bet and best_bet.model_prob >= 0.85:
-                high_prob_pool.append({
+            # ── Accumulator pool: HIGHEST-probability pick per fixture (not EV pick) ──
+            # Users want accumulators built from safest bets, not value bets
+            acc_markets = [
+                ("Over 1.5 Goals", probs.over15, best_bet.odds if best_bet and "over 1.5" in best_bet.market.lower() else 0),
+                ("Over 2.5 Goals", probs.over25, best_bet.odds if best_bet and "over 2.5" in best_bet.market.lower() else 0),
+                ("Under 2.5 Goals", probs.under25, best_bet.odds if best_bet and "under 2.5" in best_bet.market.lower() else 0),
+                ("Under 3.5 Goals", probs.under35, best_bet.odds if best_bet and "under 3.5" in best_bet.market.lower() else 0),
+                ("BTTS", probs.btts, best_bet.odds if best_bet and "btts" in best_bet.market.lower() else 0),
+                ("Over 1.5 FH Goals", probs.fh_over15, 0),
+                ("Over 0.5 FH Goals", probs.fh_over05, 0),
+                ("Home Win", probs.home_win, best_bet.odds if best_bet and "home win" in best_bet.market.lower() else 0),
+                ("Away Win", probs.away_win, best_bet.odds if best_bet and "away win" in best_bet.market.lower() else 0),
+                ("Draw", probs.draw, best_bet.odds if best_bet and "draw" in best_bet.market.lower() else 0),
+                ("DC 1X", probs.double_chance_1x, best_bet.odds if best_bet and "double chance (1x)" in best_bet.market.lower() else 0),
+            ]
+            # Filter to markets with probability >= 70% and odds > 1.0
+            acc_candidates = [(m, p, o) for m, p, o in acc_markets if p >= 0.70 and o > 0]
+            if acc_candidates:
+                # Pick the highest probability market
+                best_market, best_prob, best_odds = max(acc_candidates, key=lambda x: x[1])
+                acc_pool.append({
                     "fixture_id": match.fixture_id,
                     "league": match.league,
                     "home_team": match.home_team,
                     "away_team": match.away_team,
-                    "market": best_bet.market,
-                    "odds": best_bet.odds,
-                    "model_prob": best_bet.model_prob,
-                    "expected_value": best_bet.expected_value,
+                    "market": best_market,
+                    "odds": best_odds,
+                    "model_prob": round(best_prob, 4),
+                    "expected_value": round(best_prob * best_odds - 1, 4) if best_odds > 0 else 0,
+                    "category": "safe",
                     "kickoff_utc": match.kickoff_utc,
                     "kickoff_local": match.kickoff_local,
                 })
@@ -628,10 +649,33 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
         return {"status": "skipped", "reason": "no_matches_analyzed", "date": date_str, "matches_analyzed": len(matches)}
 
     # ── Step 10: Generate accumulators ─────────────────────────────────────
-    accas_dict = generate_accumulators(bet_pool, high_prob_pool)
+    accas_dict = generate_accumulators(acc_pool, acc_pool)
     
     total_accas = sum(len(v) for v in accas_dict.values())
     _safe_print(f"[QuantPipeline] 🎰 Generated {total_accas} named accumulators across 4 tiers.")
+
+    # ── Banker of the Day: single safest pick across all fixtures ──────────
+    banker_pick = None
+    if predictions:
+        safe_bets = [p for p in predictions if p.get("category") == "safe" and p.get("_safest_bet")]
+        if safe_bets:
+            banker = max(safe_bets, key=lambda p: (
+                p["_safest_bet"][1] if isinstance(p["_safest_bet"], list) else 0
+            ))
+            banker_pick = {
+                "fixture_id": banker["fixture_id"],
+                "home_team": banker["home_team"],
+                "away_team": banker["away_team"],
+                "league": banker["league"],
+                "market": banker["_safest_bet"][0] if isinstance(banker["_safest_bet"], list) else str(banker["_safest_bet"]),
+                "probability": round(float(banker["_safest_bet"][1] if isinstance(banker["_safest_bet"], list) else 0), 4),
+                "odds": banker.get("odds", 0),
+                "category": "safe",
+                "status": "pending",
+                "score": None,
+                "result": None,
+            }
+            _safe_print(f"[QuantPipeline] 🏦 Banker of the Day: {banker_pick['home_team']} vs {banker_pick['away_team']} — {banker_pick['market']} ({round(banker_pick['probability']*100)}%)")
 
     # ── Step 11: Save to Firestore ─────────────────────────────────────────
     # Create two payloads: public (basic data) and VIP (full analysis)
@@ -738,6 +782,19 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     _safe_print(f"[QuantPipeline] 💾 Saved VIP analyses to quant_vip/{date_str}")
                 except Exception as ve:
                     _safe_print(f"[QuantPipeline]   ⚠️  VIP save failed (non-fatal): {ve}", file=sys.stderr)
+                # Save Banker of the Day
+                if banker_pick:
+                    try:
+                        banker_doc = {
+                            "date": date_str,
+                            "pick": banker_pick,
+                            "generated_at": _now_iso(),
+                            "model_version": "2026-07-v5",
+                        }
+                        db.collection("banker_picks").document(date_str).set(banker_doc)
+                        _safe_print(f"[QuantPipeline] 🏦 Banker saved to banker_picks/{date_str}")
+                    except Exception as be:
+                        _safe_print(f"[QuantPipeline]   ⚠️  Banker save failed (non-fatal): {be}", file=sys.stderr)
                 # Update Elo ratings
                 save_dirty_ratings()
             except Exception as e:

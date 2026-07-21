@@ -18,6 +18,8 @@ import { getAppSettings } from '../services/db';
 import { TicketWizard } from '../components/TicketWizard';
 import { MotionDiv } from '../components/MotionDiv';
 import { getTopProbPicks, getPrimaryPredictionText, getPrimaryPredictionProb, getTopPickText } from '../utils';
+import { db } from '../firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface HomeProps {}
 
@@ -142,6 +144,20 @@ export const Home: React.FC<HomeProps> = () => {
   };
 
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [bankerSummary, setBankerSummary] = useState<any>(null);
+  const [todayBanker, setTodayBanker] = useState<any>(null);
+
+  // Fetch Banker of the Day
+  useEffect(() => {
+    const todayKey = activeDate || new Date().toISOString().split('T')[0];
+    Promise.all([
+      getDoc(doc(db, 'banker_summary', 'current')),
+      getDoc(doc(db, 'banker_picks', todayKey)),
+    ]).then(([summarySnap, todaySnap]) => {
+      if (summarySnap.exists()) setBankerSummary(summarySnap.data());
+      if (todaySnap.exists()) setTodayBanker(todaySnap.data());
+    }).catch(() => {});
+  }, [activeDate]);
 
   // predictions = AI-analyzed matches with full data (prediction_en, confidence, analysis_en) — shown first
   // rawFixtures = raw API fixtures with no AI analysis — only shown as a fallback if predictions are empty
@@ -334,41 +350,68 @@ export const Home: React.FC<HomeProps> = () => {
         </div>
       )}
 
-      {/* ── Zone A: Top Pick Hero ── */}
-      {topPick && (() => {
-        const pred = getTopPickText(topPick);
-        return (
-          <button
-            onClick={() => !isVip ? navigate('/vip') : navigate(`/match/${topPick.id}`)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-vantage-cyan/10 border border-emerald-500/30 hover:border-emerald-500/50 transition-all text-left"
-          >
-            <div className="shrink-0 w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-              {isVip ? <Zap size={18} className="text-emerald-500 fill-emerald-500" /> : <Lock size={18} className="text-vantage-purple" />}
+      {/* ── Banker of the Day ── */}
+      {(todayBanker || bankerSummary) && (
+        <div className="rounded-2xl bg-gradient-to-r from-amber-500/10 to-yellow-500/5 border border-amber-500/30 p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="shrink-0 w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+              <Trophy size={18} className="text-amber-500" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">
-                {language === 'fr' ? "Pick Haute Probabilité" : "Highest Probability Pick"}
+              <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">
+                {language === 'fr' ? 'Banker du Jour' : 'Banker of the Day'}
               </p>
-              <p className="text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">
-                {topPick.homeTeam} vs {topPick.awayTeam}
-              </p>
-            </div>
-            <div className="shrink-0 text-right">
-              {isVip ? (
+              {todayBanker?.pick ? (
                 <>
-                  <p className="text-xs font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">{pred}</p>
-                  <p className="text-[10px] font-bold font-mono text-emerald-500 mt-0.5">{getPrimaryPredictionProb(topPick)}%</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {todayBanker.pick.home_team} vs {todayBanker.pick.away_team}
+                  </p>
+                  <p className="text-[10px] text-gray-400">
+                    {todayBanker.pick.market} · {(todayBanker.pick.probability * 100).toFixed(0)}% confidence
+                  </p>
                 </>
               ) : (
-                <p className="text-xs font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Lock size={9} /> {language === 'fr' ? 'Débloquer' : 'Unlock'}
+                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                  {language === 'fr' ? 'En attente...' : 'Coming soon...'}
                 </p>
               )}
             </div>
-            <ChevronRight size={16} className="text-emerald-500 shrink-0" />
-          </button>
-        );
-      })()}
+            {todayBanker?.pick?.odds > 0 && (
+              <div className="shrink-0 text-right">
+                <p className="text-lg font-black font-mono text-amber-400">{todayBanker.pick.odds.toFixed(2)}x</p>
+                {todayBanker.pick.status === 'won' && (
+                  <p className="text-[10px] font-bold text-emerald-500">✅ WON {todayBanker.pick.score}</p>
+                )}
+                {todayBanker.pick.status === 'lost' && (
+                  <p className="text-[10px] font-bold text-rose-500">❌ LOST {todayBanker.pick.score}</p>
+                )}
+                {todayBanker.pick.status === 'pending' && (
+                  <p className="text-[10px] text-gray-400">{language === 'fr' ? 'En cours' : 'Pending'}</p>
+                )}
+              </div>
+            )}
+          </div>
+          {bankerSummary && (
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="text-emerald-400 font-bold">
+                {bankerSummary.win_rate_pct}% {language === 'fr' ? 'de réussite' : 'win rate'}
+              </span>
+              <span className="text-gray-500">·</span>
+              <span className="text-gray-400">
+                {bankerSummary.wins}W — {bankerSummary.losses}L ({language === 'fr' ? '30 derniers jours' : 'last 30 days'})
+              </span>
+              {bankerSummary.streak_type === 'win' && bankerSummary.current_streak >= 3 && (
+                <>
+                  <span className="text-gray-500">·</span>
+                  <span className="text-amber-400 font-bold">
+                    🔥 {bankerSummary.current_streak} {language === 'fr' ? 'victoires d\'affilée' : 'win streak'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Date Bar ── */}
       <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 px-4 py-2.5 rounded-xl border border-black/5 dark:border-white/5 text-xs">

@@ -1,0 +1,632 @@
+================================================================================
+  VANTAGE AI — COMPLETE SYSTEM DOCUMENTATION
+  For Investors, Partners & Technical Stakeholders
+================================================================================
+
+Version: 4.1.0 (2026-07)
+Generated: July 2026
+
+
+================================================================================
+  TABLE OF CONTENTS
+================================================================================
+
+  1.  SYSTEM OVERVIEW
+  2.  PREDICTION ENGINE (Core Model)
+  3.  EV ENGINE & BET SELECTION
+  4.  VAULT STRATEGY (Bankroll Management)
+  5.  ACCUMULATOR ENGINE
+  6.  CALIBRATION & RETRAINING
+  7.  DATA PIPELINE & INFRASTRUCTURE
+  8.  LIVE FEATURES
+  9.  GRADING & PERFORMANCE TRACKING
+  10. FRONTEND FEATURES
+  11. SECURITY & ACCESS CONTROL
+  12. SCHEDULER & AUTOMATION
+  13. API BUDGET & RESOURCE USAGE
+  14. FILE INDEX
+
+
+================================================================================
+  1. SYSTEM OVERVIEW
+================================================================================
+
+Vantage AI is a full-stack sports prediction platform targeting the African
+market. It combines statistical quantitative models (Poisson, Elo, Form) with
+AI-powered analysis (Groq/Llama) to generate betting predictions for football,
+basketball, and cricket.
+
+ARCHITECTURE:
+  Frontend  → React 19 + TypeScript + Vite 6 + TailwindCSS
+  Backend   → Express 5 + Node.js + Python 3.11 (Quant Engine)
+  Database  → Firestore (Firebase)
+  AI Layer  → Groq (Llama 3.1 8B Instant)
+  Data      → API-Football v3 (Bet365 + Pinnacle odds)
+  Auth      → Firebase Auth (Google + Email)
+  Payments  → Fapshi (Mobile Money) + Selar (Card)
+  Deploy    → Frontend: Netlify | Backend: Railway (Nixpacks)
+
+DAILY FLOW:
+  07:00  → Football quant pipeline runs (Poisson + Elo + Form + EV + Kelly)
+  07:30  → Basketball pipeline
+  08:00  → Cricket pipeline
+  08:15  → Unified vault built from all 3 sports
+  08:30  → Blog generation
+  09:00  → Telegram broadcast
+  11:00  → Lineup sync
+  21:00  → Tomorrow's fixtures pipeline
+  22:00  → Grading engine grades today's predictions
+  22:15  → Banker of the Day summary computed
+  23:30  → Prediction repair
+  Every 2 min → Live scores updated
+  Every 5 min → In-play EV evaluated
+  03:00  → Historical data collection
+
+
+================================================================================
+  2. PREDICTION ENGINE (Core Model)
+================================================================================
+
+FILE: backend/quant/quant_pipeline.py
+
+The central orchestrator. Runs a 12-step daily workflow:
+
+  1. Fetch upcoming fixtures from approved leagues
+  2. Build team statistics (xG, form, possession)
+  3. Run Poisson model for score-grid derivation
+  4. Run Elo model for match-outcome probabilities
+  5. Run Form model for recent-performance adjustment
+  6. Combine models via probability_engine (weights: 60/25/10/5)
+  7. Evaluate all markets for EV via ev_engine
+  8. Apply risk filters
+  9. Calculate Kelly stakes
+  10. Generate accumulators
+  11. Save to Firestore (public + VIP + Banker)
+  12. Compute performance metrics
+
+MODEL WEIGHTS:
+  Poisson = 60% (primary — strongest for goals markets)
+  Elo     = 25% (match outcomes)
+  Form    = 10% (recent performance)
+  H2H     = 5% (head-to-head, adaptive up to 12% for derbies)
+
+PREDICTION FIELDS (per fixture):
+  - fixture_id, league, teams, kickoff time
+  - bet_type, prediction (market name)
+  - probability (calibrated, 0-1)
+  - confidence (percentage, for UI)
+  - odds, pick_time_odds (decimal)
+  - expected_value, ev_pct (edge above fair)
+  - market_implied_prob (devigged bookmaker probability)
+  - inefficiency (model_prob - market_prob)
+  - kelly_stake (fraction of bankroll)
+  - calibration_factor, calibration_tier
+  - vault_eligible, vault_priority_boost
+  - category (safe/value/risky/lean)
+  - value_rank (high/medium/low/none)
+  - 25+ probability fields for all markets
+  - top_scorelines (4 most likely, Poisson-derived)
+  - expected_corners, corner probabilities
+  - all_value_bets (top 5 approved value bets)
+  - hedge_suggestion (O2.5 → O1.5 insurance)
+  - model_version (audit trail, currently "2026-07-v5")
+
+
+FILE: backend/quant/poisson_model.py
+
+The Poisson distribution model is the foundation for goals-related markets.
+
+MARKET PROBABILITIES COMPUTED:
+  - 1X2 (Home Win, Draw, Away Win)
+  - Over/Under: 1.5, 2.5, 3.5, 0.5, 4.5
+  - BTTS (Both Teams To Score), BTTS No
+  - BTTS + Over 2.5 (composite)
+  - Double Chance: 1X, X2, 12
+  - Draw No Bet: Home, Away
+
+DIXON-COLES CORRECTION:
+  A multiplicative factor (rho) applied to 4 low-score cells:
+    (0,0) and (1,1) → boosted
+    (1,0) and (0,1) → reduced
+  Default rho = -0.13, adjusted for derbies (-0.20), high-xG matches (×0.6),
+  low-xG matches (×1.3), mismatches (×0.7). Floor enforced to prevent
+  negative cell probabilities.
+
+
+FILE: backend/quant/elo_rating.py
+
+Bradley-Terry logistic Elo system:
+  E_A = 1 / (1 + 10^((R_B - R_A) / 400))
+
+  Constants: DEFAULT_ELO = 1500, K_FACTOR = 20, HOME_ADVANTAGE = 55
+  League-specific K-factors: UCL=30, EPL/La Liga/Bundesliga=22, Ligue 1=20
+  League-specific home advantage: EPL=45, Saudi=70, Turkish=75
+  Goal-difference multiplier: margin=1→×1.0, margin=2→×1.5, margin≥3→×1.75
+  22 elite clubs pre-seeded with approximate ratings
+  13 rivalry pairs tracked (derbies get stronger Dixon-Coles rho)
+  Ratings loaded from Firestore, modified ratings batch-saved at pipeline end
+
+
+FILE: backend/quant/form_model.py
+
+Two-layer scoring:
+  1. Classic Form Score (results-based): W=3, D=1, L=0 with recency weights
+     (1.5× for most recent, 0.7× for oldest)
+  2. True Dominance Score (performance-based): xG ratio (60%) + possession
+     (20%) + shots on target (20%)
+  Final score = Results × 0.5 + Performance × 0.5
+  Converts scores to 1X2 probabilities with league-tier-aware base rates
+
+
+FILE: backend/quant/probability_engine.py
+
+Weighted combination of all 4 models:
+  1X2: w_poisson × P_poisson + w_elo × P_elo + w_form × P_form + w_h2h × P_h2h
+  Goals: Taken directly from Poisson grid (form-adjusted xG)
+
+Probability caps for defensive markets: Under 2.5 ≤ 80%, Under 3.5 ≤ 88%
+Stochastic ordering enforced: P(O1.5) ≥ P(O2.5) ≥ P(O3.5)
+
+First Half probabilities: mu_fh = mu × 0.45, rho_fh = rho × 0.50
+HT/FT compounds: hthome_fthome, htdraw_fthome, hthome_ftdraw
+
+
+================================================================================
+  3. EV ENGINE & BET SELECTION
+================================================================================
+
+FILE: backend/quant/ev_engine.py
+
+EVALUATES 33 MARKETS ACROSS 7 CATEGORIES:
+  1. 1X2: Home Win, Away Win, Draw
+  2. Double Chance: DC (1X), DC (X2), DC (12)
+  3. DNB/AH: DNB Home, DNB Away, AH Home -0.5, AH Away +0.5
+  4. Over/Under: O0.5, U0.5, O1.5, U1.5, O2.5, U2.5, O3.5, U3.5, O4.5, U4.5
+  5. BTTS: BTTS Yes, BTTS No, BTTS + Over 2.5
+  6. First Half: FH O0.5, FH O1.5, FH BTTS, 1H Home, 1H Draw, 1H Away
+  7. Corners: Over 8.5, Over 9.5
+
+DEVIgging: Power (Logarithmic) method — finds power k where sum(imp_i^k) = 1.0
+via binary search (20 iterations). Models bookmaker's favorite-longshot bias.
+
+EV CAP: 15% (prevents wild overconfidence, preserves true edge signals)
+
+BOOKMAKER_MARGIN: Environment variable (default 0.0, set to 0.06 for BetPawa).
+Applies discount: adjusted_odds = market_odds × (1 - BOOKMAKER_MARGIN)
+
+DISABLED MARKETS:
+  - Home Win, Away Win, Draw (historical -40% ROI)
+  - Double Chance X2 (38% win rate)
+
+
+FILE: backend/quant/risk_filters.py
+
+FILTER THRESHOLDS:
+  - MIN_PROBABILITY = 0.40 (tier-adjusted)
+  - MIN_EV = 0.05 (5%)
+  - MAX_EV = 0.15 (reject overconfident)
+  - MAX_ODDS = 3.50, MIN_ODDS = 1.40
+  - MIN_INEFFICIENCY = 0.04
+
+LEAGUE VOLATILITY MODIFIERS:
+  Tier 1: 1.00, Tier 2: 1.00, Tier 3: 1.15, Tier 4: 1.30, Tier 5: 1.50
+  Higher tiers get stricter thresholds (multiply MIN_PROB and MIN_EV)
+
+BTTS BLANKING FILTER: Excludes BTTS bets when either team averages < 0.8 goals
+
+MARKET BONUS (quality score multiplier):
+  Over 1.5 Goals: 1.30 (84% hit rate, vault anchor)
+  Under 1.5 Goals: 1.18 (73% ROI)
+  Under 3.5 Goals: 1.10
+  BTTS: 1.05
+
+RISK CLASSIFICATION (grade_risk):
+  Safe:  prob ≥ 65% (goals) or ≥ 55% (result) AND EV ≥ 8% (goals) or ≥ 6%
+  Value: prob ≥ 55% (goals) or ≥ 45% (result) AND EV ≥ 5%
+  Risky: below thresholds
+
+
+FILE: backend/quant/kelly_optimizer.py
+
+KELLY CRITERION: f* = (b × p - q) / b
+  b = decimal odds - 1, p = win probability, q = loss probability
+
+  KELLY_FRACTION = 0.125 (1/8th Kelly — conservative)
+  MAX_STAKE_PCT = 0.02 (2% hard cap)
+  FRAGILE_MARKET_MAX = 0.01 (1% for Away Win, Draw, BTTS No, Over 3.5, Over 4.5)
+  WATCH_MARKET_MAX = 0.015 (1.5% for Under 2.5, Under 3.5, DC X2, DNB Away)
+
+
+================================================================================
+  4. VAULT STRATEGY (Bankroll Management)
+================================================================================
+
+FILE: components/VaultTab.tsx
+
+The Vault is a systematic, Kelly-based sports betting portfolio simulator.
+Treats betting like a quant trading strategy:
+
+RULES:
+  - 1/8th Kelly staking (0.125 fraction)
+  - 2% default max stake, 1% for fragile markets, 5% absolute hard cap
+  - Max 7 picks per day
+  - Only "safe" or "value" category bets
+  - EV ≥ 2%, odds > 1.0, odds_fresh = true
+  - League tier < 5
+  - Market whitelist: ONLY Over 1.5 Goals + Under 3.5 Goals
+  - Compounding bankroll (day N+1 starts where day N ended)
+  - Single bets only — no accumulators in the vault
+
+SORT PRIORITY:
+  1. Over 1.5 Goals always first (84% hit rate anchor)
+  2. Safe category > Value category
+  3. Quality score (EV × 0.4 + probability × 0.4 + inefficiency × 0.2)
+
+CIRCUIT BREAKER:
+  Pauses vault if bankroll drops 50% from starting.
+  Shows warning: "Your bankroll has dropped X% from starting. New picks paused."
+
+BACKTEST RESULTS (14-day simulation):
+  Hit Rate: 80%, ROI: +13.5%, Max Drawdown: -1.1%
+  Verdict: PROFITABLE
+
+
+================================================================================
+  5. ACCUMULATOR ENGINE
+================================================================================
+
+FILE: backend/quant/accumulator_engine.py
+
+5 NAMED TIERS:
+
+  The Baseline (🛡️): Highest probability, 2-3 legs, min prob 55%, min odds 1.50
+  The Alpha Edge (⚡): Highest EV, 2-3 legs, min prob 50%, min odds 2.00
+  The Syndicate (🎯): Balanced combo, 2-4 legs, min prob 50%, min odds 3.00
+  The Variance Play (🚀): High-yield, 3-5 legs, min prob 50%, min odds 5.00
+  The Safe Stack (🔒): 85%+ probability only, 3-5 legs, min odds 2.00
+
+SELECTION ALGORITHM: Branch-and-bound optimizer (falls back to greedy for
+large pools > 30). Finds globally optimal combinations.
+
+CORRELATION PENALTIES:
+  - Same league: 0.92^n penalty per extra leg from same league
+  - Same fixture: 0.85 penalty per duplicate fixture (cross-market)
+  - Time-based: Max 2 legs per kickoff hour
+
+ACCUMULATOR POOL: Built from highest-probability picks per fixture (70%+ prob),
+NOT the EV-optimized bets. No value bets in accumulators.
+
+
+================================================================================
+  6. CALIBRATION & RETRAINING
+================================================================================
+
+FILE: backend/quant/calibration_registry.py
+
+Single source of truth for calibration factors. Versioned and auditable.
+
+CURRENT FACTORS:
+  Over 2.5: 0.80   (predicted 88% vs actual 82%)
+  Over 1.5: 0.96   (well-calibrated, high hit rate)
+  Over 3.5: 0.65   (heavily discounted)
+  BTTS:     0.66   (predicted 57% vs actual 50%)
+  BTTS No:  0.85
+  Under 3.5: 0.80
+  Home Win: 0.37   (severe overconfidence: 60% predicted vs 21% actual)
+  Away Win: 0.27   (50% predicted vs 14% actual)
+  Draw:     0.90   (reasonably calibrated)
+
+FRAGILE MARKETS: home_win, away_win, draw, btts_no, over35, under35,
+                double_chance_x2
+
+DYNAMIC CALIBRATION:
+  Layer 1 — Season Phase: Aug/Sep 0.95, Oct-Feb 1.00, Mar/Apr 0.98, May/Jun 0.95
+  Layer 2 — League Goals Modifier: Bundesliga +6% over25, Serie A -5% over25
+  Layer 3 — Auto-update: Every 14 days, ≥20 samples, >5% divergence → adjusts 20%
+
+FILE: backend/quant/retrain_models.py
+
+Optimizes model parameters using graded prediction data:
+  1. Grid search over Poisson/Elo/Form weights (0.05 step)
+  2. Brier score minimization for calibration factors (0.02 step)
+  3. --apply flag writes optimized parameters directly to source code
+
+FILE: backend/quant/historical_data_pipeline.py
+
+Collects finished fixtures nightly (03:00) for training dataset.
+Stores in Firestore `historical_training/{date}` with odds, scores, outcomes.
+Currently collecting 7 days per run. Building toward 1000+ match dataset.
+
+
+================================================================================
+  7. DATA PIPELINE & INFRASTRUCTURE
+================================================================================
+
+FILE: backend/quant/data_pipeline.py
+
+DATA SOURCES (API-Football v3):
+  - Fixtures by date (upcoming)
+  - Odds (Bet365 bookmaker_id=8, all 30+ markets)
+  - Pinnacle odds (bookmaker_id=3, sharpest lines)
+  - AI Consensus predictions
+  - Team form + xG (last 20 matches)
+  - Team season stats (real xG from league data)
+  - Injuries (sidelined player counts)
+  - Head-to-head history (cached 7 days)
+
+xG COMPUTATION:
+  Primary: Form averages (AF-Form)
+  Fallback: League average / 2
+  Enhanced: Real xG from team season stats (API-xG)
+  Low-scoring teams get penalty (-20%), low-GPG leagues get caps
+
+LEAGUE COVERAGE (44+ leagues across 4 tiers):
+
+FILE: backend/quant/league_config.py
+
+  Tier 1 (weight 1.0): EPL, UCL, UEL, La Liga, Bundesliga, Serie A, World Cup
+  Tier 2 (weight 0.85): Ligue 1, Primeira Liga, Conference League, Eredivisie,
+    Championship, Scottish PL, J1 League, Liga MX, Chinese SL
+  Tier 3 (weight 0.70): MLS, Brasileirão, Argentine, Süper Lig, Saudi,
+    Scandinavian leagues, K League, Ekstraklasa, CAF CL, CAF CC, 2nd divisions,
+    USL Championship, PSL South Africa, Copa America, WC Qualifiers
+  Tier 4 (weight 0.55): League 1/2, National League, Brasileirão B, Liga
+    Portugal 2, USL2, Friendlies, Canadian Championship
+
+
+================================================================================
+  8. LIVE FEATURES
+================================================================================
+
+FILE: backend/quant/live_score_writer.py
+
+Fetches live fixtures from API-Football every 2 minutes. Writes to Firestore
+`live_scores/current` with: team names, logos, scores, league, minute, state,
+and last 5 match events (goals, cards, subs). Only fixtures in active states
+(1H, 2H, HT, ET, PEN, LIVE) are included.
+
+FILE: backend/quant/live_ev_engine.py
+
+In-play Expected Value evaluator. Runs every 5 minutes.
+Computes remaining-game probabilities using Poisson distribution based on
+current score, remaining minutes, and league average goals per game.
+Evaluates: Over 1.5 Goals LIVE, Over 2.5 Goals LIVE, BTTS LIVE.
+
+VIP GATING:
+  - `live_ev/current`: Full data (odds, EV, probability) — VIP only
+  - `live_ev_preview/current`: Count only — public
+
+
+================================================================================
+  9. GRADING & PERFORMANCE TRACKING
+================================================================================
+
+FILE: backend/quant/grading_engine.py
+
+Runs at 22:00 daily. Grades all pending predictions against actual results.
+
+GRADING FLOW:
+  1. Fetches results from 5-day window (±2 days) via API-Football grading cache
+  2. Matches predictions to results by fixture_id
+  3. Fallback: team-name fuzzy matching for unmatched predictions
+  4. Grades betting markets (18 types: 1X2, Over/Under, BTTS, DC, DNB)
+  5. Computes Closing Line Value (CLV) for edge verification
+  6. Grades Banker of the Day pick
+  7. Auto-updates calibration factors from graded results
+  8. Updates Elo ratings from final scores
+  9. Diagnostic logging: shows exactly how many were graded, how many not found,
+     how many filtered for negative EV
+
+FILE: backend/quant/performance_tracker.py
+
+Computes: win rate, ROI, profit/loss, CLV tracking, streaks
+Aggregation: overall, weekly (7 days), monthly (30 days)
+Risk metrics: Sharpe ratio (annualized), Sortino ratio (downside only)
+Saved to Firestore `quant_performance/all`
+
+FILE: backend/quant/banker_summary.py
+
+Computes 30-day Banker of the Day performance: wins, losses, win rate %,
+current streak. Saved to `banker_summary/current` for Home page display.
+
+
+================================================================================
+  10. FRONTEND FEATURES
+================================================================================
+
+FILE: pages/Home.tsx
+
+Main page showing:
+  - Banker of the Day card (30-day performance + today's pick)
+  - Match list sorted by probability (highest first)
+  - Free users see only "safe" category bets
+  - VIP users see full details (odds, probabilities, analysis)
+  - Smart Ticket builder (TicketWizard)
+  - Sport toggle (Football/Basketball/Cricket)
+
+FILE: pages/FreePicks.tsx
+
+Landing page for non-VIP users:
+  - Hook picks: top N safe bets (fully visible)
+  - VIP teasers: next 8 picks (blurred, "Unlock" badge)
+  - AI Intelligence Report: upgrade wall
+
+FILE: pages/VIP.tsx
+
+VIP dashboard:
+  - Signals tab: Model Picks with probability bars, bet type filters
+  - Vault tab: Kelly-optimized daily portfolio
+  - Accumulators tab: 5-tiered accumulator display
+  - Pricing: 4 plans (Weekly/Monthly/Quarterly/Annual)
+
+FILE: pages/MatchDetails.tsx
+
+Per-match deep dive:
+  - Prediction tab: VIP-gated, shows confidence/EV/Kelly/AI analysis
+  - Picks tab: Market-by-market probability breakdown with "TOP" badges
+  - Overview: Form guide, real market odds
+  - Stats: Live match statistics
+  - H2H: Head-to-head history
+  - Lineup: Expected starting XIs
+
+FILE: utils.ts
+
+Shared probability utilities:
+  - getTopProbPicks(): Finds highest-probability markets per fixture
+  - Variety logic: When top pick is Over 1.5/0.5, shows second-best too
+  - getPrimaryPredictionText(): Formats for display
+  - getPrimaryPredictionProb(): Returns percentage
+
+FILE: services/db.ts
+
+Canonical normalizer for Python → React data:
+  - snake_case to camelCase mapping
+  - Default value handling
+  - Cache management (30s TTL for today, 5min for history)
+
+
+================================================================================
+  11. SECURITY & ACCESS CONTROL
+================================================================================
+
+FILE: firestore.rules
+
+AUTH FUNCTIONS:
+  - signedIn() — request.auth != null
+  - isOwner(userId) — signed in + uid match
+  - isAdmin() — profile.isAdmin == true
+  - isVip() — profile.isVip == true
+
+ACCESS PATTERNS:
+  - Predictions: public read, admin write
+  - VIP content: isVip() required (quant_vip, live_ev, unified_vault, arb)
+  - User data: owner only (profiles, vault_days, payout_requests)
+  - Backend data: deny all (historical_training, elo_ratings, push_subscriptions)
+  - Live scores: public read, backend write only
+  - Banker data: public read, backend write only
+
+No public write access anywhere. All privileged operations via Firebase Admin SDK.
+
+
+================================================================================
+  12. SCHEDULER & AUTOMATION
+================================================================================
+
+FILE: backend/scheduler.js
+
+All times in Africa/Lagos (UTC+1):
+
+  TIME     JOB                    LOCK    PURPOSE
+  03:00    historical_data        120min   Collect 7 days of training data
+  07:00    football_generation    60min    Daily football predictions
+  07:30    basketball_generation  30min    Daily basketball
+  08:00    cricket_generation     30min    Daily cricket
+  08:00    tip_of_day_push        15min    Push notification
+  08:15    unified_vault          10min    Cross-sport vault
+  08:30    blog_generation        30min    AI blog content
+  09:00    telegram_broadcast     15min    Daily broadcast
+  11:00    lineup_sync            15min    Starting XIs
+  21:00    tomorrow_fixtures      60min    Next-day pipeline
+  22:00    quant_grading          30min    Grade predictions
+  22:15    banker_summary         5min     Banker performance
+  23:30    prediction_repair      10min    Fix corrupted predictions
+  */2 min  live_scores            1min     Live match dashboard
+  */5 min  live_ev                4min     In-play value bets
+
+Distributed locking via Firestore transactions prevents double-execution
+when horizontally scaled.
+
+
+================================================================================
+  13. API BUDGET & RESOURCE USAGE
+================================================================================
+
+API-FOOTBALL PLAN: 7,500 credits/day
+
+DAILY USAGE:
+  Morning pipeline (45+ fixtures): ~400 credits
+  Tomorrow pipeline:                ~400 credits
+  Live scores (every 2 min):        ~480 credits
+  Live in-play EV (every 5 min):    ~200 credits
+  Grading:                          ~25 credits
+  Historical data:                  ~100 credits
+  Lineup sync:                      ~51 credits
+  ─────────────────────────────────────────
+  TOTAL:                            ~1,656 credits/day
+
+REMAINING: ~5,844 credits/day (78% headroom)
+
+GROQ AI API: ~24 calls/minute, ~6 predictions/day
+FIREBASE FIRESTORE: < 50K reads/day, < 1K writes/day
+
+
+================================================================================
+  14. FILE INDEX
+================================================================================
+
+PREDICTION ENGINE:
+  backend/quant/quant_pipeline.py         — Main orchestrator
+  backend/quant/poisson_model.py          — Poisson distribution
+  backend/quant/elo_rating.py             — Elo rating system
+  backend/quant/form_model.py             — Form analysis
+  backend/quant/probability_engine.py     — Probability combination
+  backend/quant/ev_engine.py              — Expected Value engine
+  backend/quant/risk_filters.py           — Risk filtering
+  backend/quant/kelly_optimizer.py        — Kelly Criterion staking
+
+DATA & INFRASTRUCTURE:
+  backend/quant/data_pipeline.py          — Data ingestion
+  backend/quant/api_football_client.py    — API-Football client
+  backend/quant/league_config.py          — League configuration
+  backend/scheduler.js                    — Cron job scheduler
+  backend/quantService.js                 — Node.js Python wrapper
+  firestore.rules                         — Access control
+
+ACCUMULATORS & VAULT:
+  backend/quant/accumulator_engine.py     — Accumulator builder
+  components/VaultTab.tsx                 — Vault frontend
+  components/AccumulatorModal.tsx         — Accumulator display
+  components/TicketWizard.tsx             — Smart Ticket builder
+
+LIVE FEATURES:
+  backend/quant/live_score_writer.py      — Live scores
+  backend/quant/live_ev_engine.py         — In-play EV
+
+GRADING & PERFORMANCE:
+  backend/quant/grading_engine.py         — Prediction grading
+  backend/quant/performance_tracker.py    — Performance tracking
+  backend/quant/banker_summary.py         — Banker aggregation
+
+CALIBRATION & TRAINING:
+  backend/quant/calibration_registry.py   — Calibration system
+  backend/quant/retrain_models.py         — Model retraining
+  backend/quant/historical_data_pipeline.py — Training data collection
+  backend/quant/model_optimizer.py        — Parameter optimization
+
+FRONTEND PAGES:
+  pages/Home.tsx                          — Main page
+  pages/FreePicks.tsx                     — Free picks landing
+  pages/VIP.tsx                           — VIP dashboard
+  pages/MatchDetails.tsx                  — Match detail
+  pages/Results.tsx                       — Results history
+  components/MatchCardAlpha.tsx           — VIP match card
+
+AUDIT & BACKTEST TOOLS:
+  backend/quant/prediction_audit.py       — Comprehensive audit
+  backend/quant/vault_backtest.py         — Vault backtest
+  backend/quant/vault_sim_after_fixes.py  — Vault simulation
+  backend/quant/accumulator_backtester.py — Acca grading
+  backend/quant/ticket_rules.py           — Shared ticket rules
+  backend/quant/unified_vault.py          — Multi-sport vault
+
+SHARED:
+  utils.ts                                — Shared utilities
+  services/db.ts                          — Firestore data layer
+  types.ts                                — TypeScript types
+  App.tsx                                 — Application routes
+  firebaseConfig.ts                       — Firebase client init
+
+
+================================================================================
+  END OF DOCUMENT
+================================================================================
