@@ -126,7 +126,12 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
                 <span className="text-[9px] font-mono text-gray-500 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">{Number(match.odds).toFixed(2)}x</span>
               )}
               {kelly > 0 && (
-                <span className="text-[9px] font-mono text-blue-400 bg-blue-500/5 px-1.5 py-0.5 rounded">Kelly {kelly.toFixed(1)}%</span>
+                <span className="flex items-center gap-1">
+                  <span className="text-[9px] font-mono text-blue-400 bg-blue-500/5 px-1.5 py-0.5 rounded">Kelly {kelly.toFixed(1)}%</span>
+                  <div className="w-8 h-1.5 rounded-full bg-white/10">
+                    <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-emerald-400" style={{ width: `${Math.min(kelly * 10, 100)}%` }} />
+                  </div>
+                </span>
               )}
               {match.vault_eligible && (
                 <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>

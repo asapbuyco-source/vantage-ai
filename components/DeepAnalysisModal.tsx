@@ -175,6 +175,15 @@ export const DeepAnalysisModal: React.FC<DeepAnalysisModalProps> = ({ match, isO
 
   const visibleSections = sections.filter(s => s.visible);
 
+  // Compute 5-pillar radar data
+  const pillarData = [
+    { label: isFr ? 'Attaque' : 'Attack', home: Math.min((match.home_avg_scored ?? 1) / 3 * 100, 100), away: Math.min((match.away_avg_scored ?? 1) / 3 * 100, 100) },
+    { label: isFr ? 'Défense' : 'Defense', home: Math.min((1 - (match.home_avg_conceded ?? 1) / 3) * 100, 100), away: Math.min((1 - (match.away_avg_conceded ?? 1) / 3) * 100, 100) },
+    { label: isFr ? 'Forme' : 'Form', home: Math.min((match.home_win_rate ?? 50), 100), away: Math.min((match.away_win_rate ?? 50), 100) },
+    { label: isFr ? 'Fitness' : 'Fitness', home: Math.min(100 - ((4 - Math.min(match.home_days_rest ?? 7, 4)) * 15), 100), away: Math.min(100 - ((4 - Math.min(match.away_days_rest ?? 7, 4)) * 15), 100) },
+    { label: isFr ? 'Effectif' : 'Squad', home: Math.max(100 - ((match.home_sidelined_count ?? 0) * 15), 10), away: Math.max(100 - ((match.away_sidelined_count ?? 0) * 15), 10) },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -207,6 +216,61 @@ export const DeepAnalysisModal: React.FC<DeepAnalysisModalProps> = ({ match, isO
 
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Radar Chart — 5-Pillar Comparison */}
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="flex items-center gap-2 mb-3">
+              <Target size={14} className="text-vantage-cyan" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                {isFr ? 'Comparaison 5 Piliers' : '5-Pillar Comparison'}
+              </span>
+            </div>
+            <div className="flex justify-center">
+              <svg viewBox="0 0 200 200" className="w-48 h-48">
+                {/* Background pentagon grid */}
+                {[40, 80].map(r => (
+                  <polygon key={r} points={pillarData.map((_, i) => {
+                    const angle = (Math.PI / 2) + (i * 2 * Math.PI / 5);
+                    return `${100 + r * Math.cos(angle)},${100 - r * Math.sin(angle)}`;
+                  }).join(' ')} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
+                ))}
+                {/* Axis lines */}
+                {pillarData.map((_, i) => {
+                  const angle = (Math.PI / 2) + (i * 2 * Math.PI / 5);
+                  return <line key={i} x1="100" y1="100" x2={100 + 95 * Math.cos(angle)} y2={100 - 95 * Math.sin(angle)} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />;
+                })}
+                {/* Home team polygon */}
+                <polygon points={pillarData.map((d, i) => {
+                  const r = (d.home / 100) * 85;
+                  const angle = (Math.PI / 2) + (i * 2 * Math.PI / 5);
+                  return `${100 + r * Math.cos(angle)},${100 - r * Math.sin(angle)}`;
+                }).join(' ')} fill="rgba(16,185,129,0.2)" stroke="#10b981" strokeWidth="1.5" />
+                {/* Away team polygon */}
+                <polygon points={pillarData.map((d, i) => {
+                  const r = (d.away / 100) * 85;
+                  const angle = (Math.PI / 2) + (i * 2 * Math.PI / 5);
+                  return `${100 + r * Math.cos(angle)},${100 - r * Math.sin(angle)}`;
+                }).join(' ')} fill="rgba(59,130,246,0.2)" stroke="#3b82f6" strokeWidth="1.5" />
+                {/* Labels */}
+                {pillarData.map((d, i) => {
+                  const angle = (Math.PI / 2) + (i * 2 * Math.PI / 5);
+                  const x = 100 + 105 * Math.cos(angle);
+                  const y = 100 - 105 * Math.sin(angle);
+                  return <text key={i} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fill="rgba(255,255,255,0.5)" fontSize="8">{d.label}</text>;
+                })}
+              </svg>
+            </div>
+            <div className="flex justify-center gap-4 mt-2">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-emerald-500/50 border border-emerald-500" />
+                <span className="text-[10px] text-gray-400">{match.homeTeam}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-blue-500/50 border border-blue-500" />
+                <span className="text-[10px] text-gray-400">{match.awayTeam}</span>
+              </div>
+            </div>
+          </div>
+
           {visibleSections.length === 0 ? (
             <div className="text-center py-8">
               <Shield size={32} className="text-gray-500 mx-auto mb-3" />
