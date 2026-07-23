@@ -206,6 +206,8 @@ class MatchData:
     away_stats: Optional[TeamStats] = None
     home_sidelined_count: int = 0
     away_sidelined_count: int = 0
+    home_days_rest: int = 7    # Days since last match (default: well-rested)
+    away_days_rest: int = 7
     h2h_home_wins: int = 0
     h2h_away_wins: int = 0
     h2h_draws: int = 0
@@ -229,6 +231,15 @@ class MatchData:
     pinnacle_over35: float = 0.0
     pinnacle_btts_yes: float = 0.0
     pinnacle_btts_no: float = 0.0
+    weather: str = "clear"          # "windy", "rainy", "clear"
+    weather_penalty: float = 1.0    # Multiplier for O2.5 probability
+    venue_city: str = ""            # Stadium city from API-Football venue data
+    fatigue_risk: str = "none"      # "home", "away", "both", "none"
+    injury_risk: str = "none"       # "home", "away", "both", "none"
+    home_fatigue_penalty: float = 1.0
+    away_fatigue_penalty: float = 1.0
+    home_injury_penalty: float = 1.0
+    away_injury_penalty: float = 1.0
 
 
 # ── API Helpers ───────────────────────────────────────────────────────────────
@@ -427,6 +438,9 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
             away_logo=away_team.get("logo", ""),
             provider_source="api_football",
         )
+        # Extract venue city from API-Football fixture data (covers all leagues)
+        venue = fix.get("fixture", {}).get("venue", {})
+        md.venue_city = venue.get("city", "") or venue.get("name", "") or home_name
 
         # ── Enrich: Native Odds (100% Match Rate) ──────────────
         try:
@@ -482,8 +496,26 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
 
         # ── Enrich: Form & xG (No more rate limits) ──────────────
         try:
-            home_form_str, home_avg_sc, home_avg_con = fetch_team_form_and_xg(home_id, limit=20)
-            away_form_str, away_avg_sc, away_avg_con = fetch_team_form_and_xg(away_id, limit=20)
+            home_form_str, home_avg_sc, home_avg_con, home_last_date = fetch_team_form_and_xg(home_id, limit=20)
+            away_form_str, away_avg_sc, away_avg_con, away_last_date = fetch_team_form_and_xg(away_id, limit=20)
+
+            # Phase 1.2: Fatigue — compute days since last match
+            if home_last_date and match.kickoff_utc:
+                try:
+                    from datetime import datetime
+                    last = datetime.strptime(home_last_date, "%Y-%m-%d")
+                    kickoff = datetime.fromisoformat(match.kickoff_utc.replace("Z", "+00:00"))
+                    md.home_days_rest = max(1, (kickoff - last).days)
+                except:
+                    pass
+            if away_last_date and match.kickoff_utc:
+                try:
+                    from datetime import datetime
+                    last = datetime.strptime(away_last_date, "%Y-%m-%d")
+                    kickoff = datetime.fromisoformat(match.kickoff_utc.replace("Z", "+00:00"))
+                    md.away_days_rest = max(1, (kickoff - last).days)
+                except:
+                    pass
             
             home_form = home_form_str[:9] if home_form_str else "N/A"
             away_form = away_form_str[:9] if away_form_str else "N/A"
@@ -576,13 +608,96 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
         except Exception as e:
             print(f"[DataPipeline] Pinnacle odds fetch error for {fixture_id}: {e}", file=sys.stderr)
 
+        # ── Enrich: Real xG from fixture statistics ────────────────────────
+        try:
+            from api_football_client import fetch_team_xg_average
+            home_xg = fetch_team_xg_average(home_id, limit=10)
+            away_xg = fetch_team_xg_average(away_id, limit=10)
+
+            if home_xg.get("sample_size", 0) >= 3 and home_xg.get("xg_for", 0) > 0:
+                md.home_stats.avg_xg_created = home_xg["xg_for"]
+                md.home_stats.avg_xg_conceded = home_xg.get("xg_against", 0)
+                md.expected_goals_home = max(0.5, home_xg["xg_for"])
+                xg_source = "API-xG-Stats"
+
+            if away_xg.get("sample_size", 0) >= 3 and away_xg.get("xg_for", 0) > 0:
+                md.away_stats.avg_xg_created = away_xg["xg_for"]
+                md.away_stats.avg_xg_conceded = away_xg.get("xg_against", 0)
+                if xg_source != "API-xG-Stats":
+                    md.expected_goals_away = max(0.5, away_xg["xg_for"])
+        except Exception as e:
+            print(f"[DataPipeline] Real xG fetch error for {fixture_id}: {e}", file=sys.stderr)
+
+        # ── Enrich: Weather context ────────────────────────────────────────
+        try:
+            from weather_service import get_weather_context, get_weather_probability_penalty
+            # Use venue city from API-Football fixture data (covers ALL leagues)
+            venue_city = match.venue_city or home_name
+            weather = get_weather_context(venue_city, md.kickoff_utc)
+            md.weather = "windy" if weather.get("wind_kmh", 0) > 20 else ("rainy" if weather.get("rain_mmh", 0) > 2 else "clear")
+            md.weather_penalty = get_weather_probability_penalty(weather)
+            if weather.get("has_weather_risk"):
+                print(f"[DataPipeline]   🌧️ Weather risk for {home_name}: {weather.get('penalty_reason', '')}, penalty={md.weather_penalty}")
+        except Exception as e:
+            print(f"[DataPipeline] Weather fetch error: {e}", file=sys.stderr)
+
         # ── Enrich: Injuries (New Feature) ──────────────
         try:
             injuries = fetch_injuries(fixture_id)
             md.home_sidelined_count = injuries.get(home_id, 0)
             md.away_sidelined_count = injuries.get(away_id, 0)
+            
+            # Squad Strength Drop Calculation
+            # Baseline: ~1500 Elo. 3 injuries = ~0.94 multiplier
+            h_elo = md.home_stats.elo_rating if md.home_stats else 1500
+            a_elo = md.away_stats.elo_rating if md.away_stats else 1500
+            
+            # ~2% drop per injured player, scaled by Elo (higher Elo = more impactful if top heavy, or deeper bench? We'll assume higher elo = slightly bigger penalty to stop backing injured favorites blindly)
+            home_drop = md.home_sidelined_count * 0.02 * (h_elo / 1500.0)
+            away_drop = md.away_sidelined_count * 0.02 * (a_elo / 1500.0)
+            
+            md.home_injury_penalty = max(0.70, 1.0 - home_drop)
+            md.away_injury_penalty = max(0.70, 1.0 - away_drop)
+            
+            # UI Badges
+            if md.home_sidelined_count >= 3 and md.away_sidelined_count >= 3:
+                md.injury_risk = "both"
+            elif md.home_sidelined_count >= 3:
+                md.injury_risk = "home"
+            elif md.away_sidelined_count >= 3:
+                md.injury_risk = "away"
+                
+            if md.injury_risk != "none":
+                print(f"[DataPipeline]   🚑 Injury Risk: {md.injury_risk} (H:{md.home_sidelined_count} A:{md.away_sidelined_count})")
         except Exception as e:
             print(f"[DataPipeline] Injuries fetch error for {fixture_id}: {e}", file=sys.stderr)
+
+        # ── Enrich: Fatigue Context ──────────────
+        try:
+            # Penalize if <4 days rest. Apply bigger penalty to away team.
+            h_fatigue = 1.0
+            a_fatigue = 1.0
+            
+            if md.home_days_rest < 4:
+                h_fatigue = 0.95
+            if md.away_days_rest < 4:
+                a_fatigue = 0.92  # Away team traveling on short rest gets penalized harder
+
+            md.home_fatigue_penalty = h_fatigue
+            md.away_fatigue_penalty = a_fatigue
+            
+            if h_fatigue < 1.0 and a_fatigue < 1.0:
+                md.fatigue_risk = "both"
+            elif h_fatigue < 1.0:
+                md.fatigue_risk = "home"
+            elif a_fatigue < 1.0:
+                md.fatigue_risk = "away"
+                
+            if md.fatigue_risk != "none":
+                print(f"[DataPipeline]   😴 Fatigue Risk: {md.fatigue_risk} (H:{md.home_days_rest}d A:{md.away_days_rest}d rest)")
+        except Exception as e:
+            print(f"[DataPipeline] Fatigue calculation error for {fixture_id}: {e}", file=sys.stderr)
+
 
         # ── Fetch H2H (Cached) ──────────────
         try:

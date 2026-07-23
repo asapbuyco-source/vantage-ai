@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Clock, Copy, Check, BrainCircuit } from 'lucide-react';
 import { Match } from '../types';
 import { TeamLogo } from './TeamLogo';
-import { getTopProbPicks } from '../utils';
+import { getTopProbPicks, getSmartBadges } from '../utils';
+import { DeepAnalysisModal } from './DeepAnalysisModal';
 
 interface MatchCardAlphaProps {
   match: Match;
@@ -47,6 +48,8 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
   const topPicks = getTopProbPicks(match);
   const displayPickName = topPicks.length > 0 ? topPicks.map(p => p.name).join(' / ') : (match.bet_type || match.prediction);
   const displayPickProb = topPicks.length > 0 ? Math.round(topPicks[0].prob * 100) : (match.confidence ?? Math.round((match.probability ?? 0) * 100));
+
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
 
   return (
     <motion.div
@@ -117,7 +120,8 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
             </div>
           </div>
           <div className="flex items-center justify-between mt-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 flex-wrap">
               {Number(match.odds) > 1 && (
                 <span className="text-[9px] font-mono text-gray-500 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">{Number(match.odds).toFixed(2)}x</span>
               )}
@@ -127,6 +131,31 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
               {match.vault_eligible && (
                 <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Vault</span>
               )}
+            </div>
+            {(() => {
+              const badges = getSmartBadges(match);
+              if (badges.length === 0) return null;
+              return (
+                <div className="flex items-center gap-1 flex-wrap mt-1">
+                  {badges.slice(0, 3).map((b, i) => (
+                    <span
+                      key={i}
+                      onClick={(e) => { e.stopPropagation(); setShowDeepAnalysis(true); }}
+                      className={`text-[9px] font-bold ${b.color} px-1.5 py-0.5 rounded flex items-center gap-0.5 cursor-pointer hover:brightness-125 transition-all`}
+                      title={b.reason}
+                    >
+                      {b.icon} {b.text}
+                    </span>
+                  ))}
+                  <span
+                    onClick={(e) => { e.stopPropagation(); setShowDeepAnalysis(true); }}
+                    className="text-[9px] font-bold text-gray-500 hover:text-vantage-cyan px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                  >
+                    + Analysis
+                  </span>
+                </div>
+              );
+            })()}
             </div>
             <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-500 opacity-80 shrink-0">
               <span>{isExpanded ? 'Hide' : 'View More'}</span>
@@ -276,6 +305,7 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
           )}
         </AnimatePresence>
       </div>
+      <DeepAnalysisModal match={match} isOpen={showDeepAnalysis} onClose={() => setShowDeepAnalysis(false)} />
     </motion.div>
   );
 };

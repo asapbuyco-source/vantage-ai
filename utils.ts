@@ -1,7 +1,7 @@
 import { Match } from './types';
 
 export interface ProbPick {
-  market: string;
+  name: string;
   prob: number;
 }
 
@@ -70,3 +70,124 @@ export const getPrimaryPredictionProb = (match: Match): number => {
   }
   return match.confidence || 0;
 };
+
+export interface SmartBadge {
+  icon: string;
+  text: string;
+  color: string;
+  reason: string;
+}
+
+export const getSmartBadges = (match: any): SmartBadge[] => {
+  const badges: SmartBadge[] = [];
+
+  // Sharp Money signal
+  if (match.line_signal === 'sharp_money_agrees' && Math.abs(match.line_shift || 0) > 0.02) {
+    badges.push({
+      icon: '📈',
+      text: 'Sharp Money',
+      color: 'text-emerald-400 bg-emerald-500/10',
+      reason: 'Professional money moved this line in our favor',
+    });
+  }
+  if (match.line_signal === 'sharp_money_disagrees' && Math.abs(match.line_shift || 0) > 0.04) {
+    badges.push({
+      icon: '📉',
+      text: 'Sharp Fade',
+      color: 'text-rose-400 bg-rose-500/10',
+      reason: 'Smart money moved AGAINST this pick — confidence reduced',
+    });
+  }
+
+  // Fatigue risk — use pre-calculated backend field first
+  const fatigueRisk = match.fatigue_risk;
+  if (fatigueRisk && fatigueRisk !== 'none') {
+    const homeRest = match.home_days_rest ?? 7;
+    const awayRest = match.away_days_rest ?? 7;
+    const rest = Math.min(homeRest, awayRest);
+    const tiredTeam = fatigueRisk === 'home'
+      ? (match.home_team || match.homeTeam)
+      : fatigueRisk === 'away'
+        ? (match.away_team || match.awayTeam)
+        : 'Both teams';
+    badges.push({
+      icon: '😴',
+      text: `${tiredTeam}: ${rest}d rest`,
+      color: 'text-amber-400 bg-amber-500/10',
+      reason: 'Team played recently — fatigue may affect performance',
+    });
+  } else {
+    // Fallback: compute from raw rest days
+    const homeRest = match.home_days_rest ?? 7;
+    const awayRest = match.away_days_rest ?? 7;
+    if (homeRest < 4 || awayRest < 4) {
+      const tiredTeam = homeRest < awayRest ? (match.home_team || match.homeTeam) : (match.away_team || match.awayTeam);
+      const rest = Math.min(homeRest, awayRest);
+      badges.push({
+        icon: '😴',
+        text: `${tiredTeam}: ${rest}d rest`,
+        color: 'text-amber-400 bg-amber-500/10',
+        reason: 'Team played recently — fatigue may affect performance',
+      });
+    }
+  }
+
+  // Injury risk
+  const injuryRisk = match.injury_risk;
+  if (injuryRisk && injuryRisk !== 'none') {
+    const homeSidelined = match.home_sidelined_count ?? 0;
+    const awaySidelined = match.away_sidelined_count ?? 0;
+    const count = injuryRisk === 'home' ? homeSidelined : injuryRisk === 'away' ? awaySidelined : Math.max(homeSidelined, awaySidelined);
+    const team = injuryRisk === 'home'
+      ? (match.home_team || match.homeTeam)
+      : injuryRisk === 'away'
+        ? (match.away_team || match.awayTeam)
+        : 'Both teams';
+    badges.push({
+      icon: '🚑',
+      text: `${count} out (${team === 'Both teams' ? 'Both' : team})`,
+      color: 'text-red-400 bg-red-500/10',
+      reason: `${count} key players sidelined — squad strength reduced`,
+    });
+  }
+
+  // BTTS blanking risk
+  if (match.btts_blanking_risk) {
+    badges.push({
+      icon: '🚫',
+      text: 'Low scoring',
+      color: 'text-rose-400 bg-rose-500/10',
+      reason: match.btts_blanking_reason || 'One team averages under 0.8 goals',
+    });
+  }
+
+  // Weather risk
+  if (match.weather === 'windy') {
+    badges.push({
+      icon: '🌬️',
+      text: 'High Wind',
+      color: 'text-blue-400 bg-blue-500/10',
+      reason: 'High wind speeds may suppress goals — Under 2.5 more likely',
+    });
+  } else if (match.weather === 'rainy') {
+    badges.push({
+      icon: '🌧️',
+      text: 'Heavy Rain',
+      color: 'text-blue-400 bg-blue-500/10',
+      reason: 'Rain conditions may slow play and reduce goals',
+    });
+  }
+
+  // Upset alert
+  if (match.upset_alert) {
+    badges.push({
+      icon: '⚡',
+      text: 'Upset Alert',
+      color: 'text-purple-400 bg-purple-500/10',
+      reason: 'Model identified a high-value away win upset opportunity',
+    });
+  }
+
+  return badges;
+};
+

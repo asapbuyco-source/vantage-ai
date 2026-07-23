@@ -57,7 +57,7 @@ from risk_filters import (
     odds_age_minutes,
     is_odds_fresh_for_vault,
 )
-from kelly_optimizer import kelly_stake_pct, market_max_stake_pct
+from kelly_optimizer import kelly_stake_pct, market_max_stake_pct, dynamic_kelly_multiplier
 from accumulator_engine import generate_accumulators, accumulator_to_dict
 from risk_filters import check_btts_blanking_risk
 
@@ -427,17 +427,24 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     vault_eligible = False
                     _safe_print(f"[QuantPipeline]   ⚠️ {btts_blanking_reason}")
 
-            # ── Kelly stake (ISSUE-01 fixed) ────────────────────────────────
+            # ── Kelly stake ────────────────────────────────────────────────
             if best_bet and vault_eligible:
-                # Kelly already applies kelly_fraction=0.25 internally in kelly_stake_pct().
-                # Don't apply it again here.
                 base_kelly = kelly_stake_pct(
                     best_bet.model_prob,
                     best_bet.odds,
                     best_bet.market,
                     best_bet.calibration_tier,
                 )
-                kelly = round(max(0, base_kelly * staleness_mult), 2)
+                # Phase 2.1: Dynamic Kelly — adjust for context signals
+                dyn_mult = dynamic_kelly_multiplier(
+                    home_days_rest=match.home_days_rest,
+                    away_days_rest=match.away_days_rest,
+                    line_signal=getattr(best_bet, "line_signal", ""),
+                    line_shift=getattr(best_bet, "line_shift", 0.0),
+                    home_sidelined=match.home_sidelined_count,
+                    away_sidelined=match.away_sidelined_count,
+                )
+                kelly = round(max(0, base_kelly * staleness_mult * dyn_mult), 2)
             else:
                 kelly = 0.0
 
@@ -482,6 +489,25 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "vault_priority_boost": vault_priority_boost,
                 "btts_blanking_risk": btts_blanking,
                 "btts_blanking_reason": btts_blanking_reason,
+                # Phase 1.1: Sharp Money signal
+                "line_signal": getattr(best_bet, "line_signal", "") if best_bet else "",
+                "line_shift": getattr(best_bet, "line_shift", 0.0) if best_bet else 0.0,
+                # Phase 1.2: Fatigue data
+                "home_days_rest": match.home_days_rest,
+                "away_days_rest": match.away_days_rest,
+                # Phase 1.5: Weather context
+                "weather": getattr(match, "weather", "clear"),
+                "weather_penalty": getattr(match, "weather_penalty", 1.0),
+                # Phase 1.2: Fatigue & Injury context (for badges + model adjustment)
+                "fatigue_risk": getattr(match, "fatigue_risk", "none"),
+                "injury_risk": getattr(match, "injury_risk", "none"),
+                "home_sidelined_count": match.home_sidelined_count,
+                "away_sidelined_count": match.away_sidelined_count,
+                "home_fatigue_penalty": getattr(match, "home_fatigue_penalty", 1.0),
+                "away_fatigue_penalty": getattr(match, "away_fatigue_penalty", 1.0),
+                "home_injury_penalty": getattr(match, "home_injury_penalty", 1.0),
+                "away_injury_penalty": getattr(match, "away_injury_penalty", 1.0),
+
                 "max_stake_pct": round(
                     market_max_stake_pct(best_bet.market, best_bet.calibration_tier) * 100,
                     2,

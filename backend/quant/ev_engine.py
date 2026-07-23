@@ -181,6 +181,8 @@ class ValueBet:
     raw_model_prob: float = 0.0
     calibration_factor: float = 1.0
     calibration_tier: str = "stable"
+    line_signal: str = ""    # "sharp_money_agrees" / "sharp_money_disagrees"
+    line_shift: float = 0.0  # Implied probability shift from opening
 
 
 def devig_1x2(home_odds: float, draw_odds: float, away_odds: float) -> tuple[float, float, float]:
@@ -396,6 +398,14 @@ def evaluate_all_markets(
             calibration_factor=round(calibration_factor, 4),
             calibration_tier=calibration_tier,
         ))
+
+        # ── Phase 1.1: Sharp Money signal ──────────────────────────────────
+        if line_agrees:
+            results[-1].line_signal = "sharp_money_agrees"
+            results[-1].line_shift = round(line_shift, 4)
+        elif line_disagrees:
+            results[-1].line_signal = "sharp_money_disagrees" 
+            results[-1].line_shift = round(line_shift, 4)
 
     results.sort(key=lambda x: x.expected_value, reverse=True)
     return results

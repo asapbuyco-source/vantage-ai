@@ -73,6 +73,45 @@ def kelly_stake_pct(
     return round(kelly_stake(probability, decimal_odds, max_stake_pct=max_pct) * 100, 2)
 
 
+def dynamic_kelly_multiplier(
+    home_days_rest: int = 7,
+    away_days_rest: int = 7,
+    line_signal: str = "",
+    line_shift: float = 0.0,
+    home_sidelined: int = 0,
+    away_sidelined: int = 0,
+) -> float:
+    """
+    Phase 2.1: Adjust Kelly stake based on context signals.
+    Returns a multiplier (0.0-1.5) applied to the base Kelly stake.
+    """
+    multiplier = 1.0
+
+    # Fatigue penalty: <4 days rest = reduce stake
+    min_rest = min(home_days_rest, away_days_rest)
+    if min_rest <= 2:
+        multiplier *= 0.60  # Very short rest
+    elif min_rest <= 3:
+        multiplier *= 0.80  # Short rest
+    elif min_rest <= 4:
+        multiplier *= 0.90  # Slightly short
+
+    # Sharp money boost/penalty
+    if line_signal == "sharp_money_agrees" and abs(line_shift) > 0.03:
+        multiplier *= 1.25  # Professional money agrees — boost
+    elif line_signal == "sharp_money_disagrees" and abs(line_shift) > 0.05:
+        multiplier *= 0.60  # Market moving against us — cut
+
+    # Squad strength penalty: >3 injuries = reduce
+    total_sidelined = home_sidelined + away_sidelined
+    if total_sidelined >= 6:
+        multiplier *= 0.70
+    elif total_sidelined >= 4:
+        multiplier *= 0.85
+
+    return round(max(0.25, min(1.50, multiplier)), 2)
+
+
 def recommended_stake_amount(
     probability: float,
     decimal_odds: float,

@@ -1,0 +1,121 @@
+VANTAGE AI — EVOLUTION IMPLEMENTATION PLAN
+=============================================
+
+PHASE 1: DATA ENRICHMENT (No New APIs Required)
+
+1.1 — Sharp Money Detection (3 hours, 0 credits)
+  Source: OddsData.opening_home_odds (already stored)
+  Logic: Compare opening odds to current odds. If line drops >5%, 
+  professional money is backing that outcome. Flag as "Sharp Money Alert."
+  Files: ev_engine.py (new line_movement_signal field in ValueBet)
+  Value: Follows smart money. Unique differentiator.
+
+1.2 — Fatigue & Schedule Context (2 hours, 0 credits)
+  Source: API-Football fixture data (already fetched)
+  Logic: Compute days_since_last_match from timestamps.
+  Apply penalty: <4 days rest + away game = -8% probability.
+  Files: data_pipeline.py (new fatigue_penalty computation)
+  Value: Catches tired teams that model would otherwise miss.
+
+1.3 — Real xG from API-Football Statistics (4 hours, ~200 credits/day)
+  Source: fetch_fixture_statistics() already in api_football_client.py
+  Logic: Fetch last 10 matches per team, extract xG from statistics,
+  compute rolling average. Replace current goals × 0.95 proxy.
+  Files: data_pipeline.py (wire existing function into enrichment)
+  Value: Better Over/Under and BTTS predictions. Most impactful fix.
+
+1.4 — Squad Strength from Injury Data (3 hours, 0 credits)
+  Source: fetch_injuries() already returns sidelined count per team
+  Logic: Multiply injury count by team's Elo rating to compute 
+  "Squad Strength Drop %." More injuries to higher-rated players = 
+  bigger penalty. No Transfermarkt needed.
+  Files: data_pipeline.py (new squad_strength_penalty)
+  Value: Adjusts probabilities when key teams are weakened.
+
+1.5 — Weather Impact (4 hours, 0 credits but needs free API key)
+  Source: OpenWeatherMap free tier (60 calls/min)
+  Logic: Match stadium city → fetch wind speed + precipitation. 
+  Wind >20km/h: reduce Over 2.5 probability by 10%.
+  Heavy rain: boost Under 2.5 probability by 5%.
+  Files: new weather_service.py, data_pipeline.py enrichment
+  Value: Unique feature no African competitor has.
+
+PHASE 2: MODEL UPGRADES
+
+2.1 — Dynamic Kelly Criterion (5 hours)
+  Logic: Start with base Kelly stake, then multiply by:
+    - Sharp money multiplier: ×1.3 if line moved our way
+    - Fatigue multiplier: ×0.7 if team had <4 days rest
+    - Weather multiplier: ×0.8 if extreme conditions
+    - Squad strength multiplier: ×0.75 if missing 30%+ squad value
+  Files: kelly_optimizer.py (new dynamic_kelly function)
+  Value: Protects bankroll from hidden risks. Boosts on strong signals.
+
+2.2 — Contextual Confidence Adjustment (3 hours)
+  Logic: The current data_quality_score already penalizes stale odds 
+  and low-tier leagues. Extend it to also penalize:
+    - Line movement against us: -0.10
+    - Fatigue penalty triggered: -0.10
+    - Weather risk: -0.10
+    - Key injuries: -0.15
+  Files: quant_pipeline.py (_data_quality_score extension)
+  Value: More honest confidence display to users.
+
+2.3 — Pre-Match vs Post-Match xG Calibration (2 hours)
+  Logic: After grading, compare predicted xG to actual xG from 
+  fixture statistics. Compute calibration factor per league.
+  Files: grading_engine.py (new xG calibration section)
+  Value: Makes xG predictions more accurate over time.
+
+PHASE 3: FRONTEND — SMART BADGES
+
+3.1 — Signal Badges on Match Cards (3 hours)
+  Display small visual tags when analytics detect something significant:
+    📉 Sharp Money (Home)   — line moved >5% toward home
+    😴 Fatigue Risk         — team played <4 days ago
+    🌧️ High Wind 25km/h    — weather affecting goals
+    🚑 3 Key Players Out   — squad strength penalty
+    ⚔️ Tactical Edge        — xG mismatch >0.5
+  
+  Files: MatchCardAlpha.tsx (badge row below prediction)
+
+3.2 — Deep Analysis Modal (2 hours)
+  When user clicks a badge or "View Analysis," show a modal with:
+    - Full xG comparison (home vs away)
+    - Fatigue timeline (last 5 match dates)
+    - Weather summary at kickoff
+    - Sharp money line movement chart (mini sparkline)
+    - Squad strength impact calculation
+  
+  Files: new DeepAnalysisModal.tsx component
+
+3.3 — Banker of the Day Enhancement (1 hour)
+  Add badge to Banker card showing WHY it's the banker:
+    "🔒 93% confidence — no fatigue, no injuries, sharp money agrees"
+  
+  Files: Home.tsx (Banker section enhancement)
+
+API CREDIT BUDGET IMPACT:
+  Current baseline:           ~1,600/day
+  Real xG stats (new):        +200/day
+  Weather (separate API):     0
+  Total:                      ~1,800/day
+  Quota:                      7,500/day
+  Remaining:                  5,700/day (76% headroom)
+
+TOTAL EFFORT: ~30 hours across 3 phases
+NEW APIS NEEDED: OpenWeatherMap (free tier, 1 API key)
+SCRAPING NEEDED: None — everything uses existing paid subscriptions
+
+PRIORITY ORDER:
+  1. Real xG from API-Football statistics (highest impact)
+  2. Sharp Money detection (quickest win)
+  3. Fatigue & schedule (quickest win)
+  4. Smart badges UI (user-facing)
+  5. Squad strength from injuries
+  6. Weather impact
+  7. Dynamic Kelly
+  8. Contextual confidence
+  9. xG calibration
+
+FILE: C:\Users\pc\Downloads\vantage-ai\EVOLUTION_PLAN.txt

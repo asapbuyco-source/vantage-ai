@@ -296,23 +296,24 @@ def fetch_predictions(fixture_id: int) -> dict:
 def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
     """
     Fetch the last `limit` finished fixtures for a team.
-    Returns (form_string, avg_scored, avg_conceded).
+    Returns (form_string, avg_scored, avg_conceded, last_match_date).
     Cached for 60 minutes by team_id.
     """
     cache_key = f"form_{team_id}_{limit}"
     cached = _cache_get(cache_key, ttl_minutes=60)
     if cached is not None:
-        return cached.get("form_string", ""), cached.get("avg_scored"), cached.get("avg_conceded")
+        return cached.get("form_string", ""), cached.get("avg_scored"), cached.get("avg_conceded"), cached.get("last_match_date", "")
 
     data = _get("fixtures", {"team": team_id, "last": limit, "status": "FT"}, call_type="form")
     fixtures = data.get("response", []) if data else []
     
     if not fixtures:
-        return "", None, None
+        return "", None, None, ""
 
     form_chars = []
     total_scored = 0
     total_conceded = 0
+    last_match_date = ""
     
     for fix in reversed(fixtures):
         home_id = fix["teams"]["home"]["id"]
@@ -322,6 +323,11 @@ def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
         
         if goals_home is None or goals_away is None:
             continue
+
+        # Track most recent match date
+        fixture_date = fix.get("fixture", {}).get("date", "")
+        if fixture_date:
+            last_match_date = fixture_date[:10]  # YYYY-MM-DD
             
         is_home = (home_id == team_id)
         scored = goals_home if is_home else goals_away
@@ -346,9 +352,10 @@ def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
         "form_string": form_string,
         "avg_scored": avg_scored,
         "avg_conceded": avg_conceded,
+        "last_match_date": last_match_date,
     }
     _cache_set(cache_key, result)
-    return form_string, avg_scored, avg_conceded
+    return form_string, avg_scored, avg_conceded, last_match_date
 
 def fetch_injuries(fixture_id: int) -> dict:
     """
@@ -493,7 +500,70 @@ def fetch_team_season_stats(team_id: int, league_id: int, season: int = 2026) ->
     result = {}
     if not data or not data.get("response"):
         _cache_set(cache_key, result)
-        return result
+    return result
+
+
+def fetch_team_xg_average(team_id: int, limit: int = 10) -> dict:
+    """
+    Fetch a team's average xG from their last N finished fixtures.
+    Uses fixtures/statistics endpoint for per-match xG data.
+    Cached for 6 hours.
+    Returns {'xg_for': float, 'xg_against': float, 'sample_size': int}
+    """
+    cache_key = f"team_xg_{team_id}_{limit}"
+    cached = _cache_get(cache_key, ttl_minutes=360)
+    if cached is not None:
+        return cached
+
+    # Step 1: Get last N fixtures
+    data = _get("fixtures", {"team": team_id, "last": limit, "status": "FT"}, call_type="form")
+    fixtures = data.get("response", []) if data else []
+
+    if not fixtures:
+        return {"xg_for": 0.0, "xg_against": 0.0, "sample_size": 0}
+
+    xg_for_values = []
+    xg_against_values = []
+
+    for fix in fixtures[:limit]:
+        fid = fix.get("fixture", {}).get("id")
+        if not fid:
+            continue
+
+        # Step 2: Fetch statistics for this fixture
+        stats = fetch_fixture_statistics(fid)
+        if not stats:
+            continue
+
+        # Step 3: Extract xG from statistics
+        for side in ["home", "away"]:
+            side_stats = stats.get(side, {})
+            stat_list = side_stats.get("statistics", [])
+            side_team_id = side_stats.get("team_id")
+
+            xg_val = None
+            for s in stat_list:
+                if s.get("type") == "Expected Goals":
+                    try:
+                        xg_val = float(s.get("value", 0))
+                    except (ValueError, TypeError):
+                        xg_val = None
+                    break
+
+            if xg_val is not None and side_team_id:
+                if side_team_id == team_id:
+                    xg_for_values.append(xg_val)
+                else:
+                    xg_against_values.append(xg_val)
+
+    result = {
+        "xg_for": round(sum(xg_for_values) / len(xg_for_values), 2) if xg_for_values else 0.0,
+        "xg_against": round(sum(xg_against_values) / len(xg_against_values), 2) if xg_against_values else 0.0,
+        "sample_size": len(xg_for_values),
+    }
+
+    _cache_set(cache_key, result)
+    return result
 
     resp = data["response"]
     fixtures_data = resp.get("fixtures", {})
