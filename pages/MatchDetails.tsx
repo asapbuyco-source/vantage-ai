@@ -10,6 +10,8 @@ import { VisualPitch } from '../components/VisualPitch';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { getSmartBadges } from '../utils';
+import { getTopProbPicks } from '../utils';
 
 export const MatchDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -21,7 +23,7 @@ export const MatchDetails: React.FC = () => {
 
     const [match, setMatch] = useState<Match | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'prediction' | 'overview' | 'stats' | 'h2h' | 'lineup' | 'picks'>('prediction');
+    const [activeTab, setActiveTab] = useState<'analysis' | 'overview' | 'h2h' | 'lineup'>('analysis');
     const [allMatchPicks, setAllMatchPicks] = useState<Match[]>([]);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
@@ -211,29 +213,24 @@ fetchDetails();
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex px-4 pt-4 overflow-x-auto no-scrollbar border-b border-slate-200 dark:border-white/5 gap-2">
+            <div className="flex px-4 pt-4 overflow-x-auto no-scrollbar border-b border-slate-200 dark:border-white/5 gap-1">
                 {[
-                    { id: 'prediction', icon: Zap, label: language === 'fr' ? 'Prédiction' : 'Prediction' },
-                    { id: 'picks', icon: BarChart3, label: language === 'fr' ? 'Autres Paris' : 'More Picks' },
+                    { id: 'analysis', icon: Zap, label: language === 'fr' ? 'Analyse' : 'Analysis' },
                     { id: 'overview', icon: Activity, label: language === 'fr' ? 'Aperçu' : 'Overview' },
-                    { id: 'stats', icon: BarChart3, label: 'Stats' },
                     { id: 'h2h', icon: Target, label: 'H2H' },
                     { id: 'lineup', icon: Users, label: language === 'fr' ? 'Compo' : 'Lineup' },
                 ].map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold whitespace-nowrap transition-colors ${
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-xs font-bold whitespace-nowrap transition-colors ${
                             activeTab === tab.id
                                 ? 'bg-vantage-cyan/10 text-vantage-cyan border-b-2 border-vantage-cyan'
-                                : 'text-gray-500 hover:text-slate-900 dark:hover:text-white'
+                                : 'text-gray-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                     >
-                        <tab.icon size={16} />
+                        <tab.icon size={14} />
                         {tab.label}
-                        {tab.id === 'picks' && allMatchPicks.length > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-vantage-cyan/20 text-vantage-cyan text-[10px] font-bold">{allMatchPicks.length}</span>
-                        )}
                     </button>
                 ))}
             </div>
@@ -250,7 +247,7 @@ fetchDetails();
                         className="space-y-6"
                     >
                         {/* PREDICTION TAB */}
-                        {activeTab === 'prediction' && (
+                        {activeTab === 'analysis' && (
                             <>
                                 {!isVipUser ? (
                                     <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-4">
@@ -273,220 +270,115 @@ fetchDetails();
                                             {language === 'fr' ? 'DEVENIR ALPHA' : 'BECOME ALPHA'}
                                         </button>
                                     </div>
-                                ) : (
+                                ) : match && (
                                     <div className="space-y-5">
-                                        <div className={`rounded-2xl border p-5 text-center ${categoryBg}`}>
-                                            <span className={`text-[10px] font-bold uppercase tracking-widest mb-2 block ${categoryColor}`}>
-                                                {category === 'safe' ? (language === 'fr' ? '🔒 Sûr' : '🔒 Safe Bet') :
-                                                    category === 'risky' ? (language === 'fr' ? '⚡ Risqué' : '⚡ Risky') :
-                                                        (language === 'fr' ? '💎 Valeur' : '💎 Value Pick')}
+                                        {/* Clean Best Pick — highest probability */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className="text-center py-3"
+                                        >
+                                            <span className="text-[9px] uppercase tracking-widest text-emerald-400 font-bold">
+                                                {language === 'fr' ? 'Pick le Plus Sûr' : 'Safest Pick'}
                                             </span>
-                                            <p className={`text-xl font-bold tracking-tight ${categoryColor}`}>{predLabel || (language === 'fr' ? 'Analyse en attente' : 'Analysis Pending')}</p>
+                                            <p className="text-xl font-bold text-white mt-1">
+                                                {(() => {
+                                                    const top = getTopProbPicks(match);
+                                                    return top.length > 0 ? top.map((p: any) => p.name).join(' / ') : (match.prediction_en || match.prediction || match.bet_type);
+                                                })()}
+                                            </p>
+                                            <p className="text-3xl font-black font-mono text-emerald-400 mt-1">
+                                                {(() => {
+                                                    const top = getTopProbPicks(match);
+                                                    return top.length > 0 ? Math.round(top[0].prob * 100) : (match.confidence ?? 0);
+                                                })()}%
+                                            </p>
+                                            {/* Contextual badges */}
+                                            {(() => {
+                                                const b = getSmartBadges(match);
+                                                if (!b.length) return null;
+                                                return (
+                                                    <div className="flex justify-center flex-wrap gap-1 mt-2">
+                                                        {b.map((bdg: any, i: number) => (
+                                                            <span key={i} className={`text-[9px] font-bold ${bdg.color} px-1.5 py-0.5 rounded bg-white/5`}>
+                                                                {bdg.icon} {bdg.text}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()}
+                                        </motion.div>
+
+                                        {/* Market Probabilities — animated clean bars */}
+                                        <div className="space-y-4">
+                                            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">
+                                                {language === 'fr' ? 'Tous les Marchés' : 'All Markets'}
+                                            </p>
+                                            {[
+                                                { g: 'Match Result', items: [
+                                                    { l: 'Home', p: (match.home_win_prob || 0) * 100 },
+                                                    { l: 'Draw', p: (match.draw_prob || 0) * 100 },
+                                                    { l: 'Away', p: (match.away_win_prob || 0) * 100 },
+                                                ].sort((a: any, b: any) => b.p - a.p) },
+                                                { g: 'Goals', items: [
+                                                    { l: 'Over 1.5', p: (match.over15_prob || 0) * 100 },
+                                                    { l: 'Over 2.5', p: (match.over25_prob || 0) * 100 },
+                                                    { l: 'Under 2.5', p: (match.under25_prob || 0) * 100 },
+                                                ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
+                                                { g: 'BTTS & FH', items: [
+                                                    { l: 'BTTS Yes', p: (match.btts_prob || 0) * 100 },
+                                                    { l: 'FH Over 0.5', p: (match.fh_over05_prob || 0) * 100 },
+                                                ].filter((r: any) => r.p > 0) },
+                                            ].map((group, gi) => group.items.length > 0 && (
+                                                <motion.div
+                                                    key={group.g}
+                                                    initial={{ opacity: 0, x: -8 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: gi * 0.1 }}
+                                                    className="space-y-1"
+                                                >
+                                                    <span className="text-[9px] text-gray-500">{group.g}</span>
+                                                    {group.items.map((r: any) => (
+                                                        <div key={r.l} className="flex items-center gap-2">
+                                                            <span className="text-[11px] text-gray-300 w-20">{r.l}</span>
+                                                            <div className="flex-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                                                <motion.div
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: `${Math.min(r.p, 100)}%` }}
+                                                                    transition={{ duration: 0.6, delay: gi * 0.1 + 0.2 }}
+                                                                    className={`h-full rounded-full ${r.p >= 70 ? 'bg-emerald-500/60' : r.p >= 50 ? 'bg-vantage-cyan/60' : 'bg-white/15'}`}
+                                                                />
+                                                            </div>
+                                                            <span className="text-[10px] font-mono text-gray-400 w-10 text-right">{r.p.toFixed(0)}%</span>
+                                                        </div>
+                                                    ))}
+                                                </motion.div>
+                                            ))}
+                                            {/* Scorelines */}
+                                            {match.top_scorelines?.length > 0 && (
+                                                <div className="space-y-1">
+                                                    <span className="text-[9px] text-gray-500">{language === 'fr' ? 'Scorelines Probables' : 'Likely Scorelines'}</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {match.top_scorelines.slice(0, 4).map((sl: any, i: number) => (
+                                                            <span key={i} className="text-[9px] font-mono bg-white/5 px-2 py-1 rounded text-gray-300">
+                                                                {sl.score || sl.scoreline || sl[0] || sl} {(sl.prob || sl[1]) ? ((sl.prob || sl[1]) * 100).toFixed(0) + '%' : ''}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                            <div className="rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 p-4 flex flex-col items-center justify-center">
-                                                <span className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                                                    {language === 'fr' ? 'Confiance' : 'Confidence'}
-                                                </span>
-                                                <span className={`text-xl font-bold font-mono ${confidence >= 80 ? 'text-green-400' : confidence >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                                    {confidence}%
-                                                </span>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 p-4 flex flex-col items-center justify-center">
-                                                <span className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                                                    {language === 'fr' ? 'Cote' : 'Odds'}
-                                                </span>
-                                                <span className="text-xl font-bold font-mono text-white">
-                                                    {odds_val > 0 ? odds_val.toFixed(2) : '—'}
-                                                </span>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 p-4 flex flex-col items-center justify-center">
-                                                <span className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                                                    {language === 'fr' ? 'Valeur (EV)' : 'Value (EV)'}
-                                                </span>
-                                                <span className={`text-xl font-bold font-mono ${evPct > 5 ? 'text-emerald-500' : 'text-orange-500'}`}>
-                                                    +{evPct.toFixed(1)}%
-                                                </span>
-                                            </div>
-                                            <div className="rounded-xl bg-slate-50 dark:bg-white/5 border border-vantage-cyan/30 p-4 flex flex-col items-center justify-center shadow-[0_0_15px_rgba(0,229,255,0.1)]">
-                                                <span className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-                                                    {language === 'fr' ? 'Mise (Kelly)' : 'Stake (Kelly)'}
-                                                </span>
-                                                <span className="text-xl font-bold font-mono text-vantage-cyan">
-                                                    {recommendedStake > 0 ? `${recommendedStake.toLocaleString()}` : `${kelly.toFixed(1)}%`}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="rounded-xl bg-black/20 border border-white/5 p-4 relative h-20 flex flex-col justify-end">
-                                            <div className="absolute top-3 left-4 text-[10px] uppercase tracking-widest text-gray-500 font-bold flex items-center gap-2">
-                                                <Activity size={12} className="text-vantage-cyan" />
-                                                {language === 'fr' ? 'Mouvement de Ligne (Simulé)' : 'Line Movement (Simulated)'}
-                                            </div>
-                                            <div className="w-full h-8">
-                                                <Sparkline data={sparklineData} width={400} height={32} color="#00E5FF" strokeWidth={2} className="w-full" />
-                                            </div>
-                                        </div>
-
-                                        {analysis ? (
-                                            <div className="rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 p-4">
-                                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2 mb-3">
-                                                    <Crosshair size={12} /> {language === 'fr' ? 'Analyse IA' : 'AI Analysis'}
-                                                </h4>
-                                                <p className="text-sm leading-relaxed text-slate-700 dark:text-gray-300">{analysis}</p>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-6 text-gray-500 text-sm">
-                                                <Crosshair size={28} className="mx-auto mb-2 text-gray-300 dark:text-gray-600" />
-                                                <p>{language === 'fr' ? 'Analyse non disponible' : 'Analysis not yet available'}</p>
+                                        {/* AI Verdict */}
+                                        {(match as any).analysis_en && (
+                                            <div className="pt-3 border-t border-white/5">
+                                                <p className="text-[11px] text-gray-400 leading-relaxed italic">
+                                                    "{(language === 'fr' ? ((match as any).analysis_fr || (match as any).analysis_en) : (match as any).analysis_en)}"
+                                                </p>
                                             </div>
                                         )}
-
-                                        <div className="flex flex-wrap gap-2">
-                                            {match.league && (
-                                                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-white/5 text-gray-500 px-3 py-1.5 rounded-full">
-                                                    🏆 {match.league}
-                                                </span>
-                                            )}
-                                            {match.time && (
-                                                <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-white/5 text-gray-500 px-3 py-1.5 rounded-full">
-                                                    🕐 {match.time}
-                                                </span>
-                                            )}
-                                        </div>
                                     </div>
                                 )}
-                            </>
-                        )}
-
-                        {/* PICKS TAB - Market probabilities (VIP only) */}
-                        {activeTab === 'picks' && (
-                            <>
-                                {!isVipUser ? (
-                                    <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
-                                        <div className="w-16 h-16 bg-vantage-purple/10 rounded-full flex items-center justify-center">
-                                            <Crown size={28} className="text-vantage-purple" />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-                                                {language === 'fr' ? 'Contenu VIP' : 'VIP Content'}
-                                            </h3>
-                                            <p className="text-sm text-gray-500 max-w-[240px]">
-                                                {language === 'fr' ? 'Passez à Vantage Premium pour voir les probabilités détaillées de chaque marché.' : 'Upgrade to Vantage Premium to see detailed market-by-market probabilities.'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ) : match && (
-                            <div className="space-y-4">
-                                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-                                    {language === 'fr' ? 'Probabilités par Marché' : 'Market Probabilities'}
-                                </h3>
-
-                                {/* 1X2 Probability Bars */}
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Match Result (1X2)</span>
-                                    {(() => {
-                                        const markets = [
-                                            { label: 'Home Win', prob: (match.home_win_prob || 0) * 100 },
-                                            { label: 'Draw', prob: (match.draw_prob || 0) * 100 },
-                                            { label: 'Away Win', prob: (match.away_win_prob || 0) * 100 },
-                                        ];
-                                        const highest = Math.max(...markets.map(m => m.prob));
-                                        return markets.map(r => (
-                                            <div key={r.label} className="flex items-center gap-2">
-                                                <span className="text-[10px] text-gray-400 w-16">
-                                                    {r.label}
-                                                    {r.prob === highest && r.prob > 0 && (
-                                                        <span className="text-[7px] text-emerald-400 ml-0.5 font-bold">TOP</span>
-                                                    )}
-                                                </span>
-                                                <div className="flex-1 h-2 rounded-full bg-white/10">
-                                                    <div className={`h-2 rounded-full ${r.prob === highest ? 'bg-emerald-500' : 'bg-vantage-cyan'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
-                                                </div>
-                                                <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
-                                            </div>
-                                        ));
-                                    })()}
-                                </div>
-
-                                {/* Goals Over/Under */}
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Goals Over/Under</span>
-                                    {(() => {
-                                        const markets = [
-                                            { label: 'Over 1.5', prob: (match.over15_prob || 0) * 100 },
-                                            { label: 'Over 2.5', prob: (match.over25_prob || 0) * 100 },
-                                            { label: 'Over 3.5', prob: (match.over35_prob || 0) * 100 },
-                                            { label: 'Under 2.5', prob: (match.under25_prob || 0) * 100 },
-                                            { label: 'Under 3.5', prob: (match.under35_prob || 0) * 100 },
-                                        ].filter(r => r.prob > 0);
-                                        const highest = Math.max(...markets.map(m => m.prob));
-                                        return markets.map(r => (
-                                            <div key={r.label} className="flex items-center gap-2">
-                                                <span className="text-[10px] text-gray-400 w-16">
-                                                    {r.label}
-                                                    {r.prob === highest && r.prob > 0 && (
-                                                        <span className="text-[7px] text-emerald-400 ml-0.5 font-bold">TOP</span>
-                                                    )}
-                                                </span>
-                                                <div className="flex-1 h-2 rounded-full bg-white/10">
-                                                    <div className={`h-2 rounded-full ${r.prob === highest ? 'bg-emerald-500' : r.prob >= 70 ? 'bg-vantage-cyan' : 'bg-amber-500'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
-                                                </div>
-                                                <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
-                                            </div>
-                                        ));
-                                    })()}
-                                </div>
-
-                                {/* BTTS */}
-                                {(match.btts_prob || 0) > 0 && (
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Both Teams to Score</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] text-gray-400 w-16">BTTS Yes</span>
-                                        <div className="flex-1 h-2 rounded-full bg-white/10">
-                                            <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.min((match.btts_prob || 0) * 100, 100)}%` }} />
-                                        </div>
-                                        <span className="text-[10px] font-mono text-white w-10 text-right">{((match.btts_prob || 0) * 100).toFixed(0)}%</span>
-                                    </div>
-                                </div>
-                                )}
-
-                                {/* First Half */}
-                                {(match.fh_over05_prob || match.fh_over15_prob) > 0 && (
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">First Half</span>
-                                    {[
-                                        { label: 'FH Over 0.5', prob: (match.fh_over05_prob || 0) * 100 },
-                                        { label: 'FH Over 1.5', prob: (match.fh_over15_prob || 0) * 100 },
-                                    ].filter(r => r.prob > 0).map(r => (
-                                        <div key={r.label} className="flex items-center gap-2">
-                                            <span className="text-[10px] text-gray-400 w-20">{r.label}</span>
-                                            <div className="flex-1 h-2 rounded-full bg-white/10">
-                                                <div className={`h-2 rounded-full ${r.prob >= 70 ? 'bg-emerald-500' : 'bg-vantage-cyan'}`} style={{ width: `${Math.min(r.prob, 100)}%` }} />
-                                            </div>
-                                            <span className="text-[10px] font-mono text-white w-10 text-right">{r.prob.toFixed(0)}%</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                )}
-
-                                {/* Top Scorelines */}
-                                {match.top_scorelines && match.top_scorelines.length > 0 && (
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2">
-                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Most Likely Scorelines</span>
-                                    <div className="flex flex-wrap gap-2">
-                                        {match.top_scorelines.slice(0, 4).map((sl: any, i: number) => (
-                                            <span key={i} className="text-[10px] font-mono bg-white/10 px-2 py-1 rounded text-gray-300">
-                                                {sl.score || sl.scoreline || String(sl[0])} ({sl.prob != null ? (sl.prob * 100).toFixed(1) : (sl[1] != null ? (sl[1] * 100).toFixed(1) : '—')}%)
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                                )}
-                            </div>
-                            )}
                             </>
                         )}
 
@@ -532,6 +424,68 @@ fetchDetails();
                                         </div>
                                     </div>
                                 )}
+
+                                {/* xG Comparison */}
+                                {((match.expected_goals_home ?? 0) > 0 && (match.expected_goals_away ?? 0) > 0) && (
+                                    <div className="space-y-2">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                                            <Target size={12} /> {language === 'fr' ? 'Comparaison xG' : 'xG Comparison'}
+                                        </h4>
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="font-bold text-white">{match.homeTeam}</span>
+                                                <span className="font-mono text-emerald-400 font-bold">{(match.expected_goals_home ?? 0).toFixed(2)} xG</span>
+                                            </div>
+                                            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden flex">
+                                                <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(((match.expected_goals_home ?? 0) / ((match.expected_goals_home ?? 0) + (match.expected_goals_away ?? 1)) * 100), 90)}%` }} transition={{ duration: 0.6 }} className="h-full bg-emerald-500/60" />
+                                                <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(((match.expected_goals_away ?? 0) / ((match.expected_goals_home ?? 0) + (match.expected_goals_away ?? 1)) * 100), 90)}%` }} transition={{ duration: 0.6 }} className="h-full bg-blue-500/60" />
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="font-bold text-white">{match.awayTeam}</span>
+                                                <span className="font-mono text-blue-400 font-bold">{(match.expected_goals_away ?? 0).toFixed(2)} xG</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Contextual Signals */}
+                                {((match.weather && match.weather !== 'clear') || (match as any).line_signal || (match.home_days_rest ?? 7) < 5) && (
+                                    <div className="space-y-2">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                                            <Activity size={12} /> {language === 'fr' ? 'Signaux' : 'Signals'}
+                                        </h4>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {match.weather === 'windy' && <span className="text-[9px] font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded">🌪️ Windy</span>}
+                                            {match.weather === 'rainy' && <span className="text-[9px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded">🌧️ Rain</span>}
+                                            {(match as any).line_signal === 'sharp_money_agrees' && <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">📈 Sharp Money</span>}
+                                            {((match.home_days_rest ?? 7) < 4 || (match.away_days_rest ?? 7) < 4) && <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-1 rounded">😴 {Math.min(match.home_days_rest ?? 7, match.away_days_rest ?? 7)}d rest</span>}
+                                            {((match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0)) >= 3 && <span className="text-[9px] font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">🚑 {(match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0)} out</span>}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Season Stats */}
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-2">
+                                        <BarChart3 size={12} /> {language === 'fr' ? 'Stats' : 'Season Stats'}
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {[
+                                            { l: language === 'fr' ? 'Buts/match' : 'Goals/game', h: ((match as any).home_avg_scored ?? '-'), a: ((match as any).away_avg_scored ?? '-') },
+                                            { l: language === 'fr' ? 'Victoires %' : 'Win Rate', h: ((match.home_win_rate ?? 0) || 0).toFixed(0) + '%', a: ((match.away_win_rate ?? 0) || 0).toFixed(0) + '%' },
+                                            { l: language === 'fr' ? 'Repos' : 'Rest', h: (match.home_days_rest ?? 7) + 'd', a: (match.away_days_rest ?? 7) + 'd' },
+                                            { l: language === 'fr' ? 'Blessés' : 'Injured', h: (match.home_sidelined_count ?? 0), a: (match.away_sidelined_count ?? 0) },
+                                        ].map(row => (
+                                            <div key={row.l} className="p-2 rounded-lg bg-white/5">
+                                                <p className="text-[8px] text-gray-500">{row.l}</p>
+                                                <div className="flex justify-between text-[10px] font-mono mt-0.5">
+                                                    <span className="text-emerald-400">{row.h}</span>
+                                                    <span className="text-blue-400">{row.a}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
 
                                 {odds && (
                                     <div className="space-y-3">
