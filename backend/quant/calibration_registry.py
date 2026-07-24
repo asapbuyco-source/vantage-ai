@@ -24,15 +24,15 @@ CALIBRATION_LAST_UPDATED = datetime(2026, 6, 29, tzinfo=timezone.utc).isoformat(
 
 MARKET_FACTORS = {
     # key: (avg_predicted, avg_actual, discount_factor, sample_size, last_updated)
-    # ── Goals markets (updated from 30-day backtest — see prediction_strategy_audit.md) ──
-    "over25":  (0.88, 0.82, 0.8, 130, "2026-07-07"),  # Tightened from 0.82 after 14-day audit (54% overconfident losses)
+    # ── Goals markets ──
+    "over25":  (0.88, 0.82, 0.85, 130, "2026-07-24"),  # Relaxed from 0.80 — xG bias correction now handles overconfidence
     "under25": (0.12, 0.18, 1.00, 130, "2026-06-25"),
-    "over15":  (0.84, 0.72, 0.960, 210, "2026-07-07"),  # Tightened from 0.86 — 84% hit rate is strong but 16% still overconfident
+    "over15":  (0.84, 0.72, 0.97, 210, "2026-07-24"),  # Relaxed from 0.96 — xG bias correction reduces overconfidence
     "under15": (0.16, 0.28, 1.00, 210, "2026-06-25"),
-    "over35":  (0.75, 0.50, 0.65,  95, "2026-07-07"),  # Tightened from 0.72 — persistently overconfident
-    "under35": (0.38, 0.50, 0.80,  95, "2026-07-07"),  # Tightened from 0.85
-    "btts":    (0.57, 0.50, 0.660, 160, "2026-07-07"),  # Tightened from 0.87 — 50% actual hit rate
-    "btts_no": (0.43, 0.50, 0.85, 160, "2026-07-07"),  # Tightened from 0.90
+    "over35":  (0.75, 0.50, 0.70,  95, "2026-07-24"),  # Relaxed from 0.65 — xG correction helps
+    "under35": (0.38, 0.50, 0.82,  95, "2026-07-24"),  # Relaxed from 0.80
+    "btts":    (0.57, 0.50, 0.72, 160, "2026-07-24"),  # Relaxed from 0.66 — xG correction helps
+    "btts_no": (0.43, 0.50, 0.87, 160, "2026-07-24"),  # Relaxed from 0.85
     # ── Result markets (updated from backtest — catastrophic -43% ROI, suppressed from bets) ──
     "home_win": (0.60, 0.21, 0.37, 314, "2026-06-25"),  # v1: 0.95 → 21.4% hit rate! Severe overconfidence exposed.
     "away_win": (0.50, 0.14, 0.27, 314, "2026-06-25"),  # v1: 0.80 → 13.6% hit rate! Model cannot predict winners.

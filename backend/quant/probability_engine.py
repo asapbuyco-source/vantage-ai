@@ -234,10 +234,17 @@ def compute_combined(
     adj_mu_away = max(0.20, mu_away * (1.0 - away_injury_penalty))
 
     # FIX-5: Home advantage is now read from the league_tier parameter
-    # (correctly passed from match.league_tier, not from TeamStats which doesn't have it)
-    # FIX-4: Only ONE home advantage multiplier applied (removed data_pipeline's 1.12)
     HOME_ADVANTAGE = {1: 1.10, 2: 1.08, 3: 1.05, 4: 1.03, 5: 1.00}
     adj_mu_home *= HOME_ADVANTAGE.get(league_tier, 1.08)
+
+    # Bias correction: Poisson model systematically overestimates goals (~8% overconfident).
+    # Global xG deflator derived from calibration data: predicted=88% vs actual=82% for O2.5.
+    # Deflate expected goals by 8% to align Poisson output with observed hit rates.
+    XG_BIAS_CORRECTION = 0.92
+    adj_mu_home *= XG_BIAS_CORRECTION
+    adj_mu_away *= XG_BIAS_CORRECTION
+    adj_mu_home = max(0.15, adj_mu_home)
+    adj_mu_away = max(0.15, adj_mu_away)
 
     poisson: MarketProbabilities = compute_probabilities(adj_mu_home, adj_mu_away, rho)
     fh = compute_fh_markets(adj_mu_home, adj_mu_away, rho)

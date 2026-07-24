@@ -20,33 +20,12 @@ import { getTopProbPicks } from '../utils';
 import { Screener } from '../components/Screener';
 import { MatchCardAlpha } from '../components/MatchCardAlpha';
 import { ResponsibleGambling } from '../components/ResponsibleGambling';
+import { getPricingForCountry } from '../services/pricing';
 
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
-
-// ── Currency detection helper ──â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const CURRENCY_MAP: Record<string, { symbol: string; rate: number; label: string }> = {
-  'ng': { symbol: '₦', rate: 1500, label: 'NGN' },
-  'ke': { symbol: 'KSh', rate: 130, label: 'KES' },
-  'gh': { symbol: 'GH₵', rate: 15, label: 'GHS' },
-  'za': { symbol: 'R', rate: 19, label: 'ZAR' },
-  'cm': { symbol: 'FCFA', rate: 600, label: 'XAF' },
-  'ci': { symbol: 'FCFA', rate: 600, label: 'XOF' },
-  'sn': { symbol: 'FCFA', rate: 600, label: 'XOF' },
-  'gb': { symbol: '£', rate: 0.79, label: 'GBP' },
-  'eu': { symbol: '€', rate: 0.92, label: 'EUR' },
-};
-
-function getPricingForCountry(baseUsd: number, countryCode: string = 'other') {
-  if (CURRENCY_MAP[countryCode]) {
-    const cur = CURRENCY_MAP[countryCode];
-    const converted = Math.round(baseUsd * cur.rate);
-    return { amount: converted, symbol: cur.symbol, code: cur.label, isConverted: true, originalValue: baseUsd };
-  }
-  return { amount: baseUsd, symbol: '$', code: 'USD', isConverted: false, originalValue: baseUsd };
-}
 
 interface VIPProps {}
 
@@ -1138,7 +1117,7 @@ export const VIP: React.FC<VIPProps> = () => {
           <div id="plans-section" className="space-y-6">
             <div className="flex flex-col gap-4">
             {plans.filter(p => showAllPlans || ['daily', 'weekly', 'monthly', 'quarterly'].includes(p.id)).map((plan) => {
-                const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'other');
+                const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'other', plan.id);
                 const isPopular = plan.id === 'monthly';
                 return (
                   <motion.button

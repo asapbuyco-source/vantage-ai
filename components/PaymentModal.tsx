@@ -6,22 +6,7 @@ import { initiateFapshiPayment } from '../services/fapshi';
 import { initiateSelarPayment } from '../services/selar';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-
-const CURRENCY_MAP: Record<string, { symbol: string; rate: number; label: string }> = {
-  'ng': { symbol: '₦', rate: 2.45, label: 'NGN' },
-  'ke': { symbol: 'KSh', rate: 0.23, label: 'KES' },
-  'gh': { symbol: 'GH₵', rate: 0.02, label: 'GHS' },
-  'za': { symbol: 'R', rate: 0.029, label: 'ZAR' }
-};
-
-function getPricingForCountry(fcfa: number, countryCode: string = 'other') {
-  if (CURRENCY_MAP[countryCode]) {
-    const cur = CURRENCY_MAP[countryCode];
-    const converted = Math.round(fcfa * cur.rate);
-    return { amount: converted, symbol: cur.symbol, code: cur.label };
-  }
-  return { amount: fcfa, symbol: '', code: 'FCFA' };
-}
+import { getPricingForCountry } from '../services/pricing';
 
 interface PaymentModalProps {
   isOpen: boolean;

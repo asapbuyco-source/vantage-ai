@@ -1,0 +1,3781 @@
+{
+  "metadata": {
+    "generated": "2026-07-24T17:21:09.240135+00:00",
+    "date_range": [
+      "2026-06-24",
+      "2026-07-23"
+    ],
+    "total_dates": 30,
+    "mode": "grade_only"
+  },
+  "summary": {
+    "total_predictions": 358,
+    "graded": 347,
+    "wins": 236,
+    "losses": 111,
+    "voids": 0,
+    "failed_fetch": 11,
+    "win_rate": 0.6801152737752162,
+    "roi": 0.05409990743220704,
+    "total_profit": 6.908028000000003,
+    "total_stake": 127.6902
+  },
+  "by_market": {
+    "Over 1.5 Goals": {
+      "wins": 51,
+      "losses": 14,
+      "voids": 0
+    },
+    "BTTS": {
+      "wins": 13,
+      "losses": 7,
+      "voids": 0
+    },
+    "Double Chance (1X)": {
+      "wins": 91,
+      "losses": 40,
+      "voids": 0
+    },
+    "Double Chance (12)": {
+      "wins": 13,
+      "losses": 4,
+      "voids": 0
+    },
+    "Double Chance (X2)": {
+      "wins": 10,
+      "losses": 8,
+      "voids": 0
+    },
+    "Under 2.5 Goals": {
+      "wins": 21,
+      "losses": 15,
+      "voids": 0
+    },
+    "Over 2.5 Goals": {
+      "wins": 36,
+      "losses": 22,
+      "voids": 0
+    },
+    "Under 3.5 Goals": {
+      "wins": 1,
+      "losses": 1,
+      "voids": 0
+    }
+  },
+  "by_league": {
+    "FIFA World Cup": {
+      "wins": 23,
+      "losses": 11,
+      "voids": 0
+    },
+    "Eredivisie": {
+      "wins": 22,
+      "losses": 13,
+      "voids": 0
+    },
+    "Ecuadorian Serie A": {
+      "wins": 4,
+      "losses": 4,
+      "voids": 0
+    },
+    "Brasileir\u00e3o S\u00e9rie B": {
+      "wins": 13,
+      "losses": 8,
+      "voids": 0
+    },
+    "CAF Confederation Cup": {
+      "wins": 3,
+      "losses": 4,
+      "voids": 0
+    },
+    "Primera Divisi\u00f3n (Venezuela)": {
+      "wins": 8,
+      "losses": 4,
+      "voids": 0
+    },
+    "USL League Two (USA)": {
+      "wins": 60,
+      "losses": 23,
+      "voids": 0
+    },
+    "Friendlies Clubs": {
+      "wins": 16,
+      "losses": 6,
+      "voids": 0
+    },
+    "Uruguayan Primera Divisi\u00f3n": {
+      "wins": 4,
+      "losses": 1,
+      "voids": 0
+    },
+    "Liga Pro Serie B (Ecuador)": {
+      "wins": 4,
+      "losses": 0,
+      "voids": 0
+    },
+    "Canadian Championship": {
+      "wins": 1,
+      "losses": 1,
+      "voids": 0
+    },
+    "USL Championship (USA)": {
+      "wins": 9,
+      "losses": 4,
+      "voids": 0
+    },
+    "Liga MX (Mexico)": {
+      "wins": 6,
+      "losses": 5,
+      "voids": 0
+    },
+    "Brasileir\u00e3o S\u00e9rie A": {
+      "wins": 6,
+      "losses": 6,
+      "voids": 0
+    },
+    "Major League Soccer": {
+      "wins": 14,
+      "losses": 6,
+      "voids": 0
+    },
+    "Peruvian Liga 1": {
+      "wins": 3,
+      "losses": 0,
+      "voids": 0
+    },
+    "UEFA Europa League": {
+      "wins": 4,
+      "losses": 5,
+      "voids": 0
+    },
+    "UEFA Europa Conference League": {
+      "wins": 32,
+      "losses": 8,
+      "voids": 0
+    },
+    "Premier Soccer League (South Africa)": {
+      "wins": 1,
+      "losses": 2,
+      "voids": 0
+    },
+    "1. Division (Cyprus)": {
+      "wins": 3,
+      "losses": 0,
+      "voids": 0
+    }
+  },
+  "by_confidence": {
+    "high": {
+      "wins": 236,
+      "losses": 111
+    },
+    "medium": {
+      "wins": 0,
+      "losses": 0
+    },
+    "low": {
+      "wins": 0,
+      "losses": 0
+    }
+  },
+  "corner_analysis": {},
+  "loss_analysis_summary": {
+    "total_losses": 111,
+    "close_losses": 22,
+    "overconfident": 85,
+    "fixable_minor": 0,
+    "fixable_moderate": 21,
+    "fixable_major": 90
+  },
+  "loss_analysis": [
+    {
+      "date": "2026-06-24",
+      "match": "Scotland vs Brazil",
+      "fixture_id": "1489406",
+      "bet_type": "BTTS",
+      "score": "0-3",
+      "probability": 0.7364,
+      "odds": 2.25,
+      "confidence": 73.6,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: home team blanked (1 team short)",
+      "overconfident": true,
+      "alternative_winners": [],
+      "value_bets_winners": [],
+      "recommended_fix": "Model overconfident (74% prob); needs calibration adjustment",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-24",
+      "match": "Czechia vs Mexico",
+      "fixture_id": "1539010",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-3",
+      "probability": 0.6291,
+      "odds": 1.83,
+      "confidence": 62.9,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [],
+      "value_bets_winners": [],
+      "recommended_fix": "No clear alternative winner identified",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-25",
+      "match": "Paraguay vs Australia",
+      "fixture_id": "1489411",
+      "bet_type": "Double Chance (12)",
+      "score": "0-0",
+      "probability": 0.7103,
+      "odds": 1.57,
+      "confidence": 71,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [],
+      "value_bets_winners": [],
+      "recommended_fix": "Model overconfident (71% prob); needs calibration adjustment",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-26",
+      "match": "Uruguay vs Spain",
+      "fixture_id": "1489417",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-1",
+      "probability": 0.848,
+      "odds": 1.36,
+      "confidence": 84.8,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.776,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-27",
+      "match": "Colombia vs Portugal",
+      "fixture_id": "1489419",
+      "bet_type": "BTTS",
+      "score": "0-0",
+      "probability": 0.707,
+      "odds": 1.67,
+      "confidence": 70.7,
+      "close_loss": false,
+      "close_detail": "BTTS Yes failed: 0-0 draw (both blanked)",
+      "overconfident": true,
+      "alternative_winners": [],
+      "value_bets_winners": [],
+      "recommended_fix": "Model overconfident (71% prob); needs calibration adjustment",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-27",
+      "match": "Congo DR vs Uzbekistan",
+      "fixture_id": "1539013",
+      "bet_type": "Double Chance (X2)",
+      "score": "3-1",
+      "probability": 0.5935,
+      "odds": 2.1,
+      "confidence": 59.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.724,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 1.5",
+          "prob": 0.386,
+          "would_win": true
+        },
+        {
+          "market": "1H BTTS",
+          "prob": 0.237,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-27",
+      "match": "Paysandu vs Miramar",
+      "fixture_id": "1556619",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-3",
+      "probability": 0.6375,
+      "odds": 1.57,
+      "confidence": 63.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.613,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 1.5",
+          "prob": 0.257,
+          "would_win": true
+        },
+        {
+          "market": "1H BTTS",
+          "prob": 0.15,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-28",
+      "match": "Fortaleza EC vs Sport Recife",
+      "fixture_id": "1520745",
+      "bet_type": "Double Chance (X2)",
+      "score": "2-1",
+      "probability": 0.5807,
+      "odds": 1.91,
+      "confidence": 58.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.652,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 1.5",
+          "prob": 0.298,
+          "would_win": true
+        },
+        {
+          "market": "1H BTTS",
+          "prob": 0.179,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-28",
+      "match": "Oriental vs Col\u00f3n",
+      "fixture_id": "1556622",
+      "bet_type": "Double Chance (12)",
+      "score": "1-1",
+      "probability": 0.7035,
+      "odds": 1.28,
+      "confidence": 70.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.679,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 1.5",
+          "prob": 0.328,
+          "would_win": true
+        },
+        {
+          "market": "1H BTTS",
+          "prob": 0.196,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-06-29",
+      "match": "Germany vs Paraguay",
+      "fixture_id": "1565176",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.6745,
+      "odds": 1.73,
+      "confidence": 67.5,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.862,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 1.5",
+          "prob": 0.601,
+          "would_win": true
+        },
+        {
+          "market": "1H BTTS",
+          "prob": 0.335,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; '1H Over 0.5' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-06-30",
+      "match": "France vs Sweden",
+      "fixture_id": "1565177",
+      "bet_type": "BTTS",
+      "score": "3-0",
+      "probability": 0.6609,
+      "odds": 1.75,
+      "confidence": 66.1,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: away team blanked (1 team short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.572,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.865,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.959,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-01",
+      "match": "USA vs Bosnia & Herzegovina",
+      "fixture_id": "1562586",
+      "bet_type": "BTTS",
+      "score": "2-0",
+      "probability": 0.6544,
+      "odds": 2,
+      "confidence": 65.4,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: away team blanked (1 team short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.508,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.924,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.719,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-02",
+      "match": "Cuiaba vs America Mineiro",
+      "fixture_id": "1520753",
+      "bet_type": "Double Chance (X2)",
+      "score": "1-0",
+      "probability": 0.6071,
+      "odds": 1.91,
+      "confidence": 60.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.34,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.657,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.563,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-04",
+      "match": "Paraguay vs France",
+      "fixture_id": "1569870",
+      "bet_type": "BTTS",
+      "score": "0-1",
+      "probability": 0.6291,
+      "odds": 2.5,
+      "confidence": 62.9,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: home team blanked (1 team short)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.649,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.814,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.853,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; '1H Over 0.5' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-04",
+      "match": "Xilotepelt vs Real Estel\u00ed",
+      "fixture_id": "1576809",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.6604,
+      "odds": 0,
+      "confidence": 66,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.34,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.61,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.698,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-04",
+      "match": "North Carolina Courage W vs Seattle Reign FC W",
+      "fixture_id": "1508452",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-1",
+      "probability": 0.5841,
+      "odds": 1.9,
+      "confidence": 58.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.503,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.416,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.695,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-05",
+      "match": "Nautico Recife vs Juventude",
+      "fixture_id": "1520757",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-0",
+      "probability": 0.854,
+      "odds": 1.44,
+      "confidence": 85.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.251,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.702,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.548,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-05",
+      "match": "Rancho Santana vs Managua",
+      "fixture_id": "1576808",
+      "bet_type": "Double Chance (1X)",
+      "score": "2-3",
+      "probability": 0.5606,
+      "odds": 2.75,
+      "confidence": 56.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.422,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.568,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.809,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-05",
+      "match": "Chicago Red Stars W vs Utah Royals W",
+      "fixture_id": "1508455",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-2",
+      "probability": 0.6456,
+      "odds": 2.08,
+      "confidence": 64.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.256,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.354,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.633,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-05",
+      "match": "Portland Thorns W vs Racing Louisville W",
+      "fixture_id": "1508456",
+      "bet_type": "Double Chance (X2)",
+      "score": "4-0",
+      "probability": 0.5622,
+      "odds": 2.3,
+      "confidence": 56.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.389,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.669,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.871,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-06",
+      "match": "Botafogo SP vs Avai",
+      "fixture_id": "1520751",
+      "bet_type": "Double Chance (X2)",
+      "score": "3-1",
+      "probability": 0.6824,
+      "odds": 1.91,
+      "confidence": 68.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.258,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.309,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.595,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-06",
+      "match": "Miramar vs Atenas",
+      "fixture_id": "1561325",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.5696,
+      "odds": 2,
+      "confidence": 57,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.261,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.884,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.706,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-07",
+      "match": "Athletic Club vs Operario-PR",
+      "fixture_id": "1520750",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-1",
+      "probability": 0.687,
+      "odds": 1.53,
+      "confidence": 68.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.358,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.64,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.654,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-08",
+      "match": "Ponte Preta vs Criciuma",
+      "fixture_id": "1520767",
+      "bet_type": "Under 2.5 Goals",
+      "score": "1-2",
+      "probability": 0.7478,
+      "odds": 1.62,
+      "confidence": 74.8,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.406,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.252,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.533,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Double Chance X2' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-09",
+      "match": "New England FC vs Blackwatch Rush",
+      "fixture_id": "1525315",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-0",
+      "probability": 0.776,
+      "odds": 0,
+      "confidence": 77.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.481,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.69,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.837,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-09",
+      "match": "Colorado Rapids vs FC Juarez",
+      "fixture_id": "1560556",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.8484,
+      "odds": 0,
+      "confidence": 84.8,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.205,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.952,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.808,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-10",
+      "match": "Juventude vs Vila Nova",
+      "fixture_id": "1520765",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.7232,
+      "odds": 1.44,
+      "confidence": 72.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.312,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.591,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.681,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-10",
+      "match": "Sport Recife vs Botafogo SP",
+      "fixture_id": "1520769",
+      "bet_type": "Double Chance (12)",
+      "score": "3-3",
+      "probability": 0.6855,
+      "odds": 1.36,
+      "confidence": 68.5,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.293,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.374,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.66,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-10",
+      "match": "FC Miami City vs Lakeland United",
+      "fixture_id": "1525025",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.5068,
+      "odds": 2.2,
+      "confidence": 50.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.477,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.838,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.718,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-10",
+      "match": "Utah Royals W vs NJ/NY Gotham FC W",
+      "fixture_id": "1508460",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-3",
+      "probability": 0.7093,
+      "odds": 1.57,
+      "confidence": 70.9,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.269,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.448,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.722,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Norway vs England",
+      "fixture_id": "1581037",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6492,
+      "odds": 1.8,
+      "confidence": 64.9,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.331,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.827,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.943,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Sportivo Huracan vs Col\u00f3n",
+      "fixture_id": "1584325",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.6695,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.331,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.655,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.627,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Managua vs Rancho Santana",
+      "fixture_id": "1582699",
+      "bet_type": "Over 2.5 Goals",
+      "score": "2-0",
+      "probability": 0.6998,
+      "odds": 1.62,
+      "confidence": 70,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.511,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.963,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.711,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Staten Island Athletic vs Morris Elite",
+      "fixture_id": "1525331",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-2",
+      "probability": 0.6275,
+      "odds": 3,
+      "confidence": 62.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.276,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.372,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.658,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Hickory vs Asheville City",
+      "fixture_id": "1525342",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-0",
+      "probability": 0.7623,
+      "odds": 0,
+      "confidence": 76.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.224,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.668,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.556,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Lorain County Leviathan vs Steel City",
+      "fixture_id": "1525347",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.6841,
+      "odds": 1.8,
+      "confidence": 68.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.295,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.509,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.842,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Nona vs Inter Gainesville",
+      "fixture_id": "1525351",
+      "bet_type": "Double Chance (12)",
+      "score": "2-2",
+      "probability": 0.7376,
+      "odds": 1.11,
+      "confidence": 73.8,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.24,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.603,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.832,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Reading United vs Lehigh Valley United",
+      "fixture_id": "1525353",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.7949,
+      "odds": 0,
+      "confidence": 79.5,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.224,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.929,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.771,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Tobacco Road vs Port City",
+      "fixture_id": "1525357",
+      "bet_type": "Double Chance (1X)",
+      "score": "2-3",
+      "probability": 0.7682,
+      "odds": 0,
+      "confidence": 76.8,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.232,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.484,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.749,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Ironbound vs Manhattan",
+      "fixture_id": "1525361",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.8744,
+      "odds": 0,
+      "confidence": 87.4,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.197,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.963,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.843,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Columbus United vs East Atlanta",
+      "fixture_id": "1525359",
+      "bet_type": "Double Chance (X2)",
+      "score": "4-1",
+      "probability": 0.6595,
+      "odds": 0,
+      "confidence": 66,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.341,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.599,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.829,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-11",
+      "match": "Redlands vs Ventura County Fusion",
+      "fixture_id": "1525354",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.8568,
+      "odds": 0,
+      "confidence": 85.7,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.222,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.956,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.824,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "Jalapa vs Matagalpa",
+      "fixture_id": "1582702",
+      "bet_type": "Double Chance (X2)",
+      "score": "3-2",
+      "probability": 0.7622,
+      "odds": 0,
+      "confidence": 76.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.238,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.761,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.911,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "Real Tomayapo vs Independiente Petrolero",
+      "fixture_id": "1538400",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-1",
+      "probability": 0.6312,
+      "odds": 2.4,
+      "confidence": 63.1,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.276,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.369,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.647,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "West Seattle Junction vs Bangers",
+      "fixture_id": "1525365",
+      "bet_type": "BTTS",
+      "score": "0-2",
+      "probability": 0.6756,
+      "odds": 0,
+      "confidence": 67.6,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: home team blanked (1 team short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.866,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.565,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "Lakeland United vs Inter Miami II",
+      "fixture_id": "1525373",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-1",
+      "probability": 0.7418,
+      "odds": 0,
+      "confidence": 74.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.361,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.59,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.819,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "Appalachian vs SC United Bantams",
+      "fixture_id": "1525375",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-0",
+      "probability": 0.7503,
+      "odds": 0,
+      "confidence": 75,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.448,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.673,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.824,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-12",
+      "match": "Sportivo San Juan vs Marin",
+      "fixture_id": "1525377",
+      "bet_type": "Double Chance (X2)",
+      "score": "4-1",
+      "probability": 0.6899,
+      "odds": 0,
+      "confidence": 69,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.31,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.604,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.832,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-13",
+      "match": "Cavalry FC vs Vancouver Whitecaps",
+      "fixture_id": "1544686",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.7489,
+      "odds": 1.9,
+      "confidence": 74.9,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.174,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.984,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.845,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-14",
+      "match": "Asheville City vs Virginia Beach City",
+      "fixture_id": "1586078",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-0",
+      "probability": 0.755,
+      "odds": 0,
+      "confidence": 75.5,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.327,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.548,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.826,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-14",
+      "match": "Lehigh Valley United vs Appalachian",
+      "fixture_id": "1589337",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-1",
+      "probability": 0.8137,
+      "odds": 0,
+      "confidence": 81.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.367,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.584,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.856,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-15",
+      "match": "Real Potos\u00ed vs San Antonio Bulo Bulo",
+      "fixture_id": "1538388",
+      "bet_type": "Under 2.5 Goals",
+      "score": "5-0",
+      "probability": 0.5835,
+      "odds": 2.2,
+      "confidence": 58.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.355,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.416,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.697,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-15",
+      "match": "Orlando Pride W vs Boston Legacy W",
+      "fixture_id": "1508466",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.7246,
+      "odds": 0,
+      "confidence": 72.5,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.275,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.549,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.674,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-15",
+      "match": "NJ/NY Gotham FC W vs Washington Spirit W",
+      "fixture_id": "1508465",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.7705,
+      "odds": 1.33,
+      "confidence": 77,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.59,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.717,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-15",
+      "match": "Kawasaki Frontale vs Vanraure Hachinohe",
+      "fixture_id": "1589269",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-0",
+      "probability": 0.8873,
+      "odds": 0,
+      "confidence": 88.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.111,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.88,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.231,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-16",
+      "match": "Botafogo vs Santos",
+      "fixture_id": "1492291",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-1",
+      "probability": 0.5628,
+      "odds": 1.9,
+      "confidence": 56.3,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.422,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.437,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.714,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-16",
+      "match": "St. Louis City vs Sporting Kansas City",
+      "fixture_id": "1490327",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-2",
+      "probability": 0.7903,
+      "odds": 2.88,
+      "confidence": 79,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.383,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.21,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.483,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-16",
+      "match": "Seattle Sounders vs Portland Timbers",
+      "fixture_id": "1490328",
+      "bet_type": "Under 3.5 Goals",
+      "score": "1-5",
+      "probability": 0.6633,
+      "odds": 1.73,
+      "confidence": 66.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.346,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.364,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.65,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-16",
+      "match": "Dothan United vs The Villages",
+      "fixture_id": "1586137",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-1",
+      "probability": 0.7964,
+      "odds": 0,
+      "confidence": 79.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.341,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.558,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.847,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-16",
+      "match": "Laredo Heat vs Texoma",
+      "fixture_id": "1586138",
+      "bet_type": "Over 2.5 Goals",
+      "score": "2-0",
+      "probability": 0.8643,
+      "odds": 0,
+      "confidence": 86.4,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.442,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.959,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.652,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Fortaleza EC vs Novorizontino",
+      "fixture_id": "1520774",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.7733,
+      "odds": 1.36,
+      "confidence": 77.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.337,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.592,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.719,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Londrina vs Botafogo SP",
+      "fixture_id": "1520776",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-0",
+      "probability": 0.7472,
+      "odds": 1.44,
+      "confidence": 74.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.267,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.7,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.567,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Atletico San Luis vs Cruz Azul",
+      "fixture_id": "1550896",
+      "bet_type": "Double Chance (1X)",
+      "score": "2-3",
+      "probability": 0.6335,
+      "odds": 1.91,
+      "confidence": 63.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.347,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.695,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.884,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "FC Juarez vs Puebla",
+      "fixture_id": "1550898",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-1",
+      "probability": 0.7888,
+      "odds": 1.2,
+      "confidence": 78.9,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.242,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.494,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.733,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Club Nacional vs Wanderers",
+      "fixture_id": "1576796",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.7142,
+      "odds": 0,
+      "confidence": 71.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.286,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.53,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.783,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Mirassol vs Gremio",
+      "fixture_id": "1492297",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-1",
+      "probability": 0.7573,
+      "odds": 1.7,
+      "confidence": 75.7,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.369,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.243,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.524,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Double Chance 1X' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Los Angeles Galaxy vs Los Angeles FC",
+      "fixture_id": "1490330",
+      "bet_type": "Under 2.5 Goals",
+      "score": "0-3",
+      "probability": 0.5739,
+      "odds": 2.35,
+      "confidence": 57.4,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.348,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.426,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.705,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Flint City Bucks vs Buffalo",
+      "fixture_id": "1589342",
+      "bet_type": "Over 2.5 Goals",
+      "score": "2-0",
+      "probability": 0.749,
+      "odds": 1.33,
+      "confidence": 74.9,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.457,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.984,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.651,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Ventura County Fusion vs Project 51O",
+      "fixture_id": "1589343",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-0",
+      "probability": 0.9085,
+      "odds": 0,
+      "confidence": 90.8,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.425,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.626,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.909,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "Ballard vs Utah United",
+      "fixture_id": "1589344",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-1",
+      "probability": 0.9179,
+      "odds": 0,
+      "confidence": 91.8,
+      "close_loss": true,
+      "close_detail": "Over 2.5 needed 3 goals, got 2 (1 goal short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.196,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.978,
+          "would_win": true
+        },
+        {
+          "market": "BTTS Yes",
+          "prob": 0.884,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-17",
+      "match": "San Francisco City vs Tucson",
+      "fixture_id": "1589345",
+      "bet_type": "Over 2.5 Goals",
+      "score": "1-0",
+      "probability": 0.8388,
+      "odds": 0,
+      "confidence": 83.9,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.578,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.769,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.87,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Monterrey vs Santos Laguna",
+      "fixture_id": "1550901",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-2",
+      "probability": 0.5174,
+      "odds": 2.7,
+      "confidence": 51.7,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.436,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.483,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.75,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Club Queretaro vs Club America",
+      "fixture_id": "1550902",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.6032,
+      "odds": 1.8,
+      "confidence": 60.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.378,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.65,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.681,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Sporting JAX vs Brooklyn",
+      "fixture_id": "1493584",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-2",
+      "probability": 0.5121,
+      "odds": 2.15,
+      "confidence": 51.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.277,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.467,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.738,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Rhode Island vs Hartford Athletic",
+      "fixture_id": "1493582",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.8158,
+      "odds": 1.25,
+      "confidence": 81.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.513,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.765,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.755,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "FC Tulsa vs El Paso Locomotive",
+      "fixture_id": "1493578",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.8063,
+      "odds": 1.17,
+      "confidence": 80.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.317,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.588,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.746,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Phoenix Rising vs Monterey Bay",
+      "fixture_id": "1493580",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-2",
+      "probability": 0.5557,
+      "odds": 2.3,
+      "confidence": 55.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.446,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.421,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.701,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Chicago Red Stars W vs Angel City W",
+      "fixture_id": "1508471",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.5621,
+      "odds": 2.2,
+      "confidence": 56.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.42,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.622,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.711,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance X2' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Millonarios vs Colo Colo",
+      "fixture_id": "1567687",
+      "bet_type": "Over 2.5 Goals",
+      "score": "0-1",
+      "probability": 0.6159,
+      "odds": 1.8,
+      "confidence": 61.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.407,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.631,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.834,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-18",
+      "match": "Utah Royals W vs Orlando Pride W",
+      "fixture_id": "1508473",
+      "bet_type": "Over 1.5 Goals",
+      "score": "1-0",
+      "probability": 0.7831,
+      "odds": 1.22,
+      "confidence": 78.3,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.389,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.65,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.727,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-20",
+      "match": "Nacional Potos\u00ed vs Real Oruro",
+      "fixture_id": "1538394",
+      "bet_type": "Under 2.5 Goals",
+      "score": "1-4",
+      "probability": 0.4897,
+      "odds": 3.1,
+      "confidence": 49,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.334,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.51,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.77,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-21",
+      "match": "Novorizontino vs Criciuma",
+      "fixture_id": "1520787",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-1",
+      "probability": 0.832,
+      "odds": 1.5,
+      "confidence": 83.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.341,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.588,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.768,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-21",
+      "match": "Toluca vs U.N.A.M. - Pumas",
+      "fixture_id": "1550904",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6725,
+      "odds": 0,
+      "confidence": 67.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.328,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.532,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.786,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-21",
+      "match": "Independiente Petrolero vs Real Potos\u00ed",
+      "fixture_id": "1538392",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6638,
+      "odds": 0,
+      "confidence": 66.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.336,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.51,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.77,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Ceara vs CRB",
+      "fixture_id": "1520783",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-1",
+      "probability": 0.832,
+      "odds": 1.4,
+      "confidence": 83.2,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.339,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.585,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.768,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Coritiba vs Palmeiras",
+      "fixture_id": "1492294",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-3",
+      "probability": 0.67,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.433,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.71,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Columbus Crew vs New York City FC",
+      "fixture_id": "1490333",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.661,
+      "odds": 0,
+      "confidence": 66.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.339,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.547,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.796,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Chapecoense-sc vs Flamengo",
+      "fixture_id": "1492292",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-4",
+      "probability": 0.67,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.433,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.71,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Internacional vs Cruzeiro",
+      "fixture_id": "1492296",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.67,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.433,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.71,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Sao Paulo vs Atletico Paranaense",
+      "fixture_id": "1492298",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.67,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.433,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.71,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "Los Angeles Galaxy vs St. Louis City",
+      "fixture_id": "1490343",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-3",
+      "probability": 0.6553,
+      "odds": 0,
+      "confidence": 65.5,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.345,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.547,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.796,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-22",
+      "match": "San Jose Earthquakes vs Orlando City SC",
+      "fixture_id": "1490344",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-4",
+      "probability": 0.661,
+      "odds": 0,
+      "confidence": 66.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.339,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.547,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.796,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Qarabag vs CSKA Sofia",
+      "fixture_id": "1593521",
+      "bet_type": "Over 1.5 Goals",
+      "score": "0-0",
+      "probability": 0.7745,
+      "odds": 1.28,
+      "confidence": 77.5,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Draw",
+          "prob": 0.259,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance 1X",
+          "prob": 0.671,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.588,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Double Chance 1X' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Tromso vs Hradec Kr\u00e1lov\u00e9",
+      "fixture_id": "1556546",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.674,
+      "odds": 0,
+      "confidence": 67.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.326,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.583,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.72,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Dynamo Kyiv vs PAOK",
+      "fixture_id": "1593519",
+      "bet_type": "Double Chance (1X)",
+      "score": "2-3",
+      "probability": 0.6713,
+      "odds": 0,
+      "confidence": 67.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.329,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.551,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.798,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Sheriff Tiraspol vs Maccabi Tel Aviv",
+      "fixture_id": "1593522",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-5",
+      "probability": 0.6713,
+      "odds": 0,
+      "confidence": 67.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.329,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.551,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.798,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Twente vs Ferencvarosi TC",
+      "fixture_id": "1593523",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6713,
+      "odds": 0,
+      "confidence": 67.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.329,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.551,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.798,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "FK Liepaja vs Austria Vienna",
+      "fixture_id": "1591943",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.597,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Dila vs Apollon Limassol",
+      "fixture_id": "1593482",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-4",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.52,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "AEK Larnaca vs Beitar Jerusalem",
+      "fixture_id": "1556509",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.597,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.704,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "FC Santa Coloma vs Rapid Vienna",
+      "fixture_id": "1593485",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-3",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.52,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "FCSB vs Auda",
+      "fixture_id": "1556510",
+      "bet_type": "Double Chance (1X)",
+      "score": "2-3",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.52,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Paks vs Panathinaikos",
+      "fixture_id": "1556518",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.52,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Vojvodina vs Ajax",
+      "fixture_id": "1593495",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-4",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.52,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "NSI Runavik vs Koper",
+      "fixture_id": "1593487",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.6697,
+      "odds": 0,
+      "confidence": 67,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.33,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.777,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.597,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Cuiaba vs Atletico Goianiense",
+      "fixture_id": "1520784",
+      "bet_type": "BTTS",
+      "score": "0-1",
+      "probability": 0.6692,
+      "odds": 0,
+      "confidence": 66.9,
+      "close_loss": true,
+      "close_detail": "BTTS Yes failed: home team blanked (1 team short)",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.339,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.585,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.768,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; '1H Over 0.5' would have won on this match",
+      "fix_severity": "moderate"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Agama vs Hardrock",
+      "fixture_id": "1589378",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.6711,
+      "odds": 0,
+      "confidence": 67.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.329,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.699,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.615,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "CAPS United vs Hunters",
+      "fixture_id": "1589379",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-1",
+      "probability": 0.6711,
+      "odds": 0,
+      "confidence": 67.1,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.329,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.615,
+          "would_win": true
+        },
+        {
+          "market": "1H Over 0.5",
+          "prob": 0.647,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market '1H Over 0.5' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Zorya Luhansk vs G\u00f6ztepe",
+      "fixture_id": "1598508",
+      "bet_type": "Double Chance (1X)",
+      "score": "1-2",
+      "probability": 0.6556,
+      "odds": 0,
+      "confidence": 65.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.344,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.54,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.791,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "Bergisch Gladbach vs 1. FC K\u00f6ln",
+      "fixture_id": "1567708",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-8",
+      "probability": 0.6556,
+      "odds": 0,
+      "confidence": 65.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.344,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.54,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.791,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-23",
+      "match": "HNK Gorica vs Shakhtar Donetsk",
+      "fixture_id": "1583411",
+      "bet_type": "Double Chance (1X)",
+      "score": "0-2",
+      "probability": 0.6556,
+      "odds": 0,
+      "confidence": 65.6,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": true,
+      "alternative_winners": [
+        {
+          "market": "Away Win",
+          "prob": 0.344,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.791,
+          "would_win": true
+        },
+        {
+          "market": "Double Chance X2",
+          "prob": 0.611,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    }
+  ]
+}
