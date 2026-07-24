@@ -13,26 +13,29 @@ export const CURRENCY_MAP: Record<string, { symbol: string; rate: number; label:
   'us': { symbol: '$', rate: 1, label: 'USD' },
 };
 
-// Cameroon/Senegalese market: fixed FCFA prices (NOT USD conversion)
+// Cameroon/Senegalese market: fixed FCFA prices (website pricing, NOT USD conversion)
 export const LOCAL_CFA_PRICING: Record<string, number> = {
+  'daily': 500,
   'weekly': 2000,
   'monthly': 5000,
   'quarterly': 12000,
   'annual': 35000,
 };
 
-export function getPricingForCountry(baseUsd: number, countryCode: string = 'other', planId?: string) {
-  // Cameroon & Francophone Africa: use fixed FCFA prices
-  if (planId && ['cm', 'ci', 'sn'].includes(countryCode) && LOCAL_CFA_PRICING[planId]) {
-    const amount = LOCAL_CFA_PRICING[planId];
-    const cur = CURRENCY_MAP[countryCode];
-    return { amount, symbol: cur.symbol, code: cur.label, isConverted: true, originalValue: baseUsd, isLocal: true };
+export function getPricingForCountry(amountFcfa: number, countryCode: string = 'cm', planId?: string) {
+  // Cameroon & Francophone Africa: show FCFA directly
+  if (['cm', 'ci', 'sn'].includes(countryCode)) {
+    return { amount: amountFcfa, symbol: 'FCFA', code: 'XAF', isConverted: false, originalValue: amountFcfa, isLocal: true };
   }
   
+  // Other countries: convert FCFA to local currency
   if (CURRENCY_MAP[countryCode]) {
     const cur = CURRENCY_MAP[countryCode];
-    const converted = Math.round(baseUsd * cur.rate);
-    return { amount: converted, symbol: cur.symbol, code: cur.label, isConverted: true, originalValue: baseUsd };
+    const usdEquivalent = amountFcfa / 600;  // Convert FCFA → USD first
+    const converted = Math.round(usdEquivalent * cur.rate);
+    return { amount: converted, symbol: cur.symbol, code: cur.label, isConverted: true, originalValue: amountFcfa };
   }
-  return { amount: baseUsd, symbol: '$', code: 'USD', isConverted: false, originalValue: baseUsd };
+  
+  // Fallback: show FCFA
+  return { amount: amountFcfa, symbol: 'FCFA', code: 'XAF', isConverted: false, originalValue: amountFcfa };
 }

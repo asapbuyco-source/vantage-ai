@@ -36,7 +36,7 @@ export const VIP: React.FC<VIPProps> = () => {
   const { user, userProfile, isAdmin, verifyTransaction } = useAuth();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<'weekly' | 'monthly' | 'quarterly' | 'annual'>('monthly');
+  const [selectedPlanId, setSelectedPlanId] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'>('daily');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -188,7 +188,7 @@ export const VIP: React.FC<VIPProps> = () => {
   const isFirstTime = userProfile && (!userProfile.totalPaid || userProfile.totalPaid === 0);
 
   const plans: Array<{
-    id: 'weekly' | 'monthly' | 'quarterly' | 'annual';
+    id: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual';
     label: string;
     badge: string | null;
     price: string;
@@ -198,12 +198,22 @@ export const VIP: React.FC<VIPProps> = () => {
     claimColor: string;
   }> = [
       {
+        id: 'daily',
+        label: t('vip.plan_daily') || 'Daily Access',
+        badge: '⚡ QUICK START',
+        price: '500',
+        icon: <Zap size={20} />,
+        features: [t('vip.feat_signal_feed'), t('vip.feat_today')],
+        color: 'border-emerald-400 bg-emerald-500/5 dark:bg-emerald-500/10 shadow-[0_0_30px_rgba(16,185,129,0.1)]',
+        claimColor: 'bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25',
+      },
+      {
         id: 'weekly',
         label: t('vip.plan_weekly'),
         badge: '📊 7-DAY ACCESS',
-        price: '14.99',
+        price: '2000',
         icon: <Activity size={20} />,
-        features: ['Full +EV Signal Feed', 'Kelly Bankroll Sizing', 'Alpha Screener Access'],
+        features: [t('vip.feat_signal_feed'), t('vip.feat_kelly'), t('vip.feat_screener')],
         color: 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm',
         claimColor: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90',
       },
@@ -211,9 +221,9 @@ export const VIP: React.FC<VIPProps> = () => {
         id: 'monthly',
         label: t('vip.plan_monthly'),
         badge: '🔥 MOST POPULAR',
-        price: '24.99',
+        price: '5000',
         icon: <Star size={20} />,
-        features: ['Full +EV Signal Feed', 'Alpha Screener Access', 'VIP WhatsApp Group'],
+        features: [t('vip.feat_signal_feed'), t('vip.feat_screener'), t('vip.feat_whatsapp')],
         color: 'border-vantage-cyan bg-vantage-cyan/5 dark:bg-vantage-cyan/10 shadow-[0_0_40px_rgba(34,211,238,0.1)]',
         claimColor: 'bg-vantage-cyan hover:bg-cyan-400 text-slate-900 shadow-lg shadow-vantage-cyan/25',
       },
@@ -221,9 +231,9 @@ export const VIP: React.FC<VIPProps> = () => {
         id: 'quarterly',
         label: t('vip.plan_quarterly'),
         badge: '💎 BEST VALUE',
-        price: '59.99',
+        price: '12000',
         icon: <ShieldCheck size={20} />,
-        features: ['Full +EV Signal Feed', 'Alpha Screener Access', 'VIP WhatsApp Group', 'Priority Support'],
+        features: [t('vip.feat_signal_feed'), t('vip.feat_screener'), t('vip.feat_whatsapp'), t('vip.feat_priority')],
         color: 'border-slate-200 dark:border-white/10 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm',
         claimColor: 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90',
       },
@@ -231,15 +241,15 @@ export const VIP: React.FC<VIPProps> = () => {
         id: 'annual',
         label: t('vip.plan_annual') || 'Annual Access',
         badge: '👑 ULTIMATE',
-        price: '99.99',
+        price: '35000',
         icon: <Crown size={20} />,
-        features: ['Full +EV Signal Feed', 'Alpha Screener Access', 'VIP WhatsApp Group', 'Priority Support', 'Monthly 1-on-1 Review'],
+        features: [t('vip.feat_signal_feed'), t('vip.feat_screener'), t('vip.feat_whatsapp'), t('vip.feat_priority'), t('vip.feat_review')],
         color: 'border-vantage-purple bg-vantage-purple/5 dark:bg-vantage-purple/10 shadow-[0_0_40px_rgba(168,85,247,0.1)]',
         claimColor: 'bg-vantage-purple hover:bg-purple-500 text-white shadow-lg shadow-vantage-purple/25',
       },
     ];
 
-  const handlePlanClick = (planId: 'weekly' | 'monthly' | 'quarterly' | 'annual') => {
+  const handlePlanClick = (planId: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual') => {
     setSelectedPlanId(planId);
     setShowPaymentModal(true);
   };
@@ -1074,13 +1084,13 @@ export const VIP: React.FC<VIPProps> = () => {
           {/* PREMIUM HERO TEASER */}
           <div className="relative mb-8 text-center pt-4">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-vantage-cyan/10 border border-vantage-cyan/20 text-vantage-cyan text-[10px] font-bold uppercase tracking-widest mb-4">
-              <Activity size={12} /> Institutional Grade Analytics
+              <Activity size={12} /> {t('vip.institutional_grade')}
             </div>
             <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2 leading-tight">
-              Unlock the <span className="text-vantage-cyan">Alpha Terminal</span>
+              {t('vip.unlock_alpha')} <span className="text-vantage-cyan">{t('vip.alpha_terminal')}</span>
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mx-auto mb-6">
-              Stop guessing. Get access to our quantitative models, live CLV tracking, and +EV betting signals.
+              {t('vip.stop_guessing')}
             </p>
 
             <div className="relative mx-auto mb-6 max-w-md overflow-hidden rounded-2xl border border-vantage-cyan/20 bg-slate-950 text-left shadow-2xl shadow-vantage-cyan/10">
@@ -1096,11 +1106,11 @@ export const VIP: React.FC<VIPProps> = () => {
               <div className="relative z-10 p-5">
                 <div className="mb-10 inline-flex items-center gap-2 rounded-full border border-vantage-cyan/30 bg-vantage-cyan/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-vantage-cyan">
                   <Radio size={11} />
-                  Matchday Terminal
+                  {t('vip.matchday_terminal')}
                 </div>
                 <div className="max-w-[13rem]">
                   <p className="text-xl font-black leading-tight text-white">
-                    Full card, model edge, and staking plan in one view.
+                    {t('vip.matchday_desc')}
                   </p>
                   <div className="mt-4 grid grid-cols-3 gap-2">
                     {['+EV', 'CLV', 'Kelly'].map(label => (
@@ -1117,7 +1127,7 @@ export const VIP: React.FC<VIPProps> = () => {
           <div id="plans-section" className="space-y-6">
             <div className="flex flex-col gap-4">
             {plans.filter(p => showAllPlans || ['daily', 'weekly', 'monthly', 'quarterly'].includes(p.id)).map((plan) => {
-                const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'other', plan.id);
+    const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'cm', plan.id);
                 const isPopular = plan.id === 'monthly';
                 return (
                   <motion.button
@@ -1192,12 +1202,12 @@ export const VIP: React.FC<VIPProps> = () => {
             <div className="pt-6 border-t border-slate-200 dark:border-white/10 flex flex-col items-center space-y-4">
               <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
                 <ShieldCheck size={14} className="text-emerald-500" />
-                <>Secure Checkout via <span className="text-slate-900 dark:text-white font-bold">Google Play</span></>
+                <>Secure Checkout via <span className="text-slate-900 dark:text-white font-bold">Mobile Money & Card</span></>
               </div>
               
               {/* Payment Methods */}
               <div className="flex items-center justify-center gap-2">
-                {['Google Play', 'Credit Card', 'Carrier Billing'].map(method => (
+                {['MTN MoMo', 'Orange Money', 'Visa / Mastercard'].map(method => (
                   <div key={method} className="px-2.5 py-1 rounded bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-[9px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider">
                     {method}
                   </div>

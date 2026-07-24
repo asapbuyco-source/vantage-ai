@@ -17,6 +17,7 @@ export const MatchDetails: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { language, showToast } = useAppContext();
+    const { t } = useAppContext();
     const { userProfile, isAdmin } = useAuth();
     const { predictions, rawFixtures } = useData();
     const isVipUser = userProfile?.isVip === true || isAdmin;

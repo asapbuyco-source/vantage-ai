@@ -47,7 +47,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
     setPaymentFailed(false);
   }, [isOpen, plan]);
 
-  const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'other');
+  const pricing = getPricingForCountry(Number(plan.price), userProfile?.country || 'cm', plan.id);
 
   const handlePayment = async () => {
     if (!user) {
