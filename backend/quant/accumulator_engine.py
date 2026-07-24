@@ -100,6 +100,7 @@ class AccumulatorLeg:
     league: str = "unknown"
     kickoff_utc: str = ""
     kickoff_local: str = ""
+    category: str = "unknown"
 
 
 @dataclass

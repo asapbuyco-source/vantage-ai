@@ -500,19 +500,17 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
             away_form_str, away_avg_sc, away_avg_con, away_last_date = fetch_team_form_and_xg(away_id, limit=20)
 
             # Phase 1.2: Fatigue — compute days since last match
-            if home_last_date and match.kickoff_utc:
+            if home_last_date and md.kickoff_utc:
                 try:
-                    from datetime import datetime
                     last = datetime.strptime(home_last_date, "%Y-%m-%d")
-                    kickoff = datetime.fromisoformat(match.kickoff_utc.replace("Z", "+00:00"))
+                    kickoff = datetime.fromisoformat(md.kickoff_utc.replace("Z", "+00:00"))
                     md.home_days_rest = max(1, (kickoff - last).days)
                 except:
                     pass
-            if away_last_date and match.kickoff_utc:
+            if away_last_date and md.kickoff_utc:
                 try:
-                    from datetime import datetime
                     last = datetime.strptime(away_last_date, "%Y-%m-%d")
-                    kickoff = datetime.fromisoformat(match.kickoff_utc.replace("Z", "+00:00"))
+                    kickoff = datetime.fromisoformat(md.kickoff_utc.replace("Z", "+00:00"))
                     md.away_days_rest = max(1, (kickoff - last).days)
                 except:
                     pass
@@ -632,7 +630,7 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
         try:
             from weather_service import get_weather_context, get_weather_probability_penalty
             # Use venue city from API-Football fixture data (covers ALL leagues)
-            venue_city = match.venue_city or home_name
+            venue_city = md.venue_city or home_name
             weather = get_weather_context(venue_city, md.kickoff_utc)
             md.weather = "windy" if weather.get("wind_kmh", 0) > 20 else ("rainy" if weather.get("rain_mmh", 0) > 2 else "clear")
             md.weather_penalty = get_weather_probability_penalty(weather)
@@ -649,8 +647,8 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
             
             # Squad Strength Drop Calculation
             # Baseline: ~1500 Elo. 3 injuries = ~0.94 multiplier
-            h_elo = md.home_stats.elo_rating if md.home_stats else 1500
-            a_elo = md.away_stats.elo_rating if md.away_stats else 1500
+            h_elo = getattr(md.home_stats, 'elo_rating', 1500) if md.home_stats else 1500
+            a_elo = getattr(md.away_stats, 'elo_rating', 1500) if md.away_stats else 1500
             
             # ~2% drop per injured player, scaled by Elo (higher Elo = more impactful if top heavy, or deeper bench? We'll assume higher elo = slightly bigger penalty to stop backing injured favorites blindly)
             home_drop = md.home_sidelined_count * 0.02 * (h_elo / 1500.0)
