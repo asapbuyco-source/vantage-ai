@@ -3,13 +3,11 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Zap, BookOpen, User } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { useData } from '../context/DataContext';
 
 export const BottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t, language } = useAppContext();
-  const { liveCount } = useData();
 
   const getActiveTab = () => {
     const path = location.pathname;
@@ -39,7 +37,7 @@ export const BottomNav: React.FC = () => {
         </h1>
       </div>
 
-      <div className="relative flex justify-around items-center h-[72px] pb-safe pb-2 px-2 md:flex-col md:h-auto md:justify-start md:items-stretch md:space-y-2 md:px-4 md:pt-4 md:flex-1">
+      <div className="relative flex justify-around items-center h-[72px] px-2 md:flex-col md:h-auto md:justify-start md:items-stretch md:space-y-2 md:px-4 md:pt-4 md:flex-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.5rem)' }}>
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           const Icon = item.icon;
@@ -67,11 +65,6 @@ export const BottomNav: React.FC = () => {
               )}
               <div className={`relative z-10 flex items-center justify-center transition-all duration-200 ${isActive ? 'text-vantage-cyan -translate-y-0.5 md:translate-y-0 md:scale-110' : 'text-gray-400 dark:text-gray-500 md:hover:text-vantage-cyan/70'}`}>
                 <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} className="md:w-5 md:h-5" />
-                {item.id === 'home' && liveCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5 leading-none">
-                    {liveCount}
-                  </span>
-                )}
               </div>
               <span className={`relative z-10 text-[9px] md:text-sm font-semibold tracking-wide transition-colors ${isActive ? 'text-vantage-cyan md:font-bold' : 'text-gray-400 dark:text-gray-500 md:font-medium'}`}>
                 {item.label}

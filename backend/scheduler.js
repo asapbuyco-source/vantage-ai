@@ -441,49 +441,47 @@ export const initScheduler = () => {
     tasks.set('unifiedVault', unifiedVaultTask);
     logger.info('🏦 Unified vault (all sports) scheduled at 08:15 Lagos');
 
-    // Live in-play EV every 5 minutes
-    if (process.env.API_FOOTBALL_KEY) {
-        const liveEvTask = cron.schedule('*/5 * * * *',
-            withLock('live_ev', 4, async () => {
-                try {
-                    const { spawn } = await import('child_process');
-                    const { default: path } = await import('path');
-                    const script = path.join(__dirname, 'quant', 'live_ev_engine.py');
-                    const python = process.env.PYTHON_BIN || 'python3';
-
-                    const child = spawn(python, [script], {
-                        cwd: path.join(__dirname, 'quant'),
-                        env: { ...process.env },
-                        timeout: 120000,
-                    });
-
-                    let stdout = '';
-                    let stderr = '';
-                    child.stdout.on('data', d => stdout += d);
-                    child.stderr.on('data', d => stderr += d);
-
-                    child.on('close', code => {
-                        if (code !== 0) {
-                            const errMsg = stderr.trim() || stdout.trim() || '(no output)';
-                            logger.warn({ code, error: errMsg }, '[LiveEV] Non-zero exit');
-                            return;
-                        }
-                        try {
-                            const result = JSON.parse(stdout.trim() || '{}');
-                            if (result.live_bets > 0) {
-                                logger.info({ result }, `[LiveEV] ${result.live_bets} in-play bets found`);
-                            }
-                        } catch {}
-                    });
-                } catch (e) {
-                    logger.warn({ error: e.message }, '[LiveEV] Spawn error');
-                }
-            }),
-            { timezone: 'Africa/Lagos' }
-        );
-        tasks.set('liveEv', liveEvTask);
-        logger.info('🎯 Live in-play EV scheduled every 5 minutes');
-    }
+    // Live in-play EV every 5 minutes — DISABLED (non-critical, non-zero exit in production)
+    // Re-enable when live_ev_engine.py is fixed for Railway environment
+    // if (process.env.API_FOOTBALL_KEY) {
+    //     const liveEvTask = cron.schedule('*/5 * * * *',
+    //         withLock('live_ev', 4, async () => {
+    //             try {
+    //                 const { spawn } = await import('child_process');
+    //                 const { default: path } = await import('path');
+    //                 const script = path.join(__dirname, 'quant', 'live_ev_engine.py');
+    //                 const python = process.env.PYTHON_BIN || 'python3';
+    //                 const child = spawn(python, [script], {
+    //                     cwd: path.join(__dirname, 'quant'),
+    //                     env: { ...process.env },
+    //                     timeout: 120000,
+    //                 });
+    //                 let stdout = '';
+    //                 let stderr = '';
+    //                 child.stdout.on('data', d => stdout += d);
+    //                 child.stderr.on('data', d => stderr += d);
+    //                 child.on('close', code => {
+    //                     if (code !== 0) {
+    //                         const errMsg = stderr.trim() || stdout.trim() || '(no output)';
+    //                         logger.warn({ code, error: errMsg }, '[LiveEV] Non-zero exit');
+    //                         return;
+    //                     }
+    //                     try {
+    //                         const result = JSON.parse(stdout.trim() || '{}');
+    //                         if (result.live_bets > 0) {
+    //                             logger.info({ result }, `[LiveEV] ${result.live_bets} in-play bets found`);
+    //                         }
+    //                     } catch {}
+    //                 });
+    //             } catch (e) {
+    //                 logger.warn({ error: e.message }, '[LiveEV] Spawn error');
+    //             }
+    //         }),
+    //         { timezone: 'Africa/Lagos' }
+    //     );
+    //     tasks.set('liveEv', liveEvTask);
+    //     logger.info('🎯 Live in-play EV scheduled every 5 minutes');
+    // }
 
     // Historical data collection at 03:00 Lagos (low traffic, once daily)
     if (process.env.API_FOOTBALL_KEY) {

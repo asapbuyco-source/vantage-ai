@@ -712,7 +712,12 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
 
         matches.append(md)
         print(f"[DataPipeline]   [OK] {home_name} vs {away_name} "
-              f"(xG: {md.expected_goals_home:.2f}-{md.expected_goals_away:.2f} [{xg_source}])")
+              f"(xG: {md.expected_goals_home:.2f}-{md.expected_goals_away:.2f})")
+        
+        # Rate limit guard: 6s delay between fixtures to stay under 10 req/min
+        # With 100 fixtures: ~10 min total pipeline time, well within daily quota
+        if not os.environ.get("SKIP_RATE_DELAY"):
+            time.sleep(6)
 
     # ── Step 6: Grade past matches (Feedback Loop) ──────────────
     # Grading is handled by a separate cron job in scheduler.js (22:00 Lagos)
