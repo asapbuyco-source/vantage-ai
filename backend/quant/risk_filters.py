@@ -194,9 +194,9 @@ def grade_risk(bet: ValueBet) -> str:
         if bet.model_prob >= 0.45 and bet.expected_value >= 0.05:
             return "value"
     else:
-        if bet.model_prob >= 0.65 and bet.expected_value >= 0.08:
+        if bet.model_prob >= 0.60 and bet.expected_value >= 0.06:
             return "safe"
-        if bet.model_prob >= 0.55 and bet.expected_value >= 0.05:
+        if bet.model_prob >= 0.50 and bet.expected_value >= 0.04:
             return "value"
     return "risky"
 

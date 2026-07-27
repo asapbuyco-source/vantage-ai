@@ -95,13 +95,14 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
     // Sort by highest probability pick first (probability-first site)
     const sorted = [...predictions].sort((a, b) => getPrimaryPredictionProb(b) - getPrimaryPredictionProb(a));
 
-    // Top-tier picks: safe category only (value bets go to vault)
+    // Top-tier picks: safe category first, fall back to value if none
     const topPicks = sorted.filter(m => m.category === 'safe');
+    const freeablePicks = topPicks.length > 0 ? topPicks : sorted.filter(m => m.category === 'value');
 
     // Hook: dynamic free picks based on admin setting
-    const hook = topPicks.slice(0, freePicksCount);
+    const hook = freeablePicks.slice(0, freePicksCount);
     // VIP Teasers: next up to 8 picks (blurred)
-    const teasers = topPicks.slice(freePicksCount, freePicksCount + 8);
+    const teasers = freeablePicks.slice(freePicksCount, freePicksCount + 8);
     // Data cards: everything else
     const teaseIds = new Set([...hook, ...teasers].map(m => m.id));
     const data = sorted.filter(m => !teaseIds.has(m.id));

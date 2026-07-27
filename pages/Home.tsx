@@ -174,7 +174,9 @@ export const Home: React.FC<HomeProps> = () => {
       return probB - probA;
     });
     const topPicks = sorted.filter(m => m.category === 'safe');
-    return new Set(topPicks.slice(0, freePicksCount).map(m => m.id));
+    // Fallback: if no safe bets today, show value bets (xG correction may lower scores)
+    const freeablePicks = topPicks.length > 0 ? topPicks : sorted.filter(m => m.category === 'value');
+    return new Set(freeablePicks.slice(0, freePicksCount).map(m => m.id));
   }, [predictions, freePicksCount]);
 
   const filteredMatches = useMemo(() => {
