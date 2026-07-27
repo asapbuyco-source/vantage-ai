@@ -596,10 +596,10 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "probability": round(probs.over15, 4),
                     "reason": "Insurance: if Over 2.5 fails by 1 goal, Over 1.5 still wins"
                 } if (best_bet and "over 2.5" in best_bet.market.lower() and probs.over15 > 0.85) else None,
-                # Corner prediction (xG-correlated — r≈0.65, ~1.2 corners per expected goal, calibrated from 14-day audit)
+                # Corner prediction (xG-correlated, r≈0.65, ~1.2 corners per expected goal)
                 "expected_corners": round((mu_home + mu_away) * 1.2, 1),
-                "over85_corners_prob": round(_corner_over_prob(mu_home + mu_away, 8.5), 4),
-                "over95_corners_prob": round(_corner_over_prob(mu_home + mu_away, 9.5), 4),
+                "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
+                "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
             }
             predictions.append(pred)
 

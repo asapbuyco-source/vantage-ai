@@ -1,0 +1,74 @@
+
+==============================================================================
+  VANTAGE AI - PREDICTION AUDIT REPORT
+==============================================================================
+  Generated: 2026-07-27 08:39:31 UTC
+  Period: 2026-07-25 to 2026-07-26 (2 days)
+  Mode: Grade Only
+
+------------------------------------------------------------------------------
+  1. OVERALL PERFORMANCE
+------------------------------------------------------------------------------
+  Total Predictions: 63
+  Graded: 57
+  Won: 37 | Lost: 20 | Void: 0 | No Result: 6
+  Win Rate: 64.9%
+  ROI: +8.1%
+  Profit: +1.45 units on 18.00 staked
+
+------------------------------------------------------------------------------
+  2. PERFORMANCE BY MARKET TYPE
+------------------------------------------------------------------------------
+  Market                           Bets   Wins Losses     Win%   Profit
+  Double Chance (1X)                 38     25     13    65.8%
+  Under 2.5 Goals                    11      9      2    81.8%
+  Over 1.5 Goals                      4      2      2    50.0%
+  BTTS No                             2      0      2     0.0%
+  Double Chance (12)                  1      1      0   100.0%
+  Over 2.5 Goals                      1      0      1     0.0%
+
+------------------------------------------------------------------------------
+  3. PERFORMANCE BY LEAGUE (top 10 by volume)
+------------------------------------------------------------------------------
+  League                           Bets   Wins Losses     Win%
+  Major League Soccer                15     13      2    86.7%
+  USL Championship (USA)             11      4      7    36.4%
+  Brasileirão Série A                 8      7      1    87.5%
+  Liga MX (Mexico)                    4      3      1    75.0%
+  Primera División (Venezuela)        4      2      2    50.0%
+  Brasileirão Série B                 4      2      2    50.0%
+  Chilean Primera División            2      2      0   100.0%
+  Friendlies Clubs                    2      0      2     0.0%
+  Eredivisie                          2      1      1    50.0%
+  Uruguayan Primera División          1      0      1     0.0%
+
+------------------------------------------------------------------------------
+  4. PERFORMANCE BY CONFIDENCE TIER
+------------------------------------------------------------------------------
+  high (>=70%)        : 37/57 = 64.9%
+
+------------------------------------------------------------------------------
+  6. LOSS PATTERN ANALYSIS
+------------------------------------------------------------------------------
+  Total losses: 20
+  Close losses (1 goal/event short): 1 (5.0%)
+  Overconfident (>=65% prob but lost): 16 (80.0%)
+  Fixable - Minor (value bet existed): 0 (0.0%)
+  Fixable - Moderate (alternative market): 1 (5.0%)
+  Fixable - Major / Unfixable: 19 (95.0%)
+
+  Close Losses (top 10):
+  Date         Match                               Bet                    Score  Detail
+  2026-07-26   Palmeiras vs Atletico-MG            Under 2.5 Goals        1-2    Under 2.5 needed <3 goals, got 3 (1 goal over)
+
+------------------------------------------------------------------------------
+  7. KEY RECOMMENDATIONS
+------------------------------------------------------------------------------
+  1. CALIBRATION: 16/20 losses (80%) were overconfident. Apply stricter calibration to high-probability predictions.
+  2. MARKET: 'Double Chance (1X)' is your worst-performing market (66% win rate). Consider reducing weight or excluding it.
+  3. MARKET: 'Under 2.5 Goals' is your best market (82% win rate). Increase allocation and feature more prominently.
+  4. CLOSE LOSSES: 1 losses (5%) were by a single goal. Consider adding a 'saver' recommendation: for Over 2.5 picks with high confidence, suggest hedging with Over 1.5 as insurance.
+
+==============================================================================
+  END OF REPORT
+==============================================================================

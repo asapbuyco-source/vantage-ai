@@ -24,9 +24,6 @@ import { AppProvider, useAppContext } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { enableFirestorePersistence } from './firebaseConfig';
-import { TrialOfferPopup } from './components/TrialOfferPopup';
-import { WEEKLY_REGULAR_PRICE, WEEKLY_TRIAL_PRICE } from './src/constants/pricing';
-import { PaymentModal } from './components/PaymentModal';
 import { MotionDiv } from './components/MotionDiv';
 
 const VIP = lazy(() => import('./pages/VIP').then(m => ({ default: m.VIP })));
@@ -68,8 +65,6 @@ function AppContent() {
   const [showRenewalBanner, setShowRenewalBanner] = useState(false);
   const [showTrialUpsell, setShowTrialUpsell] = useState(false);
   const [renewalDaysLeft, setRenewalDaysLeft] = useState(0);
-  // Trial offer payment modal
-  const [showTrialPayment, setShowTrialPayment] = useState(false);
   // New version available banner
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
 
@@ -435,31 +430,6 @@ function AppContent() {
           ) : null}
           </AnimatePresence>
           <BetSlip />
-          {/* Trial Offer Popup — only on home/free tabs, only for non-VIP */}
-          {!showOnboarding && (location.pathname === '/' || location.pathname === '/free') && (
-            <TrialOfferPopup
-              isVip={!!(userProfile?.isVip || isAdmin)}
-              onClaim={() => setShowTrialPayment(true)}
-            />
-          )}
-          {showTrialPayment && (
-            <PaymentModal
-              isOpen={showTrialPayment}
-              onClose={() => setShowTrialPayment(false)}
-              plan={{
-                id: 'weekly',
-                label: language === 'fr' ? 'Pass Alpha 7 Jours' : '7-Day Alpha Pass',
-                price: String(WEEKLY_TRIAL_PRICE),
-                features: [
-                  language === 'fr' ? 'Signaux +EV Premium' : 'Premium +EV Signals',
-                  language === 'fr' ? 'Gestion Kelly' : 'Kelly Staking',
-                  language === 'fr' ? 'Suivi de la Valeur de Clôture (CLV)' : 'Closing Line Value (CLV) Tracker',
-                  language === 'fr' ? 'Filtres Advanced Screener' : 'Advanced Screener Filters',
-                ],
-              }}
-              onSuccess={() => { setShowTrialPayment(false); navigate('/vip'); }}
-            />
-          )}
           <ToastContainer />
         </div>
       } />

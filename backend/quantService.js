@@ -81,14 +81,17 @@ async function enrichWithAIAnalysis(predictions) {
 
     const enriched = [];
     for (const pred of predictions) {
+        // Find the safest (highest-probability) pick — what users actually see
+        const safestBet = pred._safest_bet;
+        const safestLabel = safestBet && Array.isArray(safestBet) ? safestBet[0] : (safestBet || pred.prediction || pred.bet_type);
+        const safestProb = safestBet && Array.isArray(safestBet) ? Math.round(safestBet[1] * 100) : Math.round((pred.calibrated_probability || pred.probability || 0) * 100);
+
         const prompt = `Match: ${pred.home_team} vs ${pred.away_team} (${pred.league})
-Pick: ${pred.bet_type} | Model probability: ${(pred.calibrated_probability || pred.probability * 100).toFixed(1)}% | EV: ${(pred.expected_value * 100).toFixed(1)}%
+User sees: "${safestLabel} at ${safestProb}%" | Model pick: ${pred.bet_type} at ${(pred.calibrated_probability || pred.probability * 100).toFixed(1)}% | EV: ${(pred.expected_value * 100).toFixed(1)}%
 Home form: ${pred.home_form || 'N/A'} | Away form: ${pred.away_form || 'N/A'}
 Home xG: ${pred.expected_goals_home?.toFixed(2) || 'N/A'} | Away xG: ${pred.expected_goals_away?.toFixed(2) || 'N/A'}
 
-Write a 2-sentence professional betting rationale for this pick.
-Be specific (use team names and stats). Tone: confident but measured.
-End with the key risk factor. Max 60 words.`;
+Write a 2-sentence professional betting rationale. Align with the SAFEST PICK shown to users (${safestLabel}). Be specific (use team names and stats). Tone: confident but measured. End with the key risk factor. Max 60 words.`;
 
         // Rate-limit: delay 2.5s per prediction (2 calls each → ~24 calls/min, under 30 rpm limit)
         if (enriched.length > 0) await sleep(DELAY_MS);

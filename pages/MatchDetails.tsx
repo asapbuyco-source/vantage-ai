@@ -204,6 +204,17 @@ fetchDetails();
 
             {/* Match Header */}
             <div className="p-4 border-b border-white/5">
+                <div className="flex flex-col items-center text-center space-y-1 mb-3">
+                    <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                        <span className="font-bold text-gray-300">{match.league || 'Unknown League'}</span>
+                        {match.league_tier && <span className="text-gray-600">· Tier {match.league_tier}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                        {match.time && <span>🕐 {match.time} (Lagos)</span>}
+                        {(match as any).venue_city && <span>📍 {(match as any).venue_city}</span>}
+                        <span>🏟️ {match.homeTeam} Home</span>
+                    </div>
+                </div>
                 <div className="flex justify-between items-center px-4 max-w-3xl mx-auto">
                     <div className="flex items-center gap-3 w-1/3">
                         <TeamLogo src={match.homeTeamLogo} teamName={match.homeTeam} className="w-10 h-10 md:w-12 md:h-12" />
@@ -341,14 +352,20 @@ fetchDetails();
                                             { l: 'Draw', p: (match.draw_prob || 0) * 100 },
                                             { l: 'Away', p: (match.away_win_prob || 0) * 100 },
                                         ].sort((a: any, b: any) => b.p - a.p) },
-                                        { g: 'Goals', items: [
+                                        { g: 'Goals Over', items: [
+                                            { l: 'Over 0.5', p: (match.over05_prob || 0) * 100 },
                                             { l: 'Over 1.5', p: (match.over15_prob || 0) * 100 },
                                             { l: 'Over 2.5', p: (match.over25_prob || 0) * 100 },
-                                            { l: 'Under 2.5', p: (match.under25_prob || 0) * 100 },
+                                            { l: 'Over 3.5', p: (match.over35_prob || 0) * 100 },
                                         ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
-                                        { g: 'BTTS & FH', items: [
+                                        { g: 'Goals Under', items: [
+                                            { l: 'Under 1.5', p: (match.under15_prob || 0) * 100 },
+                                            { l: 'Under 2.5', p: (match.under25_prob || 0) * 100 },
+                                            { l: 'Under 3.5', p: (match.under35_prob || 0) * 100 },
+                                            { l: 'Under 4.5', p: (match.under45_prob || 0) * 100 },
+                                        ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
+                                        { g: 'BTTS', items: [
                                             { l: 'BTTS Yes', p: (match.btts_prob || 0) * 100 },
-                                            { l: 'FH Over 0.5', p: (match.fh_over05_prob || 0) * 100 },
                                         ].filter((r: any) => r.p > 0) },
                                     ].map((group, gi) => group.items.length > 0 && (
                                         <div key={group.g}>

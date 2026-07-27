@@ -799,7 +799,19 @@ export const getUserCount = async (): Promise<{ total: number; vip: number }> =>
             getCountFromServer(coll),
             getCountFromServer(query(coll, where('isVip', '==', true)))
         ]);
-        return { total: totalSnap.data().count, vip: vipSnap.data().count };
+        const total = totalSnap.data().count;
+        const vip = vipSnap.data().count;
+        // Fallback: if count returns 0 (common when Firestore index is missing), 
+        // count from the first page of users
+        if (total === 0) {
+            const snapshot = await getDocs(query(coll, limit(500)));
+            const allProfiles = snapshot.docs.map(d => d.data());
+            return {
+                total: allProfiles.length,
+                vip: allProfiles.filter((p: any) => p.isVip).length
+            };
+        }
+        return { total, vip };
     } catch (e) {
         console.warn('getUserCount error', e);
         return { total: 0, vip: 0 };

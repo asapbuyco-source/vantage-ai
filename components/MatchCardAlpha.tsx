@@ -38,8 +38,8 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
   const fhOver15 = (match.fh_over15_prob ?? 0) * 100;
   const fhBtts = (match.fh_btts_prob ?? 0) * 100;
   const expCorners = match.expected_corners ?? 0;
-  const over85C = (match.over85_corners_prob ?? 0) * 100;
-  const over95C = (match.over95_corners_prob ?? 0) * 100;
+  const over65C = (match.over65_corners_prob ?? match.over85_corners_prob ?? 0) * 100;
+  const over75C = (match.over75_corners_prob ?? match.over95_corners_prob ?? 0) * 100;
   const evColor = ev >= 0.10 ? 'text-emerald-400' : ev >= 0.05 ? 'text-yellow-400' : 'text-orange-400';
 
   const topScorelines = match.top_scorelines;
@@ -224,12 +224,12 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
                   <span className="text-[8px] text-gray-500 uppercase tracking-wide">Markets</span>
                   <div className="grid grid-cols-3 gap-1.5 mt-1">
                     {[
+                      { label: 'Over 1.5', pct: over15 },
                       { label: 'Over 2.5', pct: over25 },
                       { label: 'BTTS', pct: btts },
-                      { label: 'O 1.5', pct: over15 },
+                      { label: 'Under 1.5', pct: ((match.under15_prob ?? 0) * 100) },
+                      { label: 'Under 2.5', pct: ((match.under25_prob ?? 0) * 100) },
                       { label: 'DC 1X', pct: dc1x },
-                      { label: 'DC X2', pct: dcx2 },
-                      { label: topScore ? `CS ${topScore.score}` : 'Score', pct: topScore ? topScore.prob * 100 : 0 },
                     ].map((mkt, i) => (
                       <div key={i} className="flex flex-col items-center justify-center px-1 py-1.5 bg-white/50 dark:bg-white/5 rounded-lg">
                         <span className="text-[8px] font-medium text-gray-500 dark:text-gray-400">{mkt.label}</span>
@@ -260,14 +260,14 @@ export const MatchCardAlpha: React.FC<MatchCardAlphaProps> = ({ match, idx, isEx
                   </div>
                 </div>
 
-                {/* ── Corners ── */}
-                {expCorners > 0 && (
+                {/* ── Corners — only show if meaningful ── */}
+                {expCorners > 0 && (over65C > 3 || over75C > 1) && (
                 <div>
                   <span className="text-[8px] text-gray-500 uppercase tracking-wide">Corners ~{expCorners.toFixed(1)}</span>
                   <div className="grid grid-cols-2 gap-1.5 mt-1">
                     {[
-                      { label: 'Over 8.5', pct: over85C },
-                      { label: 'Over 9.5', pct: over95C },
+                      { label: 'Over 6.5', pct: over65C },
+                      { label: 'Over 7.5', pct: over75C },
                     ].map((mkt, i) => (
                       <div key={i} className="flex items-center justify-between px-2 py-1 bg-white/50 dark:bg-white/5 rounded-lg">
                         <span className="text-[8px] font-medium text-gray-500 dark:text-gray-400">{mkt.label}</span>
