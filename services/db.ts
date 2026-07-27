@@ -795,23 +795,22 @@ export const updateUserProfile = async (uid: string, data: Partial<UserProfile>)
 export const getUserCount = async (): Promise<{ total: number; vip: number }> => {
     try {
         const coll = collection(db, 'profiles');
+        // Use getCountFromServer first (fast, needs Firestore index)
         const [totalSnap, vipSnap] = await Promise.all([
             getCountFromServer(coll),
             getCountFromServer(query(coll, where('isVip', '==', true)))
         ]);
         const total = totalSnap.data().count;
         const vip = vipSnap.data().count;
-        // Fallback: if count returns 0 (common when Firestore index is missing), 
-        // count from the first page of users
-        if (total === 0) {
-            const snapshot = await getDocs(query(coll, limit(500)));
-            const allProfiles = snapshot.docs.map(d => d.data());
-            return {
-                total: allProfiles.length,
-                vip: allProfiles.filter((p: any) => p.isVip).length
-            };
-        }
-        return { total, vip };
+        if (total > 0) return { total, vip };
+        
+        // Fallback: count all docs (works without index, slower for large collections)
+        const allDocs = await getDocs(coll);
+        const profiles = allDocs.docs.map(d => d.data());
+        return {
+            total: profiles.length,
+            vip: profiles.filter((p: any) => p.isVip).length
+        };
     } catch (e) {
         console.warn('getUserCount error', e);
         return { total: 0, vip: 0 };

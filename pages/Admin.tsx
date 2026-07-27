@@ -252,7 +252,7 @@ export const Admin: React.FC<AdminProps> = () => {
         try {
             const cursorDoc = append ? lastCursorRef.current : null;
             const [result, countData] = await Promise.all([
-                getAllUsers(cursorDoc, 50),
+                getAllUsers(cursorDoc, 200),
                 append ? Promise.resolve(null) : getUserCount()
             ]);
             const data: UserProfile[] = Array.isArray((result as any)?.users)
@@ -1227,7 +1227,7 @@ export const Admin: React.FC<AdminProps> = () => {
                             <Search size={16} className="absolute left-3 top-3 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search email..."
+                                placeholder="Search name or email..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-vantage-cyan/50 outline-none text-slate-900 dark:text-white"
