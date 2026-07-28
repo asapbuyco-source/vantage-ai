@@ -351,6 +351,33 @@ fetchDetails();
                             </div>
                         </div>
 
+                        {/* What to Avoid */}
+                        {(() => {
+                            const avoidMarkets = [
+                                { l: 'Home Win', p: (match.home_win_prob || 0) * 100 },
+                                { l: 'Away Win', p: (match.away_win_prob || 0) * 100 },
+                                { l: 'Draw', p: (match.draw_prob || 0) * 100 },
+                            ].filter(m => m.p > 0).sort((a, b) => a.p - b.p);
+                            if (avoidMarkets.length === 0) return null;
+                            return (
+                                <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                                    <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block mb-2">
+                                        {language === 'fr' ? 'À ÉVITER' : 'WHAT TO AVOID'}
+                                    </span>
+                                    <div className="space-y-1">
+                                        {avoidMarkets.slice(0, 2).map((m, i) => (
+                                            <p key={i} className="text-[10px] text-gray-400">
+                                                ❌ {m.l} — {m.p.toFixed(0)}% {language === 'fr' ? 'de chance' : 'chance'}
+                                            </p>
+                                        ))}
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1">
+                                        {language === 'fr' ? 'Ces marchés ont une faible probabilité.' : 'These markets have low probability of success.'}
+                                    </p>
+                                </div>
+                            );
+                        })()}
+
                         {/* Risk Meter */}
                         <div className="bg-white/5 border border-white/5 rounded-xl p-3">
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">

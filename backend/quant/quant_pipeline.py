@@ -769,6 +769,43 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "calibration_tier": p.get("calibration_tier"),
             "calibrated_probability": p.get("calibrated_probability"),
             "bet_type": p.get("bet_type"),
+            # Team stats
+            "home_avg_scored": p.get("home_avg_scored"),
+            "away_avg_scored": p.get("away_avg_scored"),
+            "home_avg_conceded": p.get("home_avg_conceded"),
+            "away_avg_conceded": p.get("away_avg_conceded"),
+            "home_win_rate": p.get("home_win_rate"),
+            "away_win_rate": p.get("away_win_rate"),
+            "home_shots_on_target": p.get("home_shots_on_target"),
+            "away_shots_on_target": p.get("away_shots_on_target"),
+            "home_possession": p.get("home_possession"),
+            "away_possession": p.get("away_possession"),
+            # Context signals
+            "home_days_rest": p.get("home_days_rest"),
+            "away_days_rest": p.get("away_days_rest"),
+            "home_sidelined_count": p.get("home_sidelined_count"),
+            "away_sidelined_count": p.get("away_sidelined_count"),
+            "weather": p.get("weather"),
+            "weather_penalty": p.get("weather_penalty"),
+            "line_signal": p.get("line_signal"),
+            "line_shift": p.get("line_shift"),
+            "btts_blanking_risk": p.get("btts_blanking_risk"),
+            "btts_blanking_reason": p.get("btts_blanking_reason"),
+            "model_version": p.get("model_version"),
+            # Missing market probabilities
+            "over05_prob": p.get("over05_prob"),
+            "over35_prob": p.get("over35_prob"),
+            "over45_prob": p.get("over45_prob"),
+            "under05_prob": p.get("under05_prob"),
+            "under15_prob": p.get("under15_prob"),
+            "under25_prob": p.get("under25_prob"),
+            "under35_prob": p.get("under35_prob"),
+            "under45_prob": p.get("under45_prob"),
+            "over65_corners_prob": p.get("over65_corners_prob"),
+            "over75_corners_prob": p.get("over75_corners_prob"),
+            # Safest bet
+            "_safest_bet": p.get("_safest_bet"),
+            "hedge_suggestion": p.get("hedge_suggestion"),
         }
         for p in predictions
     ]

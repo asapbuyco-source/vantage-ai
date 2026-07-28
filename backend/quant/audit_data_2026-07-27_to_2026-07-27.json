@@ -1,0 +1,138 @@
+{
+  "metadata": {
+    "generated": "2026-07-28T10:16:18.414891+00:00",
+    "date_range": [
+      "2026-07-27",
+      "2026-07-27"
+    ],
+    "total_dates": 1,
+    "mode": "grade_only"
+  },
+  "summary": {
+    "total_predictions": 4,
+    "graded": 4,
+    "wins": 2,
+    "losses": 2,
+    "voids": 0,
+    "failed_fetch": 0,
+    "win_rate": 0.5,
+    "roi": -0.2925,
+    "total_profit": -1.17,
+    "total_stake": 4.0
+  },
+  "by_market": {
+    "Under 2.5 Goals": {
+      "wins": 1,
+      "losses": 2,
+      "voids": 0
+    },
+    "Over 1.5 Goals": {
+      "wins": 1,
+      "losses": 0,
+      "voids": 0
+    }
+  },
+  "by_league": {
+    "Eredivisie": {
+      "wins": 2,
+      "losses": 1,
+      "voids": 0
+    },
+    "Chilean Primera Divisi\u00f3n": {
+      "wins": 0,
+      "losses": 1,
+      "voids": 0
+    }
+  },
+  "by_confidence": {
+    "high": {
+      "wins": 2,
+      "losses": 2
+    },
+    "medium": {
+      "wins": 0,
+      "losses": 0
+    },
+    "low": {
+      "wins": 0,
+      "losses": 0
+    }
+  },
+  "corner_analysis": {},
+  "loss_analysis_summary": {
+    "total_losses": 2,
+    "close_losses": 1,
+    "overconfident": 0,
+    "fixable_minor": 0,
+    "fixable_moderate": 1,
+    "fixable_major": 1
+  },
+  "loss_analysis": [
+    {
+      "date": "2026-07-27",
+      "match": "Atletico Goianiense vs Operario-PR",
+      "fixture_id": "1520791",
+      "bet_type": "Under 2.5 Goals",
+      "score": "3-1",
+      "probability": 0.624,
+      "odds": 1.62,
+      "confidence": 62.4,
+      "close_loss": false,
+      "close_detail": "",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.344,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.411,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.692,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Alternative market 'Over 1.5 Goals' would have won",
+      "fix_severity": "major"
+    },
+    {
+      "date": "2026-07-27",
+      "match": "Union Espanola vs Recoleta",
+      "fixture_id": "1511624",
+      "bet_type": "Under 2.5 Goals",
+      "score": "2-1",
+      "probability": 0.5292,
+      "odds": 2.05,
+      "confidence": 52.9,
+      "close_loss": true,
+      "close_detail": "Under 2.5 needed <3 goals, got 3 (1 goal over)",
+      "overconfident": false,
+      "alternative_winners": [
+        {
+          "market": "Home Win",
+          "prob": 0.349,
+          "would_win": true
+        },
+        {
+          "market": "Over 2.5 Goals",
+          "prob": 0.454,
+          "would_win": true
+        },
+        {
+          "market": "Over 1.5 Goals",
+          "prob": 0.728,
+          "would_win": true
+        }
+      ],
+      "value_bets_winners": [],
+      "recommended_fix": "Close miss; 'Over 1.5 Goals' would have won on this match",
+      "fix_severity": "moderate"
+    }
+  ]
+}

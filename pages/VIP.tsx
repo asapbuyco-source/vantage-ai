@@ -52,8 +52,6 @@ export const VIP: React.FC<VIPProps> = () => {
   }, []);
 
   const [activeVipTab, setActiveVipTab] = useState<'predictions' | 'vault' | 'accumulators'>('predictions');
-  const [hasSeenPicksSection, setHasSeenPicksSection] = useState(false);
-  const [showPicksHighlight, setShowPicksHighlight] = useState(false);
   const [activeSport, setActiveSport] = useState<'football' | 'basketball' | 'cricket'>('football');
   const activeAltPredictions = activeSport === 'cricket' ? cricketPredictions : basketballPredictions;
   const activeAltSportLabel = activeSport === 'cricket' ? 'Cricket' : 'Basketball';
@@ -83,7 +81,7 @@ export const VIP: React.FC<VIPProps> = () => {
   const [quantLoading, setQuantLoading] = useState(false);
   const [quantBetFilter, setQuantBetFilter] = useState<string>('All');
   const [quantLeagueFilter, setQuantLeagueFilter] = useState<string>('All');
-  const [quantExpanded, setQuantExpanded] = useState(true);
+  
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const [showPortfolioEdit, setShowPortfolioEdit] = useState(false);
   const [showAllPlans, setShowAllPlans] = useState(false);
@@ -99,15 +97,6 @@ export const VIP: React.FC<VIPProps> = () => {
     return sorted;
   }, [predictions]);
 
-  // Auto-expand Model Picks on first visit to predictions tab
-  useEffect(() => {
-    if (activeVipTab === 'predictions' && !hasSeenPicksSection && quantPredictions.length > 0) {
-      setQuantExpanded(true);
-      setHasSeenPicksSection(true);
-      setShowPicksHighlight(true);
-      setTimeout(() => setShowPicksHighlight(false), 2500);
-    }
-  }, [activeVipTab, hasSeenPicksSection, quantPredictions.length]);
 
   // Load accumulators from DataContext accumulators or fallback to Firestore
   useEffect(() => {
@@ -665,38 +654,17 @@ export const VIP: React.FC<VIPProps> = () => {
 
         {/* â”€â”€ VANTAGE MODEL PICKS SECTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {activeVipTab === 'predictions' && (
-        <div className={`mb-6 animate-in slide-in-from-left duration-300 ${showPicksHighlight ? 'ring-2 ring-cyan-400 ring-opacity-50 rounded-2xl' : ''}`}>
-          {/* Sticky Header */}
-          <div className={`${quantExpanded ? 'sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm -mx-2 px-2 py-2 rounded-xl' : ''}`}>
-          {/* Header */}
-          <button
-            onClick={() => setQuantExpanded(v => !v)}
-            className="w-full flex items-center justify-between mb-3"
-          >
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold uppercase tracking-widest flex items-center gap-2 text-slate-700 dark:text-gray-300">
               <BarChart2 size={16} className="text-emerald-500" />
               <span>Model Picks</span>
               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 ml-1">VANTAGE AI</span>
-              {!quantExpanded && quantPredictions.length > 0 && (
-                <motion.span
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ duration: 0.6, repeat: Infinity }}
-                  className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-500 text-white ml-1"
-                >
-                  NEW
-                </motion.span>
-              )}
               {quantPredictions.length > 0 && (
-                <span className="text-[10px] font-normal text-gray-500">{quantPredictions.length} bets</span>
+                <span className="text-[10px] font-normal text-gray-500">{quantPredictions.length} picks</span>
               )}
             </h3>
-            {quantExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-          </button>
           </div>
-
-          <AnimatePresence>
-            {quantExpanded && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
 
                 {/* â”€â”€ Sport Toggle â”€â”€ */}
                 <div className="flex bg-slate-100 dark:bg-white/5 rounded-xl p-1 mb-4">
@@ -855,51 +823,50 @@ export const VIP: React.FC<VIPProps> = () => {
                   <>
                     {!quantLoading && quantPredictions.length > 0 && (
                       <>
-                        <div className="flex gap-1.5 flex-wrap mb-2">
-                          {['All', 'Straight Win', 'Over/Under', 'BTTS', 'Double Chance'].map(tab => (
-                            <button
-                              key={tab}
-                              onClick={() => setQuantBetFilter(tab)}
-                              className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all ${quantBetFilter === tab
-                                ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-500/30'
-                                : 'bg-slate-100 dark:bg-white/5 text-gray-500 border-slate-200 dark:border-white/10 hover:border-emerald-500/50'
-                                }`}
-                            >{tab}</button>
-                          ))}
-                        </div>
-
-                        {/* League filter - scrollable horizontal chip row */}
-                        {availableLeagues.length > 1 && (
-                          <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-                            {availableLeagues.map(league => (
-                              <button
-                                key={league}
-                                onClick={() => setQuantLeagueFilter(league)}
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold border whitespace-nowrap shrink-0 transition-all ${
-                                  quantLeagueFilter === league
-                                    ? 'bg-vantage-cyan text-slate-900 border-vantage-cyan shadow-sm shadow-vantage-cyan/30'
-                                    : 'bg-slate-100 dark:bg-white/5 text-gray-500 border-slate-200 dark:border-white/10 hover:border-vantage-cyan/50'
-                                }`}
-                              >
-                                {league === 'All' ? '🌍 All Leagues' : league}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {(quantBetFilter !== 'All' || quantLeagueFilter !== 'All') && (
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-[10px] text-gray-500">
-                              Showing <span className="font-bold text-vantage-cyan">{filteredQuantPredictions.length}</span> of {quantPredictions.length} picks
-                            </p>
-                            <button
-                              onClick={() => { setQuantBetFilter('All'); setQuantLeagueFilter('All'); }}
-                              className="text-[10px] font-bold text-gray-400 hover:text-vantage-cyan transition-colors underline"
+                        {/* Filter Bar */}
+                        <div className="flex items-center gap-2 mb-3 flex-wrap">
+                          <div className="relative">
+                            <select
+                              value={quantBetFilter}
+                              onChange={e => setQuantBetFilter(e.target.value)}
+                              className="appearance-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 pr-7 text-[10px] font-bold text-gray-600 dark:text-gray-300 focus:outline-none focus:border-emerald-500 cursor-pointer"
                             >
-                              Clear filters
-                            </button>
+                              <option value="All">Bet Type: All</option>
+                              <option value="Straight Win">Straight Win</option>
+                              <option value="Over/Under">Over/Under</option>
+                              <option value="BTTS">BTTS</option>
+                              <option value="Double Chance">Double Chance</option>
+                            </select>
+                            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                           </div>
-                        )}
+                          {availableLeagues.length > 1 && (
+                            <div className="relative">
+                              <select
+                                value={quantLeagueFilter}
+                                onChange={e => setQuantLeagueFilter(e.target.value)}
+                                className="appearance-none bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-1.5 pr-7 text-[10px] font-bold text-gray-600 dark:text-gray-300 focus:outline-none focus:border-vantage-cyan cursor-pointer max-w-[200px] truncate"
+                              >
+                                {availableLeagues.map(league => (
+                                  <option key={league} value={league}>{league === 'All' ? 'League: All' : league}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                          )}
+                          {(quantBetFilter !== 'All' || quantLeagueFilter !== 'All') && (
+                            <>
+                              <span className="text-[10px] text-gray-500 ml-1">
+                                <span className="font-bold text-vantage-cyan">{filteredQuantPredictions.length}</span>/<span className="text-gray-400">{quantPredictions.length}</span>
+                              </span>
+                              <button
+                                onClick={() => { setQuantBetFilter('All'); setQuantLeagueFilter('All'); }}
+                                className="text-[10px] font-bold text-gray-400 hover:text-vantage-cyan transition-colors underline ml-1"
+                              >
+                                Clear
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </>
                     )}
 
@@ -942,9 +909,6 @@ export const VIP: React.FC<VIPProps> = () => {
                 )}
                 </>
               )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
         )}
 

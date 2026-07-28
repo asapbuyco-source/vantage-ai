@@ -1,0 +1,59 @@
+
+==============================================================================
+  VANTAGE AI - PREDICTION AUDIT REPORT
+==============================================================================
+  Generated: 2026-07-28 10:16:18 UTC
+  Period: 2026-07-27 to 2026-07-27 (1 days)
+  Mode: Grade Only
+
+------------------------------------------------------------------------------
+  1. OVERALL PERFORMANCE
+------------------------------------------------------------------------------
+  Total Predictions: 4
+  Graded: 4
+  Won: 2 | Lost: 2 | Void: 0 | No Result: 0
+  Win Rate: 50.0%
+  ROI: -29.2%
+  Profit: -1.17 units on 4.00 staked
+
+------------------------------------------------------------------------------
+  2. PERFORMANCE BY MARKET TYPE
+------------------------------------------------------------------------------
+  Market                           Bets   Wins Losses     Win%   Profit
+  Under 2.5 Goals                     3      1      2    33.3%
+  Over 1.5 Goals                      1      1      0   100.0%
+
+------------------------------------------------------------------------------
+  3. PERFORMANCE BY LEAGUE (top 10 by volume)
+------------------------------------------------------------------------------
+  League                           Bets   Wins Losses     Win%
+  Eredivisie                          3      2      1    66.7%
+  Chilean Primera División            1      0      1     0.0%
+
+------------------------------------------------------------------------------
+  4. PERFORMANCE BY CONFIDENCE TIER
+------------------------------------------------------------------------------
+  high (>=70%)        : 2/4 = 50.0%
+
+------------------------------------------------------------------------------
+  6. LOSS PATTERN ANALYSIS
+------------------------------------------------------------------------------
+  Total losses: 2
+  Close losses (1 goal/event short): 1 (50.0%)
+  Overconfident (>=65% prob but lost): 0 (0.0%)
+  Fixable - Minor (value bet existed): 0 (0.0%)
+  Fixable - Moderate (alternative market): 1 (50.0%)
+  Fixable - Major / Unfixable: 1 (50.0%)
+
+  Close Losses (top 10):
+  Date         Match                               Bet                    Score  Detail
+  2026-07-27   Union Espanola vs Recoleta          Under 2.5 Goals        2-1    Under 2.5 needed <3 goals, got 3 (1 goal over)
+
+------------------------------------------------------------------------------
+  7. KEY RECOMMENDATIONS
+------------------------------------------------------------------------------
+  1. CLOSE LOSSES: 1 losses (50%) were by a single goal. Consider adding a 'saver' recommendation: for Over 2.5 picks with high confidence, suggest hedging with Over 1.5 as insurance.
+
+==============================================================================
+  END OF REPORT
+==============================================================================
