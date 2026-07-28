@@ -252,7 +252,7 @@ export const Admin: React.FC<AdminProps> = () => {
         try {
             const cursorDoc = append ? lastCursorRef.current : null;
             const [result, countData] = await Promise.all([
-                getAllUsers(cursorDoc, 200),
+                getAllUsers(null, 1000),
                 append ? Promise.resolve(null) : getUserCount()
             ]);
             const data: UserProfile[] = Array.isArray((result as any)?.users)

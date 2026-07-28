@@ -25,7 +25,7 @@ export const MatchDetails: React.FC = () => {
     const [match, setMatch] = useState<Match | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'analysis' | 'overview' | 'h2h' | 'lineup'>('analysis');
-    const [secondaryTab, setSecondaryTab] = useState<string>('Markets Analysis');
+    const [secondaryTab, setSecondaryTab] = useState<string>('Predictions');
     const [allMatchPicks, setAllMatchPicks] = useState<Match[]>([]);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [selectedScoreline, setSelectedScoreline] = useState<number>(0);
@@ -266,56 +266,214 @@ fetchDetails();
                     <div className="relative rounded-xl overflow-hidden mb-4 border border-emerald-500/20 bg-gradient-to-r from-emerald-900/30 to-vantage-bg">
                         <div className="relative z-10 px-4 py-3 flex items-center gap-3">
                             <Trophy size={16} className="text-emerald-400 shrink-0" />
-                            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest shrink-0">Safest Pick</span>
-                            <span className="text-sm font-bold text-white truncate flex-1">
-                                {(() => {
-                                    const top = getTopProbPicks(match);
-                                    return top.length > 0 ? top.map((p: any) => p.name).join(' / ') : (match.prediction_en || match.prediction || match.bet_type);
-                                })()}
-                            </span>
-                            <span className="text-sm font-black font-mono text-emerald-400 shrink-0">
-                                {(() => {
-                                    const top = getTopProbPicks(match);
-                                    return top.length > 0 ? Math.round(top[0].prob * 100) : (match.confidence ?? 0);
-                                })()}%
-                            </span>
+                            <div className="min-w-0 flex-1">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block">Safest Pick</span>
+                                <span className="text-sm font-bold text-white truncate block">
+                                    {(() => {
+                                        const top = getTopProbPicks(match);
+                                        return top.length > 0 ? top.map((p: any) => p.name).join(' / ') : (match.prediction_en || match.prediction || match.bet_type);
+                                    })()}
+                                </span>
+                            </div>
+                            <div className="text-right shrink-0">
+                                <span className="text-lg font-black font-mono text-emerald-400 block">
+                                    {(() => {
+                                        const top = getTopProbPicks(match);
+                                        return top.length > 0 ? Math.round(top[0].prob * 100) : (match.confidence ?? 0);
+                                    })()}%
+                                </span>
+                                <span className="text-[9px] text-emerald-400/70">
+                                    {(() => {
+                                        const p = (() => { const t = getTopProbPicks(match); return t.length > 0 ? Math.round(t[0].prob * 100) : (match.confidence ?? 0); })();
+                                        if (p >= 90) return '★★★★★ Elite';
+                                        if (p >= 80) return '★★★★☆ Very Strong';
+                                        if (p >= 70) return '★★★☆☆ Strong';
+                                        if (p >= 60) return '★★☆☆☆ Moderate';
+                                        return '★☆☆☆☆ Low';
+                                    })()}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                        {/* AI Confidence Card */}
-                        <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 flex items-center justify-center relative overflow-hidden group hover:border-vantage-cyan/30 transition-colors">
-                            <div className="w-12 h-12 rounded-full border-[3px] border-vantage-cyan flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(45,212,191,0.2)]">
-                                <span className="text-xs font-bold font-mono text-white">{match.confidence ?? 0}%</span>
+                    {/* Decision Guide */}
+                    <div className="space-y-3 mb-6">
+                        {/* AI Match Rating */}
+                        {(() => {
+                            const prob = (() => { const t = getTopProbPicks(match); return t.length > 0 ? Math.round(t[0].prob * 100) : (match.confidence ?? 0); })();
+                            const quality = match.data_quality ?? 0.8;
+                            const agreement = match.model_agreement ?? match.result_confidence ?? 0.8;
+                            const rating = Math.round(((prob/100 * 0.4) + (quality * 0.3) + (agreement * 0.3)) * 10);
+                            return (
+                                <div className="bg-gradient-to-r from-emerald-500/10 to-vantage-cyan/5 border border-emerald-500/20 rounded-xl p-3 flex items-center justify-between">
+                                    <div>
+                                        <span className="text-[9px] text-emerald-400 uppercase font-bold">AI Match Rating</span>
+                                        <span className="text-2xl font-black text-white ml-2">{rating}/10</span>
+                                    </div>
+                                    <div className="flex-1 mx-3 h-2 rounded-full bg-white/10 overflow-hidden">
+                                        <div className="h-full bg-gradient-to-r from-emerald-500 to-vantage-cyan rounded-full" style={{width: `${rating*10}%`}} />
+                                    </div>
+                                    <span className="text-[9px] text-gray-500">{rating >= 8 ? 'Strong Match' : rating >= 6 ? 'Solid Match' : 'Uncertain'}</span>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Why This Pick + Risk Factors */}
+                        <div className="grid grid-cols-5 gap-3">
+                            <div className="col-span-3 bg-white/5 border border-white/5 rounded-xl p-3">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">
+                                    {language === 'fr' ? 'POURQUOI CE PICK' : 'WHY THIS PICK'}
+                                </span>
+                                <div className="space-y-1">
+                                    {(() => { const h = match.home_avg_scored; if (h != null && Number(h) > 1.2) return <p className="text-[10px] text-gray-300">🟢 {match.homeTeam} averages {Number(h).toFixed(1)} goals/game</p>; return null; })()}
+                                    {(() => { const a = match.away_avg_scored; if (a != null && Number(a) > 1.2) return <p className="text-[10px] text-gray-300">🟢 {match.awayTeam} averages {Number(a).toFixed(1)} goals/game</p>; return null; })()}
+                                    {(() => { const xg = (match.expected_goals_home ?? 0) + (match.expected_goals_away ?? 0); if (xg > 2) return <p className="text-[10px] text-gray-300">🟢 Combined xG = {xg.toFixed(1)}</p>; return null; })()}
+                                    {(() => { const ag = match.model_agreement ?? match.result_confidence ?? 0; if (ag > 0.7) return <p className="text-[10px] text-gray-300">🟢 Models agree ({ag >= 0.9 ? 'Strongly' : 'Well'})</p>; return null; })()}
+                                    {Number(match.odds) > 1.05 && <p className="text-[10px] text-gray-300">🟢 Odds still offer value</p>}
+                                    {match.vault_eligible && <p className="text-[10px] text-gray-300">🟢 Qualifies for Vault strategy</p>}
+                                </div>
                             </div>
-                            <div className="ml-3">
-                                <span className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">AI CONFIDENCE</span>
-                                <span className="text-sm font-bold text-vantage-cyan block">Very Strong</span>
+                            <div className="col-span-2 bg-white/5 border border-white/5 rounded-xl p-3">
+                                <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider block mb-2">
+                                    {language === 'fr' ? 'FACTEURS DE RISQUE' : 'RISK FACTORS'}
+                                </span>
+                                <div className="space-y-1">
+                                    {((match.home_days_rest ?? 7) < 4 || (match.away_days_rest ?? 7) < 4) && <p className="text-[10px] text-rose-400/70">⚠ Short rest ({Math.min(match.home_days_rest ?? 7, match.away_days_rest ?? 7)}d)</p>}
+                                    {((match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0)) >= 3 && <p className="text-[10px] text-rose-400/70">⚠ {(match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0)} players out</p>}
+                                    {(match as any).line_signal === 'sharp_money_disagrees' && <p className="text-[10px] text-rose-400/70">⚠ Market moved against us</p>}
+                                    {match.weather === 'windy' && <p className="text-[10px] text-rose-400/70">⚠ High wind conditions</p>}
+                                    {match.weather === 'rainy' && <p className="text-[10px] text-rose-400/70">⚠ Heavy rain expected</p>}
+                                    {(match as any).btts_blanking_risk && <p className="text-[10px] text-rose-400/70">⚠ Low scoring risk</p>}
+                                    {!(((match.home_days_rest ?? 7) < 4) || ((match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0)) >= 3 || (match as any).line_signal === 'sharp_money_disagrees' || match.weather === 'windy' || match.weather === 'rainy' || (match as any).btts_blanking_risk) && (
+                                        <p className="text-[10px] text-emerald-400/70">🟢 No significant risks detected</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                        
-                        {/* Expected Goals Card */}
-                        {match.expected_goals_home != null && match.expected_goals_away != null && (
-                            <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden group hover:border-emerald-500/30 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">EXPECTED GOALS</span>
-                                    <Activity size={14} className="text-emerald-400 opacity-50" />
-                                </div>
-                                <div className="text-xl font-bold font-mono text-white mb-1">
-                                    {(match.expected_goals_home + match.expected_goals_away).toFixed(2)}
-                                </div>
-                                <div className="text-[10px] font-mono flex gap-3 text-gray-400">
-                                    <span><span className="text-gray-500">Home</span> <span className="text-emerald-400">{match.expected_goals_home.toFixed(2)}</span></span>
-                                    <span><span className="text-gray-500">Away</span> <span className="text-blue-400">{match.expected_goals_away.toFixed(2)}</span></span>
-                                </div>
+
+                        {/* Risk Meter */}
+                        <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                                {language === 'fr' ? 'NIVEAU DE RISQUE' : 'RISK LEVEL'}
+                            </span>
+                            {(() => {
+                                const rest = Math.min(match.home_days_rest ?? 7, match.away_days_rest ?? 7);
+                                const injured = (match.home_sidelined_count ?? 0) + (match.away_sidelined_count ?? 0);
+                                const hasSharpDisagree = (match as any).line_signal === 'sharp_money_disagrees';
+                                const hasWeather = match.weather === 'windy' || match.weather === 'rainy';
+                                let riskScore = 20; // Base
+                                if (rest < 3) riskScore += 30;
+                                else if (rest < 4) riskScore += 15;
+                                if (injured >= 6) riskScore += 25;
+                                else if (injured >= 3) riskScore += 10;
+                                if (hasSharpDisagree) riskScore += 20;
+                                if (hasWeather) riskScore += 15;
+                                riskScore = Math.min(riskScore, 100);
+                                const label = riskScore < 30 ? (language === 'fr' ? 'Très Faible' : 'Very Low') : riskScore < 50 ? (language === 'fr' ? 'Faible' : 'Low') : riskScore < 70 ? (language === 'fr' ? 'Moyen' : 'Medium') : (language === 'fr' ? 'Élevé' : 'High');
+                                const color = riskScore < 30 ? 'bg-emerald-500' : riskScore < 50 ? 'bg-vantage-cyan' : riskScore < 70 ? 'bg-amber-500' : 'bg-rose-500';
+                                const textColor = riskScore < 30 ? 'text-emerald-400' : riskScore < 50 ? 'text-vantage-cyan' : riskScore < 70 ? 'text-amber-400' : 'text-rose-400';
+                                return (
+                                    <>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className={`text-xs font-bold ${textColor}`}>{label}</span>
+                                            <span className="text-[9px] text-gray-500">{riskScore}/100</span>
+                                        </div>
+                                        <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                                            <div className={`h-full rounded-full ${color}`} style={{width: `${riskScore}%`}} />
+                                        </div>
+                                        <p className="text-[9px] text-gray-500 mt-1">
+                                            {riskScore < 30 ? (language === 'fr' ? 'Idéal pour les accumulators.' : 'Ideal for accumulators.') :
+                                             riskScore < 50 ? (language === 'fr' ? 'Bon pour les paris simples.' : 'Good for single bets.') :
+                                             riskScore < 70 ? (language === 'fr' ? 'À considérer avec prudence.' : 'Consider with caution.') :
+                                             (language === 'fr' ? 'Éviter les accumulators.' : 'Avoid accumulators.')}
+                                        </p>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Confidence Breakdown */}
+                        <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                                {language === 'fr' ? 'CONFIANCE DÉTAILLÉE' : 'CONFIDENCE BREAKDOWN'}
+                            </span>
+                            <div className="space-y-1.5">
+                                {[
+                                    { l: language === 'fr' ? 'Accord du Modèle' : 'Model Agreement', v: ((match.model_agreement ?? match.result_confidence ?? 0.8) * 100).toFixed(0) + '%' },
+                                    { l: language === 'fr' ? 'Qualité Données' : 'Data Quality', v: ((match.data_quality ?? 0.8) * 100).toFixed(0) + '%' },
+                                    { l: language === 'fr' ? 'Valeur Marché' : 'Market Value', v: ((match.expected_value ?? 0) > 0 ? '+' : '') + ((match.expected_value ?? 0) * 100).toFixed(1) + '% EV' },
+                                ].map(row => (
+                                    <div key={row.l} className="flex items-center gap-2">
+                                        <span className="text-[10px] text-gray-400 w-28 truncate">{row.l}</span>
+                                        <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                            <div className="h-full bg-vantage-cyan/60 rounded-full" style={{width: row.v.includes('%') ? row.v : '85%'}} />
+                                        </div>
+                                        <span className="text-[9px] font-mono text-gray-300 w-14 text-right">{row.v}</span>
+                                    </div>
+                                ))}
                             </div>
-                        )}
+                        </div>
+
+                        {/* Match Outlook — star ratings */}
+                        <div className="grid grid-cols-3 gap-2">
+                            {(() => {
+                                const totalXg = (match.expected_goals_home ?? 0) + (match.expected_goals_away ?? 0);
+                                const goalsStars = totalXg > 3.5 ? '★★★★★' : totalXg > 2.5 ? '★★★★☆' : totalXg > 1.5 ? '★★★☆☆' : '★★☆☆☆';
+                                const goalsLabel = totalXg > 3.5 ? 'Very High' : totalXg > 2.5 ? 'High' : totalXg > 1.5 ? 'Moderate' : 'Low';
+                                const homeStars = (match.home_win_prob ?? 0) > 0.5 ? '★★★★☆' : (match.home_win_prob ?? 0) > 0.35 ? '★★★☆☆' : '★★☆☆☆';
+                                const awayStars = (match.away_win_prob ?? 0) > 0.4 ? '★★★★☆' : (match.away_win_prob ?? 0) > 0.25 ? '★★★☆☆' : '★★☆☆☆';
+                                return (
+                                    <>
+                                        <div className="bg-white/5 rounded-xl p-2 text-center">
+                                            <p className="text-[9px] text-gray-500">⚽ Goals Expected</p>
+                                            <p className="text-sm text-white">{goalsStars}</p>
+                                            <p className="text-[9px] text-gray-400">{goalsLabel}</p>
+                                        </div>
+                                        <div className="bg-white/5 rounded-xl p-2 text-center">
+                                            <p className="text-[9px] text-gray-500">🏠 Home Strength</p>
+                                            <p className="text-sm text-white">{homeStars}</p>
+                                            <p className="text-[9px] text-gray-400">{match.home_win_prob ? Math.round((match.home_win_prob||0)*100) + '%' : '—'}</p>
+                                        </div>
+                                        <div className="bg-white/5 rounded-xl p-2 text-center">
+                                            <p className="text-[9px] text-gray-500">✈ Away Threat</p>
+                                            <p className="text-sm text-white">{awayStars}</p>
+                                            <p className="text-[9px] text-gray-400">{match.away_win_prob ? Math.round((match.away_win_prob||0)*100) + '%' : '—'}</p>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Other Good Markets — just 3-4 */}
+                        {(() => {
+                            const markets = [
+                                { l: 'BTTS', p: ((match.btts_prob || 0) * 100) },
+                                { l: 'Over 2.5', p: ((match.over25_prob || 0) * 100) },
+                                { l: 'DC 1X', p: ((match.double_chance_1x || 0) * 100) },
+                                { l: 'FH Over 0.5', p: ((match.fh_over05_prob || 0) * 100) },
+                            ].filter(m => m.p > 50).sort((a, b) => b.p - a.p).slice(0, 4);
+                            if (markets.length === 0) return null;
+                            return (
+                                <div className="bg-white/5 border border-white/5 rounded-xl p-3">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-2">
+                                        {language === 'fr' ? 'AUTRES BONS MARCHÉS' : 'OTHER GOOD MARKETS'}
+                                    </span>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {markets.map((m, i) => (
+                                            <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-white/5">
+                                                <span className="text-[10px] text-gray-300">{m.l}</span>
+                                                <span className="text-[10px] font-bold font-mono text-emerald-400">✓ {m.p.toFixed(0)}%</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Secondary Tabs */}
                     <div className="flex border-b border-white/10 mb-6 overflow-x-auto no-scrollbar gap-6 flex-nowrap">
-                        {['Markets Analysis', 'Scorelines', 'Insights', 'Trends'].map(tab => (
+                        {['Predictions', 'Scores', 'AI Reasons', 'Team Form'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setSecondaryTab(tab)}
@@ -326,10 +484,10 @@ fetchDetails();
                                 }`}
                             >
                                 <span className="flex items-center gap-2">
-                                    {tab === 'Markets Analysis' && <BarChart3 size={14}/>}
-                                    {tab === 'Scorelines' && <Target size={14}/>}
-                                    {tab === 'Insights' && <Zap size={14}/>}
-                                    {tab === 'Trends' && <Activity size={14}/>}
+                                    {tab === 'Predictions' && <BarChart3 size={14}/>}
+                                    {tab === 'Scores' && <Target size={14}/>}
+                                    {tab === 'AI Reasons' && <Zap size={14}/>}
+                                    {tab === 'Team Form' && <Activity size={14}/>}
                                     {tab}
                                 </span>
                             </button>
@@ -337,7 +495,7 @@ fetchDetails();
                     </div>
 
                     {/* Markets Analysis Grid Layout */}
-                    {secondaryTab === 'Markets Analysis' && (
+                    {secondaryTab === 'Predictions' && (
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pb-6">
                         {/* Left Column */}
                         <div className="md:col-span-4 space-y-6">
@@ -515,7 +673,7 @@ fetchDetails();
                     )}
 
                     {/* Scorelines Tab */}
-                    {secondaryTab === 'Scorelines' && match.top_scorelines?.length > 0 && (
+                    {secondaryTab === 'Scores' && match.top_scorelines?.length > 0 && (
                         <div className="pb-6">
                             <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">LIKELY SCORELINES</h3>
                             <div className="flex flex-wrap gap-2 md:gap-3">
@@ -533,7 +691,7 @@ fetchDetails();
                     )}
 
                     {/* Insights Tab */}
-                    {secondaryTab === 'Insights' && (
+                    {secondaryTab === 'AI Reasons' && (
                         <div className="pb-6 space-y-4">
                             <div className="bg-slate-900/60 border border-white/5 rounded-xl p-5">
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">MATCH INSIGHTS</h3>

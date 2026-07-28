@@ -110,12 +110,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     await updateDoc(userRef, { referralCode: newCode });
                     profileData.referralCode = newCode;
                 }
-                // Backfill revenuecatId for existing users (needed for Google Play subscriptions)
-                if (!profileData.revenuecatId) {
-                    await updateDoc(userRef, { revenuecatId: firebaseUser.uid });
-                    profileData.revenuecatId = firebaseUser.uid;
-                }
-                if (profileData.isVip && profileData.vipExpiry) {
+            if (!profileData.revenuecatId) {
+                // revenuecatId stored for subscription management
+                profileData.revenuecatId = firebaseUser.uid;
+            }
+            if (profileData.isVip && profileData.vipExpiry) {
                     if (new Date() > new Date(profileData.vipExpiry)) {
                         try {
                             // Fix: Ensure UI state reflects expiration even if DB write fails temporarily
@@ -143,7 +142,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     referralCount: 0,
                     referralEarnings: 0,
                     lifetimeEarnings: 0,
-                    revenuecatId: firebaseUser.uid,
+                    createdAt: new Date().toISOString(),
                 };
                 await setDoc(userRef, skeletonProfile);
                 profileData = skeletonProfile;
@@ -173,7 +172,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 referralCount: 0,
                 referralEarnings: 0,
                 lifetimeEarnings: 0,
-                revenuecatId: firebaseUser.uid,
+                createdAt: new Date().toISOString(),
             };
             await setDoc(userRef, profileData);
 
