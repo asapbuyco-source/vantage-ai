@@ -2,24 +2,24 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-    Sparkles, TrendingUp, Target, ShieldCheck,
-    Flame, RefreshCw, Check, ChevronRight,
-    Wallet, DollarSign, Wand2, Info, BrainCircuit, Loader2
+    Sparkles, Target,
+    RefreshCw, Check, ChevronRight, Minus, Plus,
+    Wallet, Wand2, Info, BrainCircuit, Loader2
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { useData } from '../context/DataContext';
 import { GlassCard } from './GlassCard';
 import { TeamLogo } from './TeamLogo';
 import { useAuth } from '../context/AuthContext';
-import { Match, NavigationTab } from '../types';
+import { Match } from '../types';
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
 
 interface TicketWizardProps {}
 
-type RiskLevel = 'low' | 'med' | 'high';
-
 const DEFAULT_SPORT = 'football';
+const MIN_CONFIDENCE = 60;
+const MIN_PROBABILITY = 0.50;
 
 function getMatchKey(match: Match): string {
     return String(match.fixture_id ?? match.fixtureId ?? match.id);
@@ -31,10 +31,6 @@ function getMatchSport(match: Match): string {
 
 function getModelProbability(match: Match): number {
     return match.calibrated_probability ?? match.probability ?? ((match.confidence ?? 0) / 100);
-}
-
-function getExpectedValue(match: Match): number {
-    return match.expected_value ?? ((match.ev_pct ?? 0) / 100);
 }
 
 function getMarketBase(market: string): string {
@@ -58,79 +54,13 @@ function getTeamKeys(match: Match): string[] {
 }
 
 function isTicketEligible(match: Match): boolean {
-    if (match.vault_eligible === false) return false;
-    if (match.odds_fresh === false) return false;
-    return (match.odds ?? 0) > 1 && getModelProbability(match) > 0;
-}
-
-function getRiskSettings(riskLevel: RiskLevel, hasMultipleSports: boolean) {
-    if (riskLevel === 'low') {
-        return {
-            minConfidence: 80,
-            maxLegs: 4,
-            sameLeagueCap: 2,
-            sameSportCap: hasMultipleSports ? 2 : 99,
-            marketCaps: { goals_total: 1, btts: 1, result: 2, double_chance: 2, dnb: 2 } as Record<string, number>,
-            overshoot: 1.12,
-        };
-    }
-    if (riskLevel === 'high') {
-        return {
-            minConfidence: 0,
-            maxLegs: 6,
-            sameLeagueCap: 3,
-            sameSportCap: 99,
-            marketCaps: { goals_total: 2, btts: 2, result: 3, double_chance: 3, dnb: 3 } as Record<string, number>,
-            overshoot: 1.35,
-        };
-    }
-    return {
-        minConfidence: 70,
-        maxLegs: 5,
-        sameLeagueCap: 2,
-        sameSportCap: hasMultipleSports ? 2 : 99,
-        marketCaps: { goals_total: 1, btts: 1, result: 2, double_chance: 2, dnb: 2 } as Record<string, number>,
-        overshoot: 1.2,
-    };
-}
-
-function countBy<T>(items: T[], getter: (item: T) => string): Record<string, number> {
-    return items.reduce<Record<string, number>>((acc, item) => {
-        const key = getter(item);
-        acc[key] = (acc[key] || 0) + 1;
-        return acc;
-    }, {});
-}
-
-function violatesCorrelationGuard(selected: Match[], candidate: Match, riskLevel: RiskLevel, hasMultipleSports: boolean): boolean {
-    const settings = getRiskSettings(riskLevel, hasMultipleSports);
-    const candidateKey = getMatchKey(candidate);
-    if (selected.some(match => getMatchKey(match) === candidateKey)) return true;
-
-    const leagueCounts = countBy(selected, match => match.league || 'unknown');
-    if ((leagueCounts[candidate.league || 'unknown'] || 0) >= settings.sameLeagueCap) return true;
-
-    const sportCounts = countBy(selected, getMatchSport);
-    if ((sportCounts[getMatchSport(candidate)] || 0) >= settings.sameSportCap) return true;
-
-    const marketCounts = countBy(selected, match => getMarketBase(getTicketMarket(match)));
-    const marketBase = getMarketBase(getTicketMarket(candidate));
-    const marketCap = settings.marketCaps[marketBase] ?? 2;
-    if ((marketCounts[marketBase] || 0) >= marketCap) return true;
-
-    if (riskLevel !== 'high') {
-        const usedTeams = new Set(selected.flatMap(getTeamKeys));
-        if (getTeamKeys(candidate).some(team => usedTeams.has(team))) return true;
-    }
-
-    return false;
+    return (match.odds ?? 0) > 1 && (match.confidence ?? 0) > 0;
 }
 
 function ticketQualityScore(match: Match): number {
     const confidence = match.confidence ?? 0;
     const prob = getModelProbability(match);
     const odds = match.odds ?? 0;
-    // Accumulators compound variance, so we strictly prioritize pure probability and confidence over single-event EV
     return confidence * 2 + prob * 100 - Math.max(0, odds - 2.0) * 10;
 }
 
@@ -142,18 +72,16 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
     const { userProfile } = useAuth();
     const isVip = userProfile?.isVip || false;
 
-    // Safety check for missing translations - removed because t is always defined as a fallback function
-
     const [step, setStep] = useState(1);
     const [stake, setStake] = useState<string>('1000');
-    
+    const [legCount, setLegCount] = useState(4);
+
     React.useEffect(() => {
         if (userProfile?.portfolioBankroll) {
             setStake(Math.round(userProfile.portfolioBankroll * 0.05).toString());
         }
     }, [userProfile?.portfolioBankroll]);
-    const [goal, setGoal] = useState<string>('5000');
-const [risk, setRisk] = useState<RiskLevel>('med');
+
     const [isGenerating, setIsGenerating] = useState(false);
     const [generatedTicket, setGeneratedTicket] = useState<Match[] | null>(null);
     const [ticketExplanation, setTicketExplanation] = useState<string | null>(null);
@@ -169,15 +97,12 @@ const [risk, setRisk] = useState<RiskLevel>('med');
         setGeneratedTicket(null);
         setTicketExplanation(null);
 
-        // Simulate AI "thinking"
         setTimeout(() => {
-            const targetOdds = (parseFloat(goal) || 5000) / (parseFloat(stake) || 1);
-            const ticket = findBestCombination(allMatches, targetOdds, risk);
+            const ticket = findBestCombination(allMatches, legCount);
             setGeneratedTicket(ticket);
             setIsGenerating(false);
             setStep(3);
 
-            // Fetch AI explanation for the ticket
             if (ticket && ticket.length > 0) {
                 setIsLoadingExplanation(true);
                 fetchTicketExplanation(ticket);
@@ -193,8 +118,7 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                 body: JSON.stringify({
                     ticket,
                     stake: parseFloat(stake) || 1000,
-                    goal: parseFloat(goal) || 5000,
-                    risk
+                    legCount
                 })
             });
             if (response.ok) {
@@ -208,48 +132,74 @@ const [risk, setRisk] = useState<RiskLevel>('med');
         }
     };
 
-    const findBestCombination = (matches: Match[], target: number, riskLevel: RiskLevel): Match[] | null => {
+    const findBestCombination = (matches: Match[], maxLegs: number): Match[] | null => {
         if (matches.length === 0) return null;
 
-        const hasMultipleSports = new Set(matches.map(getMatchSport)).size > 1;
-        const settings = getRiskSettings(riskLevel, hasMultipleSports);
+        const sameLeagueCap = Math.ceil(maxLegs / 3);
+        const goalsTotalCap = maxLegs <= 4 ? 1 : 2;
+        const resultCap = Math.ceil(maxLegs / 2);
 
-        let pool = matches.filter(m => isTicketEligible(m) && (m.confidence ?? 0) >= settings.minConfidence);
-        if (pool.length === 0) {
-            pool = matches.filter(isTicketEligible);
-        }
+        const marketCaps: Record<string, number> = {
+            goals_total: goalsTotalCap,
+            btts: maxLegs <= 5 ? 1 : 2,
+            result: resultCap,
+            double_chance: resultCap,
+            dnb: maxLegs <= 5 ? 1 : 2,
+        };
+
+        const pool = matches
+            .filter(m => isTicketEligible(m) && (m.confidence ?? 0) >= MIN_CONFIDENCE && getModelProbability(m) >= MIN_PROBABILITY)
+            .sort((a, b) => ticketQualityScore(b) - ticketQualityScore(a));
+
         if (pool.length === 0) return null;
 
-        let bestTicket: Match[] = [];
-        let currentOdds = 1;
+        const ticket: Match[] = [];
+        const usedMarketBases: Record<string, number> = {};
+        const sportLegs: Record<string, number> = {};
+        const usedTeams = new Set<string>();
 
-        const sortedPool = [...pool].sort((a, b) => ticketQualityScore(b) - ticketQualityScore(a));
+        for (const match of pool) {
+            if (ticket.length >= maxLegs) break;
 
-        for (const match of sortedPool) {
-            if (bestTicket.length >= settings.maxLegs) break;
-            if (violatesCorrelationGuard(bestTicket, match, riskLevel, hasMultipleSports)) continue;
+            if (ticket.some(m => getMatchKey(m) === getMatchKey(match))) continue;
 
-            const nextOdds = currentOdds * match.odds;
-            if (nextOdds <= target * settings.overshoot) {
-                bestTicket.push(match);
-                currentOdds = nextOdds;
-            } else if (bestTicket.length < 2 && nextOdds <= target * 1.35) {
-                bestTicket.push(match);
-                currentOdds = nextOdds;
-                break;
-            }
-            if (currentOdds >= target * 0.95) break;
+            const l = match.league || 'unknown';
+            const leagueCount = ticket.filter(m => (m.league || 'unknown') === l).length;
+            if (leagueCount >= sameLeagueCap) continue;
+
+            const st = getMatchSport(match);
+            if ((sportLegs[st] ?? 0) >= 3) continue;
+
+            const mb = getMarketBase(getTicketMarket(match));
+            const cap = marketCaps[mb] ?? 2;
+            if ((usedMarketBases[mb] ?? 0) >= cap) continue;
+
+            const tks = getTeamKeys(match);
+            if (tks.some(t => usedTeams.has(t))) continue;
+            tks.forEach(t => usedTeams.add(t));
+
+            ticket.push(match);
+            usedMarketBases[mb] = (usedMarketBases[mb] ?? 0) + 1;
+            sportLegs[st] = (sportLegs[st] ?? 0) + 1;
         }
 
-        return bestTicket.length > 0 ? bestTicket : null;
+        return ticket.length > 0 ? ticket : null;
     };
 
     const totalOdds = generatedTicket?.reduce((acc, m) => acc * m.odds, 1) || 0;
     const potentialPayout = totalOdds * parseFloat(stake);
 
+    const payoutPerLeg: Record<number, number> = useMemo(() => {
+        const estimates: Record<number, number> = {};
+        for (let l = 2; l <= 8; l++) {
+            const avgOdds = 1.35;
+            estimates[l] = Math.pow(avgOdds, l) * (parseFloat(stake) || 1000);
+        }
+        return estimates;
+    }, [stake]);
+
     return (
         <div className="pb-24 pt-4 px-4 max-w-lg mx-auto">
-            {/* Header */}
             <div className="mb-8">
                 <h2 className="text-3xl font-black font-orbitron tracking-tighter text-slate-900 dark:text-white leading-tight">
                     {t('concierge.title')} <span className="text-vantage-purple">{t('concierge.title_accent')}</span>
@@ -296,31 +246,13 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                                    <Target size={14} className="text-vantage-cyan" /> {t('concierge.goal_label')}
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="number"
-                                        value={goal}
-                                        onChange={(e) => setGoal(e.target.value)}
-                                        className="w-full bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl py-3 px-4 font-mono font-bold text-lg text-vantage-cyan focus:outline-none focus:ring-2 focus:ring-vantage-cyan/50"
-                                    />
-                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">FCFA</span>
-                                </div>
-                            </div>
-
                             <div className="pt-2">
                                 <div className="p-3 bg-vantage-purple/5 border border-vantage-purple/10 rounded-lg flex items-start gap-3">
                                     <Info size={16} className="text-vantage-purple shrink-0 mt-0.5" />
                                     <p className="text-[11px] text-gray-500 italic">
                                         {language === 'fr'
-                                          ? `L'IA analysera les cotes disponibles pour atteindre votre objectif de `
-                                          : `AI will analyze available odds to reach your goal of `}
-                                        <span className="text-vantage-purple font-bold font-mono">{goal} FCFA</span>
-                                        {language === 'fr' ? ' avec une mise de ' : ' with a stake of '}
-                                        <span className="text-vantage-purple font-bold font-mono">{stake} FCFA</span>.
+                                          ? `L'IA selectionnera les paris les plus sûrs pour construire le meilleur ticket combiné.`
+                                          : `AI will select the safest bets to build the best possible accumulator ticket.`}
                                     </p>
                                 </div>
                             </div>
@@ -344,7 +276,7 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                         exit={{ x: -20, opacity: 0 }}
                         className="space-y-6"
                     >
-                        <div className="space-y-3 relative">
+                        <div className="relative">
                             {!isVip && (
                                 <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-100/60 dark:bg-vantage-bg/80 backdrop-blur-[2px] rounded-2xl border border-vantage-purple/20">
                                     <div className="p-3 bg-vantage-purple/20 rounded-full mb-3">
@@ -366,37 +298,70 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                     </button>
                                 </div>
                             )}
-                            {[
-                                { id: 'low', label: t('concierge.risk_low'), icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/20' },
-                                { id: 'med', label: t('concierge.risk_med'), icon: TrendingUp, color: 'text-vantage-cyan', bg: 'bg-vantage-cyan/10', border: 'border-vantage-cyan/20' },
-                                { id: 'high', label: t('concierge.risk_high'), icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-                            ].map((r) => (
-                                <button
-                                    key={r.id}
-                                    onClick={() => setRisk(r.id as any)}
-                                    className={`w-full p-6 rounded-2xl border-2 transition-all flex items-center gap-4 ${risk === r.id
-                                        ? `${r.border} ${r.bg} shadow-lg scale-[1.02]`
-                                        : 'border-slate-100 dark:border-white/5 bg-white dark:bg-white/5 grayscale'
-                                        }`}
-                                >
-                                    <div className={`p-3 rounded-xl ${r.bg} ${r.color}`}>
-                                        <r.icon size={24} />
+
+                            <GlassCard className="p-6 space-y-6">
+                                <div className="text-center">
+                                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                        {language === 'fr' ? 'Nombre de sélections' : 'Number of selections'}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-4">
+                                    <button
+                                        onClick={() => setLegCount(Math.max(2, legCount - 1))}
+                                        className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-gray-500 hover:text-vantage-purple hover:border-vantage-purple/30 transition-all active:scale-90"
+                                    >
+                                        <Minus size={20} />
+                                    </button>
+
+                                    <div className="text-center min-w-[80px]">
+                                        <span className="text-4xl font-black font-mono text-vantage-purple">{legCount}</span>
+                                        <p className="text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-wider">Legs</p>
                                     </div>
-                                    <div className="text-left">
-                                        <span className={`block font-bold ${risk === r.id ? 'text-slate-900 dark:text-white' : 'text-gray-400'}`}>
-                                            {r.label}
-                                        </span>
-                                        <span className="text-[10px] text-gray-500 uppercase tracking-tighter">
-                                            {r.id === 'low'
-                                                ? (language === 'fr' ? 'Confiance > 80%' : 'Confidence > 80%')
-                                                : r.id === 'med'
-                                                    ? (language === 'fr' ? 'Optimisé pour le profit' : 'Optimized for profit')
-                                                    : (language === 'fr' ? 'Priorité aux grosses cotes' : 'High odds priority')}
-                                        </span>
+
+                                    <button
+                                        onClick={() => setLegCount(Math.min(8, legCount + 1))}
+                                        className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-center text-gray-500 hover:text-vantage-purple hover:border-vantage-purple/30 transition-all active:scale-90"
+                                    >
+                                        <Plus size={20} />
+                                    </button>
+                                </div>
+
+                                <div className="flex gap-1 justify-center">
+                                    {[2, 3, 4, 5, 6, 7, 8].map(n => (
+                                        <button
+                                            key={n}
+                                            onClick={() => setLegCount(n)}
+                                            className={`w-9 h-9 rounded-lg text-xs font-bold transition-all ${
+                                                legCount === n
+                                                    ? 'bg-vantage-purple text-white shadow'
+                                                    : 'bg-slate-100 dark:bg-white/5 text-gray-500 hover:text-vantage-purple'
+                                            }`}
+                                        >
+                                            {n}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="p-3 bg-vantage-purple/5 border border-vantage-purple/10 rounded-lg flex items-start gap-3">
+                                    <Info size={16} className="text-vantage-purple shrink-0 mt-0.5" />
+                                    <div className="text-[11px] text-gray-500">
+                                        <p className="italic mb-1">
+                                            {language === 'fr'
+                                              ? `${legCount} sélections à ~1.35x moyenne → est. gain:`
+                                              : `${legCount} legs at ~1.35x avg → est. payout:`}
+                                        </p>
+                                        <p className="font-bold font-mono text-vantage-purple">
+                                            ~{Math.round(payoutPerLeg[legCount] ?? 0).toLocaleString()} FCFA
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 mt-1">
+                                            {language === 'fr'
+                                              ? 'Les cotes réelles varient. Plus de jambes = plus de risque, plus de gain potentiel.'
+                                              : 'Actual odds vary. More legs = more risk, bigger potential payout.'}
+                                        </p>
                                     </div>
-                                    {risk === r.id && <div className={`ml-auto w-6 h-6 rounded-full ${r.bg} ${r.color} flex items-center justify-center`}><Check size={14} /></div>}
-                                </button>
-                            ))}
+                                </div>
+                            </GlassCard>
                         </div>
 
                         <div className="flex gap-4">
@@ -430,8 +395,8 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                 <GlassCard className="overflow-hidden border-2 border-vantage-purple/30">
                                     <div className="bg-vantage-purple p-4 flex justify-between items-center text-white">
                                         <div>
-                                            <p className="text-[10px] uppercase font-bold opacity-80">{t('concierge.total_odds')}</p>
-                                            <p className="text-2xl font-black font-mono">{totalOdds.toFixed(2)}</p>
+                                            <p className="text-[10px] uppercase font-bold opacity-80">{generatedTicket.length} {t('concierge.picks')}</p>
+                                            <p className="text-2xl font-black font-mono">{totalOdds.toFixed(2)}x</p>
                                         </div>
                                         <div className="text-right">
                                             <p className="text-[10px] uppercase font-bold opacity-80">{t('concierge.potential_win')}</p>
@@ -439,7 +404,6 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                         </div>
                                     </div>
 
-                                    {/* AI Explanation */}
                                     {(ticketExplanation || isLoadingExplanation) && (
                                         <div className="mx-4 mb-2">
                                             <div className="p-3 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20">
@@ -470,9 +434,12 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                                     <p className="text-xs font-bold text-slate-800 dark:text-white truncate">
                                                         {match.homeTeam} v {match.awayTeam}
                                                     </p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] font-black text-vantage-purple uppercase">{match.prediction}</span>
+                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                        <span className="text-[10px] font-black text-vantage-purple uppercase">{getTicketMarket(match)}</span>
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-gray-500 font-bold font-mono">@{match.odds.toFixed(2)}</span>
+                                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400 font-bold">
+                                                            {(getModelProbability(match) * 100).toFixed(0)}%
+                                                        </span>
                                                     </div>
                                                     {(match as any).analysis_en && (
                                                         <p className="text-[9px] text-gray-400 mt-1 line-clamp-2">{(match as any).analysis_en}</p>
@@ -506,7 +473,7 @@ const [risk, setRisk] = useState<RiskLevel>('med');
                                     <div className="p-4 bg-slate-50 dark:bg-white/5 border-t border-slate-100 dark:border-white/5">
                                         <div className="flex items-center justify-between text-xs">
                                             <span className="text-gray-500 italic">
-                                                {language === 'fr' ? 'Mise recommandée:' : 'Recommended stake:'} <span className="font-mono">{stake}</span> FCFA
+                                                <span className="text-vantage-purple font-bold">{generatedTicket.length}</span> {language === 'fr' ? 'paris les plus sûrs' : 'safest picks'} &bull; <span className="font-mono">{stake}</span> FCFA
                                             </span>
                                             <div className="flex items-center gap-1 text-vantage-purple">
                                                 <Sparkles size={12} />

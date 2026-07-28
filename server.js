@@ -379,7 +379,7 @@ app.post('/api/ai/features', async (req, res) => {
 
 app.post('/api/ai/ticket-explanation', async (req, res) => {
     try {
-        const { ticket, stake, goal, risk } = req.body;
+        const { ticket, stake, legCount } = req.body;
         if (!ticket || ticket.length === 0) {
             return res.status(400).json({ error: 'No ticket provided' });
         }
@@ -394,8 +394,7 @@ app.post('/api/ai/ticket-explanation', async (req, res) => {
 
 Ticket Details:
 Stake: ${stake} FCFA
-Target: ${goal} FCFA
-Risk Level: ${risk}
+Legs: ${legCount} selections
 Combined Odds: ${totalOdds.toFixed(2)}
 Combined EV: ${combinedEv.toFixed(1)}%
 Leagues: ${leagues.join(', ')}
