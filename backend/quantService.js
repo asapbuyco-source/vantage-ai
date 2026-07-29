@@ -384,11 +384,11 @@ async function spawnPythonPipeline(dateStr = null, dryRun = false) {
             reject(new Error(`Failed to spawn Python: ${err.message}`));
         });
 
-        // Safety timeout: 10 minutes
+        // Safety timeout: 45 minutes (large fixture pools take time)
         setTimeout(() => {
             py.kill('SIGTERM');
-            reject(new Error('Quant pipeline timed out after 10 minutes'));
-        }, 10 * 60 * 1000);
+            reject(new Error('Quant pipeline timed out after 45 minutes'));
+        }, 45 * 60 * 1000);
     });
 }
 
@@ -520,7 +520,7 @@ export const runQuantGrading = async (dateStr = null) => {
                     py.stderr.on('data', d => logger.warn(`[Python|Grading|ERR] ${d.toString().trim()}`));
                     py.on('close', code => code === 0 ? resolve(stdout) : reject(new Error(`Exit code ${code}`)));
                     py.on('error', reject);
-                    setTimeout(() => { py.kill(); reject(new Error('Grading timeout')); }, 5 * 60 * 1000);
+                    setTimeout(() => { py.kill(); reject(new Error('Grading timeout after 15 minutes')); }, 15 * 60 * 1000);
                 });
             },
             {
@@ -578,7 +578,7 @@ export const runQuantPerformance = async () => {
                     py.stderr.on('data', d => logger.warn(`[Python|Perf|ERR] ${d.toString().trim()}`));
                     py.on('close', code => code === 0 ? resolve() : reject(new Error(`Exit code ${code}`)));
                     py.on('error', reject);
-                    setTimeout(() => { py.kill(); reject(new Error('Performance timeout')); }, 3 * 60 * 1000);
+                    setTimeout(() => { py.kill(); reject(new Error('Performance timeout after 5 minutes')); }, 5 * 60 * 1000);
                 });
             },
             {
@@ -657,11 +657,11 @@ export const runBasketballPipeline = async (dateStr = null, dryRun = false) => {
 
                     py.on('error', (err) => reject(new Error(`Failed to spawn basketball pipeline: ${err.message}`)));
 
-                    // Safety timeout: 5 minutes
+                    // Safety timeout: 10 minutes
                     setTimeout(() => {
                         py.kill('SIGTERM');
-                        reject(new Error('Basketball pipeline timed out after 5 minutes'));
-                    }, 5 * 60 * 1000);
+                        reject(new Error('Basketball pipeline timed out after 10 minutes'));
+                    }, 10 * 60 * 1000);
                 });
             },
             {
@@ -744,8 +744,8 @@ export const runCricketPipeline = async (dateStr = null, dryRun = false) => {
 
                     setTimeout(() => {
                         py.kill('SIGTERM');
-                        reject(new Error('Cricket pipeline timed out after 5 minutes'));
-                    }, 5 * 60 * 1000);
+                        reject(new Error('Cricket pipeline timed out after 10 minutes'));
+                    }, 10 * 60 * 1000);
                 });
             },
             {

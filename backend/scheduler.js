@@ -304,7 +304,7 @@ export const initScheduler = () => {
                 const child = spawn(python, [script], {
                     cwd: path.join(__dirname, 'quant'),
                     env: { ...process.env },
-                    timeout: 15000,
+                    timeout: 60000,
                 });
 
                 let stdout = '';
@@ -416,7 +416,7 @@ export const initScheduler = () => {
                 const child = spawn(python, [script], {
                     cwd: path.join(__dirname, 'quant'),
                     env: { ...process.env },
-                    timeout: 120000,
+                    timeout: 300000,
                 });
 
                 let stdout = '';
@@ -496,7 +496,7 @@ export const initScheduler = () => {
                     const child = spawn(python, [script, '--days', '7'], {
                         cwd: path.join(__dirname, 'quant'),
                         env: { ...process.env },
-                        timeout: 120000,
+                        timeout: 600000,
                     });
 
                     let stdout = '';
