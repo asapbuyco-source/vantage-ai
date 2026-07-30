@@ -345,57 +345,70 @@ def compute_combined(
     under45 = poisson.under45       # P(≤4 goals)
 
     # Phase 4.3: HT/FT compound probabilities
-    # Uses first-half Poisson + conditional second-half Poisson (simplified: halves are ~independent)
-    mu_home_2h = adj_mu_home * 0.50
-    mu_away_2h = adj_mu_away * 0.50
+    # Instead of two independent Poisson half-grids (which ignore score correlation),
+    # we anchor on the full-match Dixon-Coles grid and use binomial splitting.
+    # Research shows first half = ~48% of total goals, second half = ~52%.
+    # Each goal is independently assigned to FH/SH with p=0.48, preserving
+    # the Dixon-Coles low-score correlation from the full match.
+    FH_GOAL_SHARE = 0.48
 
-    def _poisson_grid_2h(mu_h: float, mu_a: float) -> dict:
-        grid = {}
-        for h in range(8):
-            for a in range(8):
-                ph = (mu_h ** h) * math.exp(-mu_h) / math.factorial(h)
-                pa = (mu_a ** a) * math.exp(-mu_a) / math.factorial(a)
-                grid[(h, a)] = ph * pa
-        return grid
+    # Build full-match score grid using Dixon-Coles rho (P(FT = H, A))
+    full_grid = poisson.score_grid  # already computed for full match
+    if not full_grid:
+        # Fallback: build it from the Poisson model
+        from poisson_model import compute_score_grid
+        full_grid = compute_score_grid(adj_mu_home, adj_mu_away, rho)
 
-    fh_grid = _poisson_grid_2h(adj_mu_home * 0.50, adj_mu_away * 0.50)
-    sh_grid = _poisson_grid_2h(mu_home_2h, mu_away_2h)
+    # Convert full grid to probability of each half-time state by binomial splitting
+    def _binomial_pmf(k: int, n: int, p: float) -> float:
+        """P(k | n, p) using exact combinatorial if small, Poisson approx otherwise."""
+        if n > 20 or p < 0.001:
+            return (n * p) ** k * math.exp(-n * p) / math.factorial(k)
+        return math.comb(n, k) * (p ** k) * ((1 - p) ** (n - k))
 
-    # Aggregate HT/FT probabilities
+    hthome_fthome = 0.0  # HT home lead → FT home win
+    htdraw_fthome = 0.0   # HT draw → FT home win
+    hthome_ftdraw = 0.0   # HT home lead → FT draw
+
+    for (ft_h, ft_a), p_ft in full_grid.items():
+        if p_ft <= 0:
+            continue
+
+        # For each possible FH home score and FH away score, compute
+        # P(FH = (fh_h, fh_a) | FT = (ft_h, ft_a)) = binom(fh_h; ft_h, p) * binom(fh_a; ft_a, p)
+        fh_probs = {}
+        for fh_h in range(ft_h + 1):
+            p_hh = _binomial_pmf(fh_h, ft_h, FH_GOAL_SHARE)
+            for fh_a in range(ft_a + 1):
+                p_ha = _binomial_pmf(fh_a, ft_a, FH_GOAL_SHARE)
+                fh_probs[(fh_h, fh_a)] = p_hh * p_ha * p_ft
+
+        # Aggregate by HT state
+        ht_home_p = sum(p for (h, a), p in fh_probs.items() if h > a)
+        ht_draw_p = sum(p for (h, a), p in fh_probs.items() if h == a)
+        ht_away_p = sum(p for (h, a), p in fh_probs.items() if h < a)
+
+        # Determine FT outcome from full match score
+        if ft_h > ft_a:
+            hthome_fthome += ht_home_p      # HT home lead, FT home win
+            htdraw_fthome += ht_draw_p       # HT draw, FT home win
+        elif ft_h == ft_a:
+            hthome_ftdraw += ht_home_p       # HT home lead, FT draw
+
+    # Aggregate HT probabilities for HT-only markets
     ht_home_lead = 0.0
     ht_draw = 0.0
     ht_away_lead = 0.0
-    for (h, a), p in fh_grid.items():
-        if h > a: ht_home_lead += p
-        elif h == a: ht_draw += p
-        else: ht_away_lead += p
-
-    # Conditional: P(home wins full time | HT state) ~ P(home outscored in 2H)
-    def _ft_outcome_2h(state_lead: str) -> tuple:
-        w, d, l = 0.0, 0.0, 0.0
-        for (h, a), p in sh_grid.items():
-            if state_lead == "home":
-                if h >= a: w += p  # home maintains or extends lead
-                elif h + 1 == a and a - h <= 1: d += p
-                else: l += p
-            elif state_lead == "draw":
-                if h > a: w += p
-                elif h == a: d += p
-                else: l += p
-            else:  # away
-                if a >= h: l += p  # away maintains
-                elif a + 1 == h and h - a <= 1: d += p
-                else: w += p
-        total = w + d + l
-        return (w/total, d/total, l/total) if total > 0 else (0, 0, 0)
-
-    hw2h, hd2h, hl2h = _ft_outcome_2h("home")
-    dw2h, dd2h, dl2h = _ft_outcome_2h("draw")
-    aw2h, ad2h, al2h = _ft_outcome_2h("away")
-
-    hthome_fthome = ht_home_lead * hw2h
-    htdraw_fthome = ht_draw * dw2h
-    hthome_ftdraw = ht_home_lead * hd2h
+    for (ft_h, ft_a), p_ft in full_grid.items():
+        if p_ft <= 0: continue
+        for fh_h in range(ft_h + 1):
+            p_hh = _binomial_pmf(fh_h, ft_h, FH_GOAL_SHARE)
+            for fh_a in range(ft_a + 1):
+                p_ha = _binomial_pmf(fh_a, ft_a, FH_GOAL_SHARE)
+                p = p_hh * p_ha * p_ft
+                if fh_h > fh_a: ht_home_lead += p
+                elif fh_h == fh_a: ht_draw += p
+                else: ht_away_lead += p
 
     # ── Compound markets ───────────────────────────────────────────────────
     dc_1x = p_home + p_draw

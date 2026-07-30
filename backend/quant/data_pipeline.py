@@ -88,10 +88,22 @@ _LEAGUE_GPG = {
 }
 
 def _league_avg(league_id: int) -> float:
-    """Return average total goals for a league (cached)."""
+    """Return average total goals for a league. Tries live API-Football data
+    first (24h disk cache), falls back to hardcoded estimates."""
     if league_id in _LEAGUE_AVG_CACHE:
         return _LEAGUE_AVG_CACHE[league_id]
-    avg = _LEAGUE_GPG.get(league_id, 2.65)  # per-league fallback, else default
+
+    # Try dynamic API-Football data first
+    try:
+        live_gpg = fetch_league_gpg(league_id)
+        if live_gpg > 0:
+            _LEAGUE_AVG_CACHE[league_id] = live_gpg
+            return live_gpg
+    except Exception:
+        pass
+
+    # Fallback to hardcoded values for known leagues
+    avg = _LEAGUE_GPG.get(league_id, 2.65)
     _LEAGUE_AVG_CACHE[league_id] = avg
     return avg
 
@@ -322,7 +334,8 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
     from api_football_client import (
         fetch_fixtures_by_date, fetch_odds_for_fixture,
         fetch_predictions, fetch_team_form_and_xg, fetch_injuries,
-        reset_call_counts, log_api_summary, _fetch_h2h_cached
+        reset_call_counts, log_api_summary, _fetch_h2h_cached,
+        fetch_league_gpg
     )
     reset_call_counts()
 

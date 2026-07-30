@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 from collections import defaultdict
 from ticket_rules import SAME_LEAGUE_PENALTY, SAME_FIXTURE_PENALTY
+from kelly_optimizer import KELLY_FRACTION
 
 
 # ── Accumulator config ─────────────────────────────────────────────────────────
@@ -145,13 +146,13 @@ class Accumulator:
             self.combined_prob = round(self.combined_prob, 4)
             self.combined_ev = round((self.combined_prob * self.combined_odds) - 1.0, 4)
 
-            # Conservative fractional Kelly for parlays (0.10 multiplier)
+            # Conservative fractional Kelly for parlays — uses same fraction as singles
             b = self.combined_odds - 1
             if b > 0:
                 p = self.combined_prob
                 q = 1 - p
                 kelly = (b * p - q) / b
-                self.kelly_stake = round(max(0, kelly * 100 * 0.10), 2)
+                self.kelly_stake = round(max(0, kelly * 100 * KELLY_FRACTION), 2)
 
 
 def _market_base(market: str) -> str:
@@ -251,14 +252,9 @@ def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None)
         for b in combo:
             total_prob *= b["model_prob"]
             total_odds *= b["odds"]
-        league_counts = defaultdict(int)
-        for b in combo:
-            league_counts[b.get("league", "")] += 1
-        dup = sum(max(0, c - 1) for c in league_counts.values())
-        total_prob *= (0.92 ** dup)
-        fids = [b["fixture_id"] for b in combo]
-        same_fixture_pairs = len(fids) - len(set(fids))
-        total_prob *= (0.85 ** same_fixture_pairs)
+        # Correlation penalties are applied in Accumulator.__post_init__; do NOT
+        # double-count them here. score_combo is used for branch-and-bound ranking
+        # only; final probability is computed by the dataclass.
         ev = (total_prob * total_odds) - 1.0
         return total_prob * 0.5 + max(0, ev) * 0.5
 

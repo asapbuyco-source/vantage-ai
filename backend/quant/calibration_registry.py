@@ -41,9 +41,25 @@ MARKET_FACTORS = {
     "AH Away +0.5":       (0.55, 0.50, 0.90,  50, "2026-06-25"),
     "Double Chance (X2)": (0.60, 0.55, 0.92,  50, "2026-06-25"),
     "Draw No Bet (Away)": (0.50, 0.45, 0.90,  50, "2026-06-25"),
+    # ── Extreme goal lines ───────────────────────────────────────────────────────
+    "over05":  (0.95, 0.92, 0.99,  15, "2026-07-30"),  # conservative seed, low samples
+    "under05": (0.05, 0.08, 1.00,  15, "2026-07-30"),
+    "over45":  (0.55, 0.45, 0.72,  15, "2026-07-30"),  # ~O3.5 pattern but more extreme
+    "under45": (0.55, 0.55, 0.90,  15, "2026-07-30"),
+    # ── First-half markets ───────────────────────────────────────────────────────
+    "fh_home_win":  (0.40, 0.35, 0.78,  10, "2026-07-30"),
+    "fh_draw":      (0.35, 0.40, 1.00,  10, "2026-07-30"),
+    "fh_away_win":  (0.35, 0.25, 0.65,  10, "2026-07-30"),
+    "fh_over05":    (0.85, 0.78, 0.97,  10, "2026-07-30"),
+    "fh_over15":    (0.55, 0.45, 0.80,  10, "2026-07-30"),
+    "fh_btts":      (0.40, 0.35, 0.75,  10, "2026-07-30"),
+    # ── Corner markets ───────────────────────────────────────────────────────────
+    "over65_corners": (0.60, 0.50, 0.85,   5, "2026-07-30"),
+    "over75_corners": (0.45, 0.35, 0.72,   5, "2026-07-30"),
 }
 
-FRAGILE_MARKETS = {"home_win", "away_win", "draw", "btts_no", "over35", "under35", "double_chance_x2"}
+FRAGILE_MARKETS = {"home_win", "away_win", "draw", "btts_no", "over35", "under35", "double_chance_x2",
+                    "over45", "fh_away_win", "fh_over15", "fh_btts", "over75_corners"}
 
 # ── Workstream 6: Dynamic Calibration ────────────────────────────────────────
 

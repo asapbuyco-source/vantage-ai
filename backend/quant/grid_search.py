@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from quant_pipeline import run_pipeline
-from data_pipeline import fetch_matches, _get
+from data_pipeline import fetch_matches
 from replay_engine import get_actual_result, grade_prediction, _safe_print
 
 LAGOS_TZ = timezone(timedelta(hours=1))
@@ -58,13 +58,20 @@ def preload_data(days: int) -> dict:
             continue
             
         scores = {}
-        for match in matches:
-            fid = match.fixture_id
-            raw_match = _get(f"/fixtures/{fid}", {"include": "scores;participants"})
-            if raw_match and raw_match.get("data"):
-                score = get_actual_result(raw_match["data"])
-                if score:
-                    scores[fid] = score
+        # Use API-Football grading cache for results (same source as grading_engine)
+        try:
+            from api_football_client import _get as af_get
+            from grading_engine import _fetch_results_from_api_football
+            date_results = _fetch_results_from_api_football(date_str, matches)
+            if date_results:
+                for fid, result_str in date_results.items():
+                    try:
+                        hg, ag = map(int, result_str.split("-"))
+                        scores[int(fid)] = f"{hg}-{ag}"
+                    except (ValueError, AttributeError):
+                        pass
+        except Exception as e:
+            _safe_print(f"   ⚠️  Score fetch fallback: {e}")
                     
         cache[date_str] = {
             "matches": matches,

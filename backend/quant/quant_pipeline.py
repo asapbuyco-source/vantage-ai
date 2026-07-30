@@ -43,13 +43,14 @@ import math
 from datetime import datetime, timezone, timedelta
 
 # ── Local imports ─────────────────────────────────────────────────────────────
-from data_pipeline import fetch_matches, MatchData, TeamStats
+from data_pipeline import fetch_matches, MatchData, TeamStats, _league_avg
 from poisson_model import compute_probabilities, compute_dynamic_rho, top_scorelines, compute_score_grid
 import math as _math
 from elo_rating import load_ratings_from_firestore, match_probabilities as elo_probs, save_dirty_ratings, get_team_rating, is_derby_match, DEFAULT_ELO
 from form_model import compute_form_probabilities
 from probability_engine import compute_combined, CombinedProbabilities
 from ev_engine import evaluate_all_markets, get_best_value_bet
+from calibration_registry import MARKET_FACTORS, get_calibration_factor, get_dynamic_calibration_factor
 from risk_filters import (
     filter_bets,
     grade_risk,
@@ -63,6 +64,104 @@ from risk_filters import check_btts_blanking_risk
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MAX_PREDICTIONS_PER_DAY = 100
+
+
+def _calibrate_league_trends(predictions: list[dict], matches: list) -> None:
+    """
+    Post-processing: when many matches play in the same league today, compare
+    today's average expected goals to the league's historical average. If the
+    league is trending significantly above/below its norm, nudge Over/Under
+    probabilities and confidences slightly toward today's trend.
+
+    This makes predictions league-aware instead of purely per-match, improving
+    accuracy when leagues have systematic scoring phases (weather, refs, etc.).
+    """
+    from collections import defaultdict
+
+    # Group predictions by league_id
+    by_league: dict[int, list[dict]] = defaultdict(list)
+    for pred in predictions:
+        lid = pred.get("league_id", 0)
+        if lid:
+            by_league[lid].append(pred)
+
+    calibrated = 0
+    for lid, league_preds in by_league.items():
+        if len(league_preds) < 5:
+            continue  # not enough matches to detect a league trend
+
+        # Calculate today's average expected goals for this league
+        today_xg = 0.0
+        count = 0
+        for pred in league_preds:
+            xg_h = pred.get("expected_goals_home", 0)
+            xg_a = pred.get("expected_goals_away", 0)
+            if xg_h or xg_a:
+                today_xg += xg_h + xg_a
+                count += 1
+        if count == 0:
+            continue
+        today_avg = today_xg / count
+
+        # Historical league average
+        hist_avg = _league_avg(lid)
+        if hist_avg <= 0:
+            continue
+
+        # Compute trend ratio: >1 means today is higher-scoring than usual
+        ratio = today_avg / hist_avg
+
+        # Only calibrate if the deviation is meaningful (10%+)
+        if 0.90 <= ratio <= 1.10:
+            continue
+
+        league_name = league_preds[0].get("league", f"League-{lid}")
+        direction = "hot" if ratio > 1.0 else "cold"
+        factor = min(max(ratio, 0.85), 1.15)  # cap at ±15%
+        adjust = 1.0 + (factor - 1.0) * 0.3  # dampen: only 30% of the trend
+
+        for pred in league_preds:
+            bet = pred.get("prediction", "")
+            if not bet:
+                continue
+
+            # Only calibrate goal-related markets (Over/Under/BTTS)
+            is_goal_market = any(k in bet.lower() for k in ["over", "under", "btts"])
+            if not is_goal_market:
+                continue
+
+            # Adjust model probability and confidence by the trend factor
+            prob_key = "probability"
+            old_prob = pred.get(prob_key, 0)
+            if old_prob > 0:
+                # For Over markets: hot league → boost, cold league → reduce
+                # For Under markets: hot league → reduce, cold league → boost
+                if "over" in bet.lower():
+                    new_prob = min(old_prob * adjust, 0.95)
+                elif "under" in bet.lower():
+                    new_prob = min(old_prob * (2.0 - adjust), 0.95)
+                else:  # BTTS
+                    new_prob = min(old_prob * adjust, 0.95)
+                pred[prob_key] = round(new_prob, 4)
+
+            # Adjust confidence similarly
+            old_conf = pred.get("confidence", 0)
+            if old_conf > 0:
+                if "over" in bet.lower():
+                    new_conf = min(old_conf * adjust, 95.0)
+                elif "under" in bet.lower():
+                    new_conf = min(old_conf * (2.0 - adjust), 95.0)
+                else:
+                    new_conf = min(old_conf * adjust, 95.0)
+                pred["confidence"] = round(new_conf, 1)
+
+            # Tag the prediction with calibration metadata for transparency
+            pred["calibration_tag"] = f"league_trend_{direction}"
+            pred["calibration_factor"] = round(adjust, 4)
+            calibrated += 1
+
+    if calibrated > 0:
+        _safe_print(f"[QuantPipeline] 📊 League calibration applied to {calibrated} predictions across {len(by_league)} leagues")
 
 
 def _now_iso() -> str:
@@ -287,8 +386,13 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
 
 
             # ── Evaluate ALL markets for this match (FIX: was undefined) ────
-            current_month = datetime.now().month
-            all_value_bets = evaluate_all_markets(probs, match.odds, match.league_id, current_month)
+            # Use match kickoff date for season-phase calibration, not pipeline execution time
+            try:
+                kickoff_dt = datetime.fromisoformat(match.kickoff_utc.replace("Z", "+00:00"))
+                match_month = kickoff_dt.month
+            except (ValueError, AttributeError):
+                match_month = datetime.now().month
+            all_value_bets = evaluate_all_markets(probs, match.odds, match.league_id, match_month)
 
             # ── Apply risk filters to find approved value bets ──────────────
             approved_bets = filter_bets(all_value_bets, match.league_tier)
@@ -366,7 +470,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                         is_low_agreement = probs.result_confidence < 0.25
 
                     is_risky_prob = best_bet.model_prob < 0.62
-                    is_volatile_league = match.league_tier >= 3
+                    is_volatile_league = match.league_tier >= 5
 
                     # MODEL-06: Over 3.5 Goals is ALWAYS downgraded to Over 2.5 Goals.
                     # Backtesting shows O3.5 hit rate is ~20% despite 75-80% model probability,
@@ -374,7 +478,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     # without the tail risk of 4+ goals needed for O3.5.
                     is_over35 = best_bet.market == "Over 3.5 Goals"
 
-                    # Downgrade if: Over 3.5 (always), OR (both prob low AND agreement low) OR volatile league
+                    # Downgrade if: Over 3.5 (always), OR (prob low AND confidence low),
+                    # OR tier 5 (data too poor). Tier 3-4 leagues are no longer auto-downgraded;
+                    # they compete on probability + confidence merit like any other match.
                     should_downgrade = is_over35 or (is_risky_prob and is_low_agreement) or is_volatile_league
 
                     if should_downgrade:
@@ -467,7 +573,11 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "bet_type": best_bet.market if best_bet else "N/A",
                 "prediction": best_bet.market if best_bet else "N/A",
                 "probability": round(best_bet.model_prob, 4) if best_bet else 0,
-                "confidence": round(best_bet.model_prob * 100, 1) if best_bet else 0,  # UI compat — misleading label kept
+                # NOTE: "confidence" is actually model_probability × 100 (0-100 scale),
+                # NOT a separate confidence metric. Named for backward compat with UI
+                # expectancies. The per-market confidence fields (result_confidence,
+                # goals_confidence, btts_confidence) are the true agreement metrics.
+                "confidence": round(best_bet.model_prob * 100, 1) if best_bet else 0,
                 "model_agreement": round(_model_agreement_for_bet(best_bet, probs), 2) if best_bet else 0,
                 "data_quality": round(_data_quality_score(match, best_bet, odds_fresh, home_stats, away_stats), 2) if best_bet else 0,
                 "odds": best_bet.odds if best_bet else 0,
@@ -601,6 +711,19 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
                 "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
             }
+            # ── Apply calibration to no-odds predictions ──────────────────────
+            # When odds are unavailable, the ev_engine calibration path is skipped.
+            # Apply the registry's market factors here so these predictions aren't raw.
+            if best_bet and best_bet.odds <= 0:
+                market_lower = best_bet.market.lower()
+                factor = get_dynamic_calibration_factor(market_lower, match.league_id if hasattr(match, 'league_id') else 0)
+                if factor < 1.0:
+                    old_prob = pred.get("probability", 0)
+                    old_conf = pred.get("confidence", 0)
+                    pred["probability"] = round(old_prob * factor, 4)
+                    pred["confidence"] = round(old_conf * factor, 1)
+                    pred["calibration_tag"] = "no_odds_fallback"
+                    pred["calibration_factor"] = round(factor, 4)
             predictions.append(pred)
 
             # ── Add to accumulator pool — separate eligibility from vault ───
@@ -669,6 +792,29 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             _safe_print(f"[QuantPipeline]   ❌ Error processing {match.home_team} vs {match.away_team}: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
+
+    # ── League-Level Calibration: adjust predictions based on same-day league trends ──
+    _calibrate_league_trends(predictions, matches)
+
+    # ── Rebuild acc_pool from calibrated predictions ─────────────────────────
+    # League calibration may have nudged probabilities; rebuild the accumulator
+    # pool so accumulators benefit from league-level adjustments.
+    acc_pool = []
+    for pred in predictions:
+        if pred.get("category") in ("safe", "value") and pred.get("odds", 0) > 1.0 and pred.get("league_tier", 5) < 5:
+            acc_pool.append({
+                "fixture_id": pred["fixture_id"],
+                "league": pred.get("league", ""),
+                "home_team": pred.get("home_team", ""),
+                "away_team": pred.get("away_team", ""),
+                "market": pred.get("prediction", ""),
+                "odds": pred.get("odds", 0),
+                "model_prob": pred.get("probability", 0),
+                "expected_value": pred.get("ev_pct", 0) / 100 if pred.get("ev_pct") else 0,
+                "kickoff_utc": pred.get("kickoff_utc", ""),
+                "kickoff_local": pred.get("kickoff_local", ""),
+                "category": pred.get("category", "value"),
+            })
 
     if not predictions:
         _safe_print("[QuantPipeline] No matches could be analyzed today.")
@@ -740,8 +886,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "expected_goals_home": p.get("expected_goals_home"),
             "expected_goals_away": p.get("expected_goals_away"),
             "expected_corners": p.get("expected_corners"),
-            "over85_corners_prob": p.get("over85_corners_prob"),
-            "over95_corners_prob": p.get("over95_corners_prob"),
+            "over65_corners_prob": p.get("over65_corners_prob"),
+            "over75_corners_prob": p.get("over75_corners_prob"),
             "fh_over05_prob": p.get("fh_over05_prob"),
             "fh_over15_prob": p.get("fh_over15_prob"),
             "fh_btts_prob": p.get("fh_btts_prob"),
@@ -768,6 +914,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "vault_eligible": p.get("vault_eligible"),
             "calibration_tier": p.get("calibration_tier"),
             "calibrated_probability": p.get("calibrated_probability"),
+            "calibration_tag": p.get("calibration_tag"),
+            "calibration_factor": p.get("calibration_factor"),
             "bet_type": p.get("bet_type"),
             # Team stats
             "home_avg_scored": p.get("home_avg_scored"),

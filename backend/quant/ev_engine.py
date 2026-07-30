@@ -60,6 +60,19 @@ _MARKET_KEY_MAP = {
     "Draw No Bet (Away)": "Draw No Bet (Away)",
     "AH Away +0.5": "AH Away +0.5",
     "Double Chance (X2)": "Double Chance (X2)",
+    # New markets — calibration seeds added 2026-07-30
+    "Over 0.5 Goals": "over05",
+    "Under 0.5 Goals": "under05",
+    "Over 4.5 Goals": "over45",
+    "Under 4.5 Goals": "under45",
+    "Over 1.5 FH Goals": "fh_over15",
+    "Over 0.5 FH Goals": "fh_over05",
+    "BTTS FH": "fh_btts",
+    "Home Win FH": "fh_home_win",
+    "Draw FH": "fh_draw",
+    "Away Win FH": "fh_away_win",
+    "Over 6.5 Corners": "over65_corners",
+    "Over 7.5 Corners": "over75_corners",
 }
 
 
@@ -355,9 +368,6 @@ def evaluate_all_markets(
         if market_odds <= 1.05:
             continue
 
-        if market_odds <= 1.05:
-            continue
-
         # Use devigged market probability (preferred) falling back to raw implied
         mkt_prob = market_devig.get(market, implied_prob(market_odds))
         
@@ -378,9 +388,14 @@ def evaluate_all_markets(
         if line_disagrees and is_value:
             is_value = ev >= MIN_EV * 1.5  # Require 50% more EV to override sharp signal
 
-        # STEP 2: Market Filtering (Drop underperforming markets)
-        if market in ["Home Win", "Away Win", "Draw", "Double Chance (X2)"]:
-            continue  # Disabled: 1X2 = -40% ROI, DC X2 = 38% win rate
+        # STEP 2: Market Filtering — historically underperforming markets get stricter EV
+        # requirements instead of being hard-disabled. Calibration factors (home_win 0.37,
+        # away_win 0.27, draw 0.41) already severely discount these; only genuinely strong
+        # signals will survive both calibration and this elevated threshold.
+        HISTORICALLY_WEAK = {"Home Win", "Away Win", "Draw", "Double Chance (X2)"}
+        if market in HISTORICALLY_WEAK:
+            if ev < MIN_EV * 2.0:  # 2x EV threshold for weak markets
+                continue
 
         # STEP 1: Cap EV at 15% to prevent wild overconfidence while preserving true edge signals
         capped_ev = min(ev, 0.15)

@@ -674,3 +674,100 @@ def fetch_fixture_statistics(fixture_id: int) -> dict:
             "statistics": entry.get("statistics", []),
         }
     return result
+
+
+# ── League Goals-Per-Game (Dynamic) ──────────────────────────────────────────────
+_LEAGUE_GPG_LIVE: dict[int, float] = {}
+
+def fetch_league_gpg(league_id: int, season: int = 2026) -> float:
+    """
+    Fetch league-average goals per game from API-Football's /leagues endpoint.
+    Cached in memory (process lifetime) and on disk (24h TTL).
+    """
+    global _LEAGUE_GPG_LIVE
+    if league_id in _LEAGUE_GPG_LIVE:
+        return _LEAGUE_GPG_LIVE[league_id]
+
+    cache_key = f"league_gpg_{league_id}_{season}"
+    cached = _cache_get(cache_key, ttl_minutes=1440)  # 24-hour TTL
+    if cached is not None and isinstance(cached, dict):
+        gpg = cached.get("gpg", 0)
+        if gpg > 0:
+            _LEAGUE_GPG_LIVE[league_id] = gpg
+            return gpg
+
+    try:
+        data = _get("leagues", {"id": league_id, "season": season}, call_type="leagues")
+        if not data:
+            return 0
+
+        league_info = None
+        for entry in data.get("response", []):
+            if entry.get("league", {}).get("id") == league_id:
+                league_info = entry
+                break
+
+        if not league_info:
+            # Try season-specific: API-Football nesting varies
+            seasons_data = data.get("response", [])
+            if seasons_data:
+                # Look in the first entry's seasons list
+                for season_entry in seasons_data:
+                    for s in season_entry.get("seasons", []):
+                        if s.get("year") == season and s.get("coverage", {}).get("fixtures", {}).get("statistics", False):
+                            league_info = {"statistics": s}
+                            break
+
+        goals_avg = None
+        if league_info:
+            # Try coverage.statistics first (v3 structure)
+            stats = league_info.get("statistics", {})
+            if not stats:
+                stats = league_info.get("coverage", {}).get("statistics", {})
+
+            # Try different API response shapes
+            goals_total = None
+            for path in ["goals.total", "goals.for.total.total", "goals.for.average.total"]:
+                val = stats
+                for key in path.split("."):
+                    val = val.get(key, {}) if isinstance(val, dict) else {}
+                if isinstance(val, (int, float)) and val > 0:
+                    goals_total = val
+                    break
+
+            if goals_total is None:
+                # Fallback: use goals.for.total.home + goals.for.total.away divided by matches played
+                home_goals = 0
+                away_goals = 0
+                played = 0
+                for side in ["home", "away"]:
+                    g = stats.get("goals", {}).get("for", {}).get("total", {}).get(side, 0)
+                    if isinstance(g, (int, float)):
+                        if side == "home":
+                            home_goals = g
+                        else:
+                            away_goals = g
+                # Approximate matches from total goals / average
+                # This is fragile — API-Football response format varies by plan
+                goals_total = home_goals + away_goals
+
+            if goals_total and goals_total > 0:
+                # goals_total is a total, need to divide by matches played
+                # API-Football plans vary — try to get matches played
+                matches_played = stats.get("fixtures", {}).get("played", {}).get("total", 0)
+                if not matches_played:
+                    matches_played = stats.get("matches", {}).get("total", 0)
+                if matches_played and matches_played > 0:
+                    goals_avg = goals_total / matches_played
+
+        # Cache and return
+        if goals_avg and goals_avg > 0:
+            _cache_set(cache_key, {"gpg": goals_avg, "league_id": league_id, "season": season})
+            _LEAGUE_GPG_LIVE[league_id] = goals_avg
+            return goals_avg
+
+        return 0  # Signal: use hardcoded fallback
+
+    except Exception as e:
+        print(f"[API-Football] League GPG fetch error for league {league_id}: {e}", file=sys.stderr)
+        return 0

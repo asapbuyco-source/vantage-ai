@@ -357,6 +357,7 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
 
     # ── Step 3: Fallback to football-data.org (free, no daily cap) ───────────
     if not results_map:
+        next_date_str = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
         res1 = _fetch_results_from_football_data_org(date_str, predictions) or {}
         res2 = _fetch_results_from_football_data_org(next_date_str, predictions) or {}
         results_map = {**res1, **res2}
