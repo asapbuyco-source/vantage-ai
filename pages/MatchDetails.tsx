@@ -477,6 +477,8 @@ fetchDetails();
                                 { l: 'BTTS', p: ((match.btts_prob || 0) * 100) },
                                 { l: 'Over 2.5', p: ((match.over25_prob || 0) * 100) },
                                 { l: 'DC 1X', p: ((match.double_chance_1x || 0) * 100) },
+                                { l: 'DC X2', p: ((match.double_chance_x2 || 0) * 100) },
+                                { l: 'DC 12', p: ((match.double_chance_12 || 0) * 100) },
                                 { l: 'FH Over 0.5', p: ((match.fh_over05_prob || 0) * 100) },
                             ].filter(m => m.p > 50).sort((a, b) => b.p - a.p).slice(0, 4);
                             if (markets.length === 0) return null;
@@ -544,6 +546,7 @@ fetchDetails();
                                             { l: 'Over 3.5', p: (match.over35_prob || 0) * 100 },
                                         ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
                                         { g: 'Goals Under', items: [
+                                            { l: 'Under 0.5', p: (match.under05_prob || 0) * 100 },
                                             { l: 'Under 1.5', p: (match.under15_prob || 0) * 100 },
                                             { l: 'Under 2.5', p: (match.under25_prob || 0) * 100 },
                                             { l: 'Under 3.5', p: (match.under35_prob || 0) * 100 },
@@ -551,6 +554,7 @@ fetchDetails();
                                         ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
                                         { g: 'BTTS', items: [
                                             { l: 'BTTS Yes', p: (match.btts_prob || 0) * 100 },
+                                            { l: 'BTTS No', p: (1 - (match.btts_prob || 0)) * 100 },
                                         ].filter((r: any) => r.p > 0) },
                                     ].map((group, gi) => group.items.length > 0 && (
                                         <div key={group.g}>
@@ -616,8 +620,8 @@ fetchDetails();
                                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-5">KEY STATS</h3>
                                 <div className="space-y-4">
                                     {[
-                                        {label: 'Avg. Goals For', home: (match.homeAvgScored||0).toFixed(2), away: (match.awayAvgScored||0).toFixed(2)},
-                                        {label: 'Avg. Goals Against', home: (match.homeAvgConceded||0).toFixed(2), away: (match.awayAvgConceded||0).toFixed(2)},
+                                        {label: 'Avg. Goals For', home: (match.home_avg_scored ?? match.homeAvgScored ?? 0).toFixed(2), away: (match.away_avg_scored ?? match.awayAvgScored ?? 0).toFixed(2)},
+                                        {label: 'Avg. Goals Against', home: (match.home_avg_conceded ?? match.homeAvgConceded ?? 0).toFixed(2), away: (match.away_avg_conceded ?? match.awayAvgConceded ?? 0).toFixed(2)},
                                         {label: 'Shots Per Game', home: matchStats?.stats?.shots?.home || (match as any).home_shots_on_target || 0, away: matchStats?.stats?.shots?.away || (match as any).away_shots_on_target || 0},
                                         {label: 'Possession', home: matchStats?.stats?.possession?.home || (match as any).home_possession || 50, away: matchStats?.stats?.possession?.away || (match as any).away_possession || 50, isPct: true}
                                     ].map(stat => (
