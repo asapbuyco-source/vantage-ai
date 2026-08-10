@@ -1619,6 +1619,60 @@ export const Admin: React.FC<AdminProps> = () => {
                                 </button>
                             </div>
 
+                            {/* New Triggers: Banker & VIP Teaser */}
+                            <div className="flex gap-2">
+                                <button
+                                    disabled={isTelegramActing}
+                                    onClick={async () => {
+                                        if (!window.confirm("Send Banker of the Day to Telegram right now?")) return;
+                                        setIsTelegramActing(true);
+                                        setTelegramActionResult(null);
+                                        try {
+                                            const data = await adminFetch('/api/admin/trigger-banker', {
+                                                method: 'POST'
+                                            });
+                                            if (data.status === 'success') {
+                                                setTelegramActionResult(`✅ Banker sent: ${data.banker}`);
+                                            } else {
+                                                setTelegramActionResult(`⚠️ ${data.reason || data.error}`);
+                                            }
+                                        } catch (e: any) {
+                                            setTelegramActionResult(`❌ ${e.message}`);
+                                        } finally {
+                                            setIsTelegramActing(false);
+                                        }
+                                    }}
+                                    className="flex-1 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 rounded-lg text-xs font-bold border border-yellow-500/20 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 active:scale-[0.98]"
+                                >
+                                    <Send size={12} /> Send Banker
+                                </button>
+                                <button
+                                    disabled={isTelegramActing}
+                                    onClick={async () => {
+                                        if (!window.confirm("Send VIP Teaser to Telegram right now?")) return;
+                                        setIsTelegramActing(true);
+                                        setTelegramActionResult(null);
+                                        try {
+                                            const data = await adminFetch('/api/admin/trigger-vip-teaser', {
+                                                method: 'POST'
+                                            });
+                                            if (data.status === 'success') {
+                                                setTelegramActionResult(`✅ VIP Teaser sent (${data.vipCount} hidden picks teased)!`);
+                                            } else {
+                                                setTelegramActionResult(`⚠️ ${data.reason || data.error}`);
+                                            }
+                                        } catch (e: any) {
+                                            setTelegramActionResult(`❌ ${e.message}`);
+                                        } finally {
+                                            setIsTelegramActing(false);
+                                        }
+                                    }}
+                                    className="flex-1 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-xs font-bold border border-purple-500/20 flex items-center justify-center gap-2 transition-colors disabled:opacity-50 active:scale-[0.98]"
+                                >
+                                    <Send size={12} /> Send VIP Teaser
+                                </button>
+                            </div>
+
                             {telegramActionResult && (
                                 <div className={`text-xs font-mono text-center p-2 rounded-lg ${telegramActionResult.startsWith('✅') ? 'bg-green-500/10 text-green-400 border border-green-500/20' : telegramActionResult.startsWith('⚠️') ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
                                     {telegramActionResult}

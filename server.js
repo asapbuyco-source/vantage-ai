@@ -15,7 +15,7 @@ import OpenAI from 'openai';
 import sanitizeHtml from 'sanitize-html';
 import jwt from 'jsonwebtoken';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
-import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
+import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerBankerOfTheDay, triggerVipTeaser, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
 import { sendTelegramTestMessage } from './backend/telegramService.js';
 import { requireFirebaseUser } from './backend/authMiddleware.js';
 import { assertValidPlan, inferPlanFromAmount } from './backend/paymentPlans.js';
@@ -549,6 +549,24 @@ app.post('/api/admin/telegram-broadcast', adminAuth, async (req, res) => {
         logger.error({ error: e }, '[API] Telegram broadcast error');
         Sentry.captureException(e);
         res.status(500).json({ error: 'Telegram broadcast failed', details: e.message });
+    }
+});
+
+app.post('/api/admin/trigger-banker', adminAuth, async (req, res) => {
+    try {
+        const result = await triggerBankerOfTheDay();
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/admin/trigger-vip-teaser', adminAuth, async (req, res) => {
+    try {
+        const result = await triggerVipTeaser();
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -1170,7 +1188,6 @@ app.get('/sitemap.xml', async (req, res) => {
 
             predictionSnap.forEach(doc => {
                 const dateKey = doc.id;
-                // Ensure it's a valid date key format YYYY-MM-DD
                 if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
                     xml += `  <url>\n    <loc>${baseUrl}/predictions/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
                 }
@@ -1189,6 +1206,25 @@ app.get('/sitemap.xml', async (req, res) => {
                     xml += `  <url>\n    <loc>${baseUrl}/blog/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
                 }
             });
+
+            // Add individual match URLs from last 3 days for deeper indexing
+            const today = new Date();
+            const matchIds = new Set();
+            for (let i = 0; i < 3; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                const dateKey = d.toISOString().split('T')[0];
+                const docSnap = await admin.firestore().collection('quant_predictions').doc(dateKey).get();
+                if (docSnap.exists && docSnap.data().predictions) {
+                    for (const m of docSnap.data().predictions) {
+                        const matchId = m.id || m.fixture_id || `${m.home_team || 'home'}_${m.away_team || 'away'}`.replace(/\s+/g, '-').toLowerCase();
+                        if (matchId && !matchIds.has(matchId)) {
+                            matchIds.add(matchId);
+                            xml += `  <url>\n    <loc>${baseUrl}/match/${matchId}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+                        }
+                    }
+                }
+            }
         }
 
         xml += '</urlset>';
@@ -1307,6 +1343,49 @@ app.use(async (req, res, next) => {
                     `;
                     html = html.replace('<!-- REACT_ROOT -->', blogInjection);
                 }
+            }
+        }
+
+        // --- SPECIFIC ROUTE: /match/:id ---
+        const matchRegex = req.path.match(/^\/match\/([a-zA-Z0-9_-]+)$/);
+        if (matchRegex && admin.apps.length > 0) {
+            const matchId = matchRegex[1];
+            let foundMatch = null;
+            
+            // Search the last 3 days of quant_predictions to find the match
+            const today = new Date();
+            for (let i = 0; i < 3; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                const dateKey = d.toISOString().split('T')[0];
+                const docSnap = await admin.firestore().collection('quant_predictions').doc(dateKey).get();
+                if (docSnap.exists && docSnap.data().predictions) {
+                    const m = docSnap.data().predictions.find(p => {
+                        const pId = p.id || p.fixture_id || `${p.home_team || 'home'}_${p.away_team || 'away'}`.replace(/\s+/g, '-').toLowerCase();
+                        return String(pId) === matchId;
+                    });
+                    if (m) {
+                        foundMatch = m;
+                        break;
+                    }
+                }
+            }
+
+            if (foundMatch) {
+                const home = foundMatch.home_team || 'Home';
+                const away = foundMatch.away_team || 'Away';
+                const league = foundMatch.league || 'Football';
+                const title = `${home} vs ${away} Prediction & Odds - ${league} | Vantage AI`;
+                const description = `Data-driven prediction for ${home} vs ${away}. View AI confidence, expected goals, head-to-head stats, and the best betting value from Vantage AI's quantitative model.`;
+                
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${process.env.FRONTEND_URL || 'https://vantageai.online'}/match/${matchId}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
             }
         }
 

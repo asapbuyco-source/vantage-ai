@@ -175,6 +175,32 @@ export const triggerTelegramBroadcast = async () => {
     }
 };
 
+export const triggerBankerOfTheDay = async () => {
+    logger.info('[Scheduler] Triggering Banker of the Day...');
+    try {
+        const { sendBankerOfTheDay } = await import('./telegramService.js');
+        const result = await sendBankerOfTheDay();
+        logger.info('[Scheduler] Banker of the Day complete.');
+        return result || { status: 'success' };
+    } catch (e) {
+        logger.error({ error: e }, '[Scheduler] Banker of the Day error');
+        return { status: 'error', error: e.message };
+    }
+};
+
+export const triggerVipTeaser = async () => {
+    logger.info('[Scheduler] Triggering VIP Teaser...');
+    try {
+        const { sendVipTeaser } = await import('./telegramService.js');
+        const result = await sendVipTeaser();
+        logger.info('[Scheduler] VIP Teaser complete.');
+        return result || { status: 'success' };
+    } catch (e) {
+        logger.error({ error: e }, '[Scheduler] VIP Teaser error');
+        return { status: 'error', error: e.message };
+    }
+};
+
 export const triggerTipOfTheDay = async () => {
     logger.info('[Scheduler] Triggering Tip of the Day push...');
     try {
@@ -348,6 +374,28 @@ export const initScheduler = () => {
     );
     tasks.set('telegram', telegramTask);
     logger.info('📱 Telegram broadcast scheduled at 09:00 Lagos');
+
+    // Banker of the Day at 08:15 Lagos time (after pipeline runs at 07:00)
+    const bankerTask = cron.schedule('15 8 * * *',
+        withLock('telegram_banker', 10, async () => {
+            logger.info('[Scheduler] Running Banker of the Day...');
+            await triggerBankerOfTheDay();
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('banker', bankerTask);
+    logger.info('⭐ Banker of the Day scheduled at 08:15 Lagos');
+
+    // VIP Teaser at 09:30 Lagos time (30 min after free picks broadcast)
+    const vipTeaserTask = cron.schedule('30 9 * * *',
+        withLock('telegram_vip_teaser', 10, async () => {
+            logger.info('[Scheduler] Running VIP Teaser...');
+            await triggerVipTeaser();
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('vipTeaser', vipTeaserTask);
+    logger.info('🔒 VIP Teaser scheduled at 09:30 Lagos');
 
     // Tip of the Day push at 08:00 Lagos time (after quant pipeline completes)
     const tipTask = cron.schedule('0 8 * * *',
