@@ -156,6 +156,11 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
               <span className="flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded-md">
                 <Clock size={10} /> {match.time || match.kickoff_local}
               </span>
+              {!blurred && match.odds > 0 && (
+                <span className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-white font-bold bg-vantage-cyan/10 border border-vantage-cyan/20 px-2 py-0.5 rounded-md">
+                  {Number(match.odds).toFixed(2)}x
+                </span>
+              )}
               {!blurred && (
                 <>
                   <button

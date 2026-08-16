@@ -102,6 +102,12 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
             setGeneratedTicket(ticket);
             setIsGenerating(false);
             setStep(3);
+            import('../services/analytics').then(({ trackEvent }) => {
+                trackEvent('smart_ticket_generated', {
+                    legs: ticket?.length || 0,
+                    stake: parseFloat(stake) || 0,
+                });
+            }).catch(() => {});
 
             if (ticket && ticket.length > 0) {
                 setIsLoadingExplanation(true);

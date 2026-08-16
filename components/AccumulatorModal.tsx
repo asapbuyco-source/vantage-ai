@@ -14,6 +14,12 @@ interface AccumulatorModalProps {
 function getTierMeta(lang: string): Record<string, { label: string; icon: any; color: string; desc: string }> {
   const fr = lang === 'fr';
   return {
+    safe_stack: { 
+      label: fr ? 'Safe Stack' : 'Safe Stack', 
+      icon: ShieldCheck, 
+      color: 'text-teal-500', 
+      desc: fr ? 'Haute probabilité (85%+)' : 'Highest probability (85%+)' 
+    },
     baseline: { 
       label: fr ? 'La Base' : 'The Baseline', 
       icon: ShieldCheck, 

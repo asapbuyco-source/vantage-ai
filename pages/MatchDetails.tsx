@@ -23,6 +23,7 @@ export const MatchDetails: React.FC = () => {
     const isVipUser = userProfile?.isVip === true || isAdmin;
 
     const [match, setMatch] = useState<Match | null>(null);
+    
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'analysis' | 'overview' | 'h2h' | 'lineup'>('analysis');
     const [secondaryTab, setSecondaryTab] = useState<string>('Predictions');
@@ -42,6 +43,13 @@ export const MatchDetails: React.FC = () => {
         const foundMatch = [...predictions, ...rawFixtures].find(m => m.id === id);
         if (foundMatch) {
             setMatch(foundMatch);
+            import('../services/analytics').then(({ trackEvent }) => {
+                trackEvent('match_details_viewed', {
+                    match_id: id,
+                    league: foundMatch.league || '',
+                    teams: `${foundMatch.homeTeam || ''} v ${foundMatch.awayTeam || ''}`,
+                });
+            }).catch(() => {});
             // Find all predictions for the same fixture
             const fixtureId = foundMatch.fixture_id || foundMatch.fixtureId;
             const sameFixturePicks = predictions.filter(p =>
@@ -157,13 +165,26 @@ fetchDetails();
     const categoryBg = category === 'safe' ? 'bg-green-500/10 border-green-500/20' : category === 'risky' ? 'bg-red-500/10 border-red-500/20' : 'bg-yellow-500/10 border-yellow-500/20';
     const predLabel = language === 'fr' ? predictionFr : prediction;
     const ev = match.expected_value ?? 0;
-    const evPct = match.ev_pct ?? (ev * 100);
+    const evPct = match.ev_pct ?? (ev > 1 ? ev : ev * 100);
     const kelly = match.kelly_stake ?? 0;
     const riskMultipliers = { 'low': 0.25, 'medium': 0.5, 'high': 1.0 };
     const riskMult = userProfile?.riskTolerance ? riskMultipliers[userProfile.riskTolerance] : 0.5;
     const bankroll = userProfile?.portfolioBankroll || 0;
     const recommendedStake = bankroll > 0 ? Math.round(bankroll * (kelly / 100) * riskMult) : 0;
-    const sparklineData = Array.from({ length: 15 }, () => 1.5 + Math.random() * 0.5);
+    
+    const isFreeMatchCheck = () => {
+        const sorted = [...predictions].sort((a, b) => {
+            const probA = Math.max(a.home_win_prob||0, a.away_win_prob||0, a.draw_prob||0, a.over25_prob||0, a.btts_prob||0);
+            const probB = Math.max(b.home_win_prob||0, b.away_win_prob||0, b.draw_prob||0, b.over25_prob||0, b.btts_prob||0);
+            return probB - probA;
+        });
+        const topPicks = sorted.filter(m => m.category === 'safe');
+        const freeablePicks = topPicks.length > 0 ? topPicks : sorted.filter(m => m.category === 'value');
+        const freeIds = new Set(freeablePicks.slice(0, 3).map(m => m.id));
+        return freeIds.has(match.id);
+    };
+    
+    const isUnlocked = isVipUser || isFreeMatchCheck();
 
     return (
         <div className="min-h-screen bg-vantage-bg pb-20 font-sans text-white">
@@ -238,7 +259,7 @@ fetchDetails();
             </div>
             
             {/* VIP Lock Check */}
-            {!isVipUser ? (
+            {!isUnlocked ? (
                 <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-4 max-w-md mx-auto">
                     <div className="w-16 h-16 bg-vantage-purple/20 rounded-full flex items-center justify-center mb-2">
                         <Target size={32} className="text-vantage-purple" />

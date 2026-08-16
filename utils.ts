@@ -35,17 +35,7 @@ export const getTopProbPicks = (match: Match): ProbPick[] => {
     return [];
   }
 
-  const topPick = markets[0];
-  const picks = [topPick];
-
-  if (topPick.name === 'Over 1.5 Goals' || topPick.name === 'Over 0.5 Goals') {
-    const nextBest = markets.find(m => m.name !== 'Over 1.5 Goals' && m.name !== 'Over 0.5 Goals');
-    if (nextBest && nextBest.prob > 0 && !picks.includes(nextBest)) picks.push(nextBest);
-  } else if (markets.length > 1 && markets[1].prob > 0) {
-    if (topPick.prob - markets[1].prob <= 0.02) picks.push(markets[1]);
-  }
-
-  return picks;
+  return [markets[0]];
 };
 
 export const getPrimaryPredictionText = (match: Match, language: string): string => {

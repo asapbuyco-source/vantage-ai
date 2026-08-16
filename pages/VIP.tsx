@@ -241,6 +241,9 @@ export const VIP: React.FC<VIPProps> = () => {
   const handlePlanClick = (planId: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual') => {
     setSelectedPlanId(planId);
     setShowPaymentModal(true);
+    import('../services/analytics').then(({ trackEvent }) => {
+      trackEvent('vip_upgrade_clicked', { plan: planId });
+    }).catch(() => {});
   };
 
   const handleCopy = (text: string, id: string) => {
@@ -579,7 +582,7 @@ export const VIP: React.FC<VIPProps> = () => {
               <div className="text-center py-10 rounded-2xl border-2 border-dashed border-purple-500/20 bg-purple-500/5">
                 <LayoutGrid size={28} className="mx-auto mb-2 text-purple-500/40" />
                 <p className="text-sm font-medium text-gray-500">No accumulators generated today</p>
-                <p className="text-xs text-gray-400 mt-1">Check back after 19:00 Lagos time</p>
+                <p className="text-xs text-gray-400 mt-1">Check back after 07:30 Lagos time</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

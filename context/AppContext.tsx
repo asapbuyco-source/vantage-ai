@@ -72,6 +72,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const exists = prev.some(p => p.id === pick.id);
       const next = exists ? prev.filter(p => p.id !== pick.id) : [...prev, pick];
       localStorage.setItem('vantage_saved_picks', JSON.stringify(next));
+      if (!exists) {
+        import('../services/analytics').then(({ trackEvent }) => {
+          trackEvent('pick_saved', { match: `${pick.homeTeam} v ${pick.awayTeam}`, league: pick.league || '' });
+        }).catch(() => {});
+      }
       return next;
     });
   }, []);

@@ -50,6 +50,13 @@ function AppContent() {
   // Enable Firestore offline persistence on mount
   useEffect(() => { enableFirestorePersistence(); }, []);
 
+  // Analytics: track page views on route change
+  useEffect(() => {
+    import('./services/analytics').then(({ trackPageView }) => {
+      trackPageView(location.pathname);
+    }).catch(() => {});
+  }, [location.pathname]);
+
   // Listen for SW_UPDATED message from the new service worker
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
