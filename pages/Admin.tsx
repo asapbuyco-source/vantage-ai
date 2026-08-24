@@ -8,7 +8,7 @@ import { UserProfile, NavigationTab, Match, PayoutRequest, TeamAsset } from '../
 import { useAppContext } from '../context/AppContext';
 import { useData } from '../context/DataContext';
 import { testGeminiConnection, enrichMatchStats, setGeminiModel, getGeminiModel, AVAILABLE_MODELS } from '../services/gemini';
-import { getFirestorePredictionsOnly, getGlobalTodayKey, getGlobalYesterdayKey, saveTodaysPredictions, saveTeamAsset, deleteTeamAsset, getAllTeamAssets, getAppSettings, saveAppSettings, getUserCount, getInternalSettings, saveInternalSettings } from '../services/db';
+import { getFirestorePredictionsOnly, getGlobalTodayKey, getGlobalYesterdayKey, saveTodaysPredictions, saveTeamAsset, deleteTeamAsset, getAllTeamAssets, getAppSettings, saveAppSettings, getUserCount, getInternalSettings, saveInternalSettings, isVipActive } from '../services/db';
 import { getAnalyticsRange, DailyAnalytics } from '../services/analytics';
 import { auth } from '../firebaseConfig';
 import { TeamLogo } from '../components/TeamLogo';
@@ -331,14 +331,16 @@ export const Admin: React.FC<AdminProps> = () => {
 
     const handleToggleVip = async (user: UserProfile) => {
         if (processingId) return;
-        
-        // If revoking, do it immediately. If granting, show plan dropdown.
-        if (user.isVip) {
+
+        // Use EFFECTIVE status (flag + expiry) so expired-but-flagged users
+        // can be revoked cleanly and re-granted without stale-state issues.
+        const currentlyActive = isVipActive(user);
+        if (currentlyActive || user.isVip) {
             setProcessingId(user.uid);
             try {
-                await toggleUserVip(user.uid, user.isVip);
-                setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isVip: false, vipPlan: undefined } : u));
-                setUserStats(prev => ({ ...prev, vip: prev.vip - 1, free: prev.free + 1 }));
+                await toggleUserVip(user.uid, true);
+                setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isVip: false, vipPlan: undefined, vipExpiry: undefined } : u));
+                setUserStats(prev => ({ ...prev, vip: Math.max(0, prev.vip - 1), free: prev.free + 1 }));
             } catch (e) { console.error(e); }
             finally { setProcessingId(null); }
         } else {
@@ -350,9 +352,21 @@ export const Admin: React.FC<AdminProps> = () => {
         setSelectPlanFor(null);
         setProcessingId(user.uid);
         try {
-            await toggleUserVip(user.uid, user.isVip, plan);
-            setUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isVip: true, vipPlan: plan } : u));
-            setUserStats(prev => ({ ...prev, vip: prev.vip + 1, free: prev.free - 1 }));
+            await toggleUserVip(user.uid, false, plan);
+            // Refresh authoritative counts from server after grant
+            getUserCount().then(({ total, vip }) => {
+                setUserStats(prev => ({ ...prev, total, vip, free: total - vip }));
+            }).catch(() => {});
+            setUsers(prev => prev.map(u => {
+                if (u.uid !== user.uid) return u;
+                const expiry = new Date();
+                if (plan === 'daily') expiry.setDate(expiry.getDate() + 1);
+                else if (plan === 'weekly') expiry.setDate(expiry.getDate() + 7);
+                else if (plan === 'quarterly') expiry.setDate(expiry.getDate() + 90);
+                else if (plan === 'annual') expiry.setDate(expiry.getDate() + 365);
+                else expiry.setDate(expiry.getDate() + 30);
+                return { ...u, isVip: true, vipPlan: plan, vipExpiry: expiry.toISOString() };
+            }));
         } catch (e) { console.error(e); }
         finally { setProcessingId(null); }
     };
@@ -1262,7 +1276,7 @@ export const Admin: React.FC<AdminProps> = () => {
                                         className={`flex items-center justify-between p-3 rounded-xl border ${u.isBlocked ? 'bg-red-900/10 border-red-500/20' : 'bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/5'}`}
                                     >
                                         <div className="flex items-center space-x-3 overflow-hidden">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${u.isAdmin ? 'bg-red-500 text-white' : (u.isVip ? 'bg-vantage-purple text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500')}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${u.isAdmin ? 'bg-red-500 text-white' : (isVipActive(u) ? 'bg-vantage-purple text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500')}`}>
                                                 {u.email ? u.email.substring(0, 2).toUpperCase() : '??'}
                                             </div>
                                             <div className="flex flex-col min-w-0">
@@ -1270,7 +1284,9 @@ export const Admin: React.FC<AdminProps> = () => {
                                                     {u.email}
                                                 </span>
                                                 <span className="text-[10px] text-gray-500 flex items-center gap-2">
-                                                    {u.isVip ? (
+                                                    {u.isVip && !isVipActive(u) ? (
+                                                        <span className="text-gray-400 flex items-center gap-1"><Crown size={10} /> VIP Expired</span>
+                                                    ) : isVipActive(u) ? (
                                                         <span className="text-vantage-purple flex items-center gap-1"><Crown size={10} /> VIP</span>
                                                     ) : 'Free'}
                                                     {u.isAdmin && (
@@ -1299,15 +1315,15 @@ export const Admin: React.FC<AdminProps> = () => {
                                             <button
                                                 onClick={() => handleToggleVip(u)}
                                                 disabled={processingId === u.uid}
-                                                className={`p-2 rounded-lg transition-colors ${u.isVip
+                                                className={`p-2 rounded-lg transition-colors ${isVipActive(u)
                                                     ? 'bg-vantage-purple/10 text-vantage-purple hover:bg-vantage-purple/20'
                                                     : 'bg-gray-200 dark:bg-white/5 text-gray-400 hover:text-green-500'
                                                     }`}
-                                                title={u.isVip ? "Revoke VIP" : "Grant VIP"}
+                                                title={isVipActive(u) ? "Revoke VIP" : "Grant VIP"}
                                             >
                                                 {processingId === u.uid ? (
                                                     <RefreshCw size={16} className="animate-spin" />
-                                                ) : u.isVip ? (
+                                                ) : isVipActive(u) ? (
                                                     <XCircle size={16} />
                                                 ) : (
                                                     <CheckCircle2 size={16} />

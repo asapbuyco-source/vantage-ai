@@ -721,6 +721,21 @@ const shareReferral = () => {
                         <ChevronRight size={18} className="text-gray-400" />
                     </button>
 
+                    {/* Learning Hub (moved from bottom nav) */}
+                    <button
+                        onClick={() => navigate('/learn')}
+                        className="w-full flex items-center justify-between p-4 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors border-b border-slate-200 dark:border-white/5"
+                    >
+                        <div className="flex items-center space-x-3 text-slate-700 dark:text-gray-300">
+                            <BookOpen size={20} />
+                            <div className="text-left">
+                                <span className="font-bold block leading-tight">{language === 'fr' ? 'Centre d\'Apprentissage' : 'Learning Hub'}</span>
+                                <span className="text-[10px] text-gray-500">Guides, strategy & betting basics</span>
+                            </div>
+                        </div>
+                        <ChevronRight size={18} className="text-gray-400" />
+                    </button>
+
                     <button
                         onClick={() => setShowSettings(true)}
                         className="w-full flex items-center justify-between p-4 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors border-b border-slate-200 dark:border-white/5"

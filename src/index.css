@@ -8,11 +8,23 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Dark theme: flat black like the search/pitch surfaces */
+.dark body {
+  background-color: #05070a;
+}
+
 .font-orbitron {
   font-family: 'Orbitron', sans-serif;
 }
 
-/* Global Scrollbar Handling */
+/* ── Refined focus rings ── */
+:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Global Scrollbar Handling ── */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -64,4 +76,22 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ── Glass card hover lift (used by interactive cards) ── */
+.glass-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+.glass-hover:hover {
+  transform: translateY(-2px);
+}
+.dark .glass-hover:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.glass-hover:hover {
+  background-color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
 }

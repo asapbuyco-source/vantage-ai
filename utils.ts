@@ -38,6 +38,27 @@ export const getTopProbPicks = (match: Match): ProbPick[] => {
   return [markets[0]];
 };
 
+/**
+ * Plain-language market names for non-technical users.
+ * "Double Chance (1X)" → "Home or Draw", "FH Over 0.5" → "1st-Half Goal".
+ */
+export const plainMarket = (market: string): string => {
+  if (!market) return market;
+  const m = market.toLowerCase();
+  if (m === 'double chance (1x)' || m === 'double chance 1x') return 'Home or Draw';
+  if (m === 'double chance (x2)' || m === 'double chance x2') return 'Draw or Away';
+  if (m === 'double chance (12)' || m === 'double chance 12') return 'Home or Away';
+  if (m === 'btts' || m.includes('both teams to score') && !m.includes('no')) return 'Both Teams Score';
+  if (m.includes('btts no')) return 'One Team Fails to Score';
+  if (m === 'draw no bet (home)') return 'Home Win (draw refunds)';
+  if (m === 'draw no bet (away)') return 'Away Win (draw refunds)';
+  if (m.includes('fh over 0.5')) return '1st-Half Goal';
+  if (m.includes('fh over 1.5')) return '1st-Half Over 1.5';
+  if (m.includes('fh btts')) return '1st-Half: Both Score';
+  if (/^over \d(\.\d)? goals?$/.test(m)) return market.replace(/^Over/, 'Over').replace(/Goals$/i, 'goals');
+  return market;
+};
+
 export const getPrimaryPredictionText = (match: Match, language: string): string => {
   const topPicks = getTopProbPicks(match);
   if (topPicks.length > 0) {

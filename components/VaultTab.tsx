@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, TrendingUp, TrendingDown, Minus, Calendar, ChevronDown, ChevronUp, Pencil, Info, AlertTriangle } from 'lucide-react';
+import { RefreshCw, TrendingUp, TrendingDown, Minus, Calendar, ChevronDown, ChevronUp, Pencil, Info, AlertTriangle, Copy, Check } from 'lucide-react';
+import { TeamCrest } from './intel/TeamCrest';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -117,6 +118,7 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
     const [circuitBroken, setCircuitBroken] = useState(false);
+    const [copiedPickId, setCopiedPickId] = useState<string | null>(null);
 
     const todayKey = getGlobalTodayKey();
     const vaultStartDate = userProfile?.vaultProgress?.startDate || user?.metadata?.creationTime?.split('T')[0] || todayKey;
@@ -640,12 +642,32 @@ export const VaultTab: React.FC<{ quantPredictions: any[], onEditBankroll?: () =
                                 <div className="p-3">
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-black text-gray-400">#{i + 1}</span>
-                                                <span className="text-sm font-bold text-white truncate">
-                                                    {pick.homeTeam} vs {pick.awayTeam}
-                                                </span>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-[10px] font-black text-gray-400 shrink-0">#{i + 1}</span>
+                                                <TeamCrest teamName={pick.homeTeam} size={22} />
+                                                <span className="text-[13px] font-bold text-white truncate">{pick.homeTeam}</span>
+                                                <span className="text-[9px] font-bold text-gray-500 shrink-0">vs</span>
+                                                <TeamCrest teamName={pick.awayTeam} size={22} />
+                                                <span className="text-[13px] font-bold text-white truncate">{pick.awayTeam}</span>
                                             </div>
+                                            <button
+                                                onClick={() => {
+                                                    const text = `${pick.homeTeam} vs ${pick.awayTeam} — ${pick.market} @ ${pick.odds.toFixed(2)}`;
+                                                    navigator.clipboard.writeText(text).then(() => {
+                                                        setCopiedPickId(pick.fixtureId);
+                                                        setTimeout(() => setCopiedPickId(null), 1500);
+                                                    }).catch(() => {});
+                                                }}
+                                                className={`mt-1.5 flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${
+                                                    copiedPickId === pick.fixtureId
+                                                        ? 'bg-emerald-500/15 text-emerald-400'
+                                                        : 'bg-white/5 text-gray-500 hover:text-vantage-cyan hover:bg-vantage-cyan/10'
+                                                }`}
+                                                title="Copy this pick"
+                                            >
+                                                {copiedPickId === pick.fixtureId ? <Check size={10} /> : <Copy size={10} />}
+                                                {copiedPickId === pick.fixtureId ? 'Copied!' : 'Copy'}
+                                            </button>
                                             <div className="flex items-center gap-2 mt-2 flex-wrap">
                                                 <span className={`text-[11px] font-black px-2 py-1 rounded-lg ${
                                                     isWon ? 'bg-emerald-500/20 text-emerald-400' :

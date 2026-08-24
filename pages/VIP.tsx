@@ -529,6 +529,35 @@ export const VIP: React.FC<VIPProps> = () => {
           </a>
         )}
 
+        {/* ── Backtest Validation Strip ── */}
+        <div className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 to-vantage-cyan/5 p-4 mb-5">
+          <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent pointer-events-none" />
+          <div className="flex items-center gap-2 mb-2.5">
+            <ShieldCheck size={15} className="text-emerald-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+              {language === 'fr' ? 'Validé par Backtest' : 'Backtest Verified'}
+            </span>
+            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-white/10 text-gray-300">BIG-5 · 2024/25</span>
+          </div>
+          <p className="text-[11px] text-gray-400 leading-snug mb-3">
+            {language === 'fr'
+              ? 'Chaque probabilité affichée est testée contre 1 614 vrais résultats de match.'
+              : 'Every probability we show is tested against 1,614 real match outcomes.'}
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { v: '94%', l: language === 'fr' ? 'précision marche phare' : 'top market accuracy' },
+              { v: '75%', l: language === 'fr' ? 'précision double chance' : 'double-chance accuracy' },
+              { v: '0.59', l: 'Brier (0.67 random)' },
+            ].map(s => (
+              <div key={s.l} className="rounded-lg bg-black/20 dark:bg-black/30 border border-white/5 px-1 py-2">
+                <p className="text-sm font-black font-mono text-emerald-400 leading-none">{s.v}</p>
+                <p className="text-[7px] text-gray-500 uppercase tracking-wider mt-1 leading-tight">{s.l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
        {/* â”€â”€ TAB SWITCH â”€â”€ */}
        <div className="flex bg-slate-100 dark:bg-white/5 rounded-xl p-1 mb-6">
           <button

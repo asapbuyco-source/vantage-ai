@@ -29,6 +29,10 @@ import { MotionDiv } from './components/MotionDiv';
 const VIP = lazy(() => import('./pages/VIP').then(m => ({ default: m.VIP })));
 const Admin = lazy(() => import('./pages/Admin').then(m => ({ default: m.Admin })));
 const Learn = lazy(() => import('./pages/Learn').then(m => ({ default: m.Learn })));
+const IntelligenceTeam = lazy(() => import('./pages/IntelligenceTeam').then(m => ({ default: m.IntelligenceTeam })));
+const IntelligencePlayer = lazy(() => import('./pages/IntelligencePlayer').then(m => ({ default: m.IntelligencePlayer })));
+const IntelligenceVersus = lazy(() => import('./pages/IntelligenceChallenge').then(m => ({ default: m.IntelligenceChallenge })));
+const Research = lazy(() => import('./pages/Research').then(m => ({ default: m.Research })));
 
 
 function AppContent() {
@@ -287,15 +291,31 @@ function AppContent() {
       <Route path="/match/:id" element={<MatchDetails />} />
       <Route path="/privacy-policy" element={<Privacy />} />
 
+      {/* ───── Intelligence Pages (full-screen, no bottom nav) ───── */}
+      <Route path="/intel/team/:id" element={
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+          <IntelligenceTeam />
+        </Suspense>
+      } />
+      <Route path="/intel/player/:id" element={
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+          <IntelligencePlayer />
+        </Suspense>
+      } />
+      <Route path="/intel/versus" element={
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+          <IntelligenceVersus />
+        </Suspense>
+      } />
+      <Route path="/intel/challenge" element={
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+          <IntelligenceVersus />
+        </Suspense>
+      } />
+
       {/* ───── All other routes = main authenticated app ───── */}
       <Route path="*" element={
         <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans transition-colors duration-300 md:flex">
-
-          {/* Ambient Background */}
-          <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-4xl h-64 blur-[120px] rounded-full mix-blend-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-vantage-cyan/5' : 'bg-blue-200/40'}`} />
-            <div className={`absolute bottom-0 right-0 w-96 h-96 blur-[120px] rounded-full mix-blend-screen transition-colors duration-500 ${theme === 'dark' ? 'bg-vantage-purple/5' : 'bg-purple-200/40'}`} />
-          </div>
 
           {/* ── New Version Update Banner ───────────────────────────── */}
           <AnimatePresence>
@@ -406,7 +426,13 @@ function AppContent() {
           </AnimatePresence>
 
           <main className="relative z-10 w-full mx-auto max-w-md md:max-w-7xl md:ml-64 px-4 pt-6 min-h-screen pb-24 md:pb-6" style={{ paddingTop: (showRenewalBanner || showTrialUpsell) ? '4rem' : undefined }}>
-            <AnimatePresence mode="wait">
+            {/* Keyed route transition: fade+rise on every path change */}
+            <MotionDiv
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+            >
               <Suspense fallback={<div className="min-h-screen flex flex-col items-center justify-center"><Loader2 className="animate-spin text-vantage-cyan mb-4" size={40} /><p className="text-gray-500 text-sm font-medium animate-pulse">Loading...</p></div>}>
                 <ErrorBoundary>
                   <Routes>
@@ -417,6 +443,11 @@ function AppContent() {
                     <Route path="/learn" element={<Learn />} />
                     <Route path="/guide" element={<Learn />} />
                     <Route path="/concierge" element={<TicketWizard />} />
+                    <Route path="/research" element={
+                      <Suspense fallback={<div className="min-h-screen flex flex-col items-center justify-center"><Loader2 className="animate-spin text-vantage-cyan mb-4" size={40} /></div>}>
+                        <Research />
+                      </Suspense>
+                    } />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/stats" element={<PublicStats />} />
@@ -425,7 +456,7 @@ function AppContent() {
                   </Routes>
                 </ErrorBoundary>
               </Suspense>
-            </AnimatePresence>
+            </MotionDiv>
           </main>
 
           <BottomNav />

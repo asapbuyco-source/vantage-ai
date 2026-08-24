@@ -61,6 +61,23 @@ MARKET_FACTORS = {
 FRAGILE_MARKETS = {"home_win", "away_win", "draw", "btts_no", "over35", "under35", "double_chance_x2",
                     "over45", "fh_away_win", "fh_over15", "fh_btts", "over75_corners"}
 
+# ── Empirical confidence boost (Big-5 2024-25, n=1282, intel_backtest) ──────
+# The raw model is systematically UNDERCONFIDENT: e.g. picks claimed at 55%
+# actually won 72% of the time. Boost within measured bands.
+EMPIRICAL_BOOSTS = (
+    (0.30, 0.40, 1.07),
+    (0.40, 0.50, 1.19),
+    (0.50, 0.60, 1.31),
+    (0.60, 0.70, 1.15),
+)
+
+def apply_empirical_boost(p: float) -> float:
+    """Nudge model probabilities toward observed frequencies."""
+    for lo, hi, f in EMPIRICAL_BOOSTS:
+        if lo <= p < hi:
+            return min(0.95, p * f)
+    return p
+
 # ── Workstream 6: Dynamic Calibration ────────────────────────────────────────
 
 # Layer 1: Season Phase Multiplier

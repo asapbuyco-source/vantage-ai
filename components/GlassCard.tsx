@@ -26,15 +26,18 @@ export const GlassCard: React.FC<GlassCardProps> = ({
       whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={`
-        relative overflow-hidden rounded-2xl border
-        ${onClick ? 'cursor-pointer' : ''}
+        relative overflow-hidden rounded-2xl border backdrop-blur-md
+        ${onClick ? 'cursor-pointer glass-hover' : ''}
         ${highlight
-          ? 'border-vantage-cyan/40 bg-vantage-cyan/10 dark:bg-vantage-cyan/5'
-          : 'border-slate-200 bg-white/90 dark:border-white/10 dark:bg-white/5'}
-        backdrop-blur-md shadow-lg p-5
+          ? 'border-vantage-cyan/30 bg-vantage-cyan/10 dark:bg-vantage-cyan/5 shadow-cyan-glow'
+          : 'border-slate-200 bg-white/90 dark:border-white/10 dark:bg-white/5 shadow-glass'}
+        p-5
         ${className}
       `}
     >
+      {/* Top edge highlight line */}
+      <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-vantage-cyan/40 to-transparent pointer-events-none" />
+
       {/* Corner glow orbs */}
       <div className="absolute -top-8 -right-8 w-16 h-16 bg-white/30 dark:bg-white/5 rounded-full blur-2xl pointer-events-none opacity-60 dark:opacity-100" />
       <div className="absolute -bottom-8 -left-8 w-16 h-16 bg-vantage-cyan/10 dark:bg-vantage-cyan/5 rounded-full blur-2xl pointer-events-none" />

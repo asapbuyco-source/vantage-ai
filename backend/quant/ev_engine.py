@@ -90,6 +90,9 @@ def calibrate_market_probability(
     key = _market_to_key(market)
     factor = get_dynamic_calibration_factor(key, 0.97, league_id, month)
     calibrated = max(0.01, min(0.99, raw_prob * factor))
+    # Empirical underconfidence correction (Big-5 backtest, n=1282)
+    from calibration_registry import apply_empirical_boost
+    calibrated = apply_empirical_boost(calibrated)
     tier = get_calibration_tier(key)
     return calibrated, factor, tier
 

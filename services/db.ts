@@ -792,25 +792,31 @@ export const updateUserProfile = async (uid: string, data: Partial<UserProfile>)
 
 // ─── USER COUNT ───────────────────────────────────────────────────────────────
 
+/** True only if the profile's VIP flag is set AND the subscription hasn't expired. */
+export const isVipActive = (profile: any): boolean => {
+    if (!profile?.isVip) return false;
+    if (!profile.vipExpiry) return true; // no expiry = lifetime/admin-granted
+    try {
+        return new Date() < new Date(profile.vipExpiry);
+    } catch {
+        return false;
+    }
+};
+
 export const getUserCount = async (): Promise<{ total: number; vip: number }> => {
     try {
         const coll = collection(db, 'profiles');
-        // Use getCountFromServer first (fast, needs Firestore index)
-        const [totalSnap, vipSnap] = await Promise.all([
-            getCountFromServer(coll),
-            getCountFromServer(query(coll, where('isVip', '==', true)))
-        ]);
+        // Total via fast server-side count
+        const totalSnap = await getCountFromServer(coll);
         const total = totalSnap.data().count;
-        const vip = vipSnap.data().count;
-        if (total > 0) return { total, vip };
-        
-        // Fallback: count all docs (works without index, slower for large collections)
-        const allDocs = await getDocs(coll);
-        const profiles = allDocs.docs.map(d => d.data());
-        return {
-            total: profiles.length,
-            vip: profiles.filter((p: any) => p.isVip).length
-        };
+        if (total <= 0) return { total: 0, vip: 0 };
+
+        // VIP must be counted client-side so EXPIRED subscriptions are excluded
+        // (isVip flag is only cleared when that user next logs in).
+        const vipSnap = await getDocs(query(coll, where('isVip', '==', true)));
+        let vip = 0;
+        vipSnap.forEach(d => { if (isVipActive(d.data())) vip++; });
+        return { total, vip };
     } catch (e) {
         console.warn('getUserCount error', e);
         return { total: 0, vip: 0 };
