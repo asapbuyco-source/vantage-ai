@@ -11,6 +11,7 @@ import { TugOfWar } from '../components/intel/TugOfWar';
 import { TeamCrest } from '../components/intel/TeamCrest';
 import { PlayerAvatar } from '../components/intel/PlayerAvatar';
 import { DreamPitch } from '../components/intel/DreamPitch';
+import { MatchSim } from '../components/intel/MatchSim';
 
 const HOME = '#22d3ee';
 const AWAY = '#a855f7';
@@ -36,6 +37,7 @@ export const IntelligenceChallenge: React.FC = () => {
   const [pH, setPH] = useState<PlayerIntelligence | null>(null);
   const [pA, setPA] = useState<PlayerIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
+  const [simDone, setSimDone] = useState(false);
 
   // Dream XI rosters
   const [dreamH, setDreamH] = useState<PlayerIntelligence[]>([]);
@@ -86,10 +88,25 @@ export const IntelligenceChallenge: React.FC = () => {
   // ── Loading / coverage guards ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-vantage-bg flex flex-col items-center justify-center gap-4">
-        <RefreshCw size={28} className="animate-spin text-vantage-cyan" />
-        <p className="text-xs text-gray-500">Building matchup…</p>
-      </div>
+      <Shell><RefreshCw size={28} className="animate-spin text-vantage-cyan" />
+        <p className="text-xs text-gray-500 text-center mt-3">Building matchup…</p></Shell>
+    );
+  }
+
+  // ── Match simulation first (all challenge types) ──
+  if (!simDone) {
+    const sh = type === 'players' ? [pH?.player_name ?? ''] : type === 'dream' ? dreamH.map(p => p.player_name) : [];
+    const sa = type === 'players' ? [pA?.player_name ?? ''] : type === 'dream' ? dreamA.map(p => p.player_name) : [];
+    const hAtk = type === 'teams' && home ? home.scores.attacking : null;
+    const aAtk = type === 'teams' && away ? away.scores.attacking : null;
+    return (
+      <MatchSim
+        homeName={type === 'teams' ? home?.team_name ?? 'Home' : type === 'players' ? pH?.player_name ?? 'Home' : `Your XI (${dreamH.length})`}
+        awayName={type === 'teams' ? away?.team_name ?? 'Away' : type === 'players' ? pA?.player_name ?? 'Away' : `Vantage AI (${dreamA.length})`}
+        homeAttack={hAtk} awayAttack={aAtk}
+        scorersHome={sh} scorersAway={sa}
+        onDone={() => setSimDone(true)}
+      />
     );
   }
 

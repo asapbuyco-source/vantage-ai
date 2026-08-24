@@ -78,12 +78,15 @@ export const Research: React.FC = () => {
     if (q.length < 2) { setResults([]); setSearching(false); return; }
     setSearching(true);
     debounceRef.current = setTimeout(async () => {
-      const r = await searchIntelligence(q, filter === 'all' ? undefined : filter);
+      const effFilter = mode === 'challenge'
+        ? (kind === 'teams' ? 'team' : 'player')
+        : (filter === 'all' ? undefined : filter);
+      const r = await searchIntelligence(q, effFilter as any);
       setResults(r);
       setSearching(false);
     }, 250);
     return () => clearTimeout(debounceRef.current);
-  }, [query, filter]);
+  }, [query, filter, mode, kind]);
 
   const saveRecent = (r: SearchResult) => {
     try {
