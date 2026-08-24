@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { Settings, LogOut, ChevronRight, Moon, Sun, User, AlertTriangle, X, Mail, Lock, ArrowRight, CheckCircle2, Crown, ShieldAlert, Globe, FileText, Calendar, CreditCard, MessageCircle, ChevronLeft, Shield, Ticket, Copy, Share2, Coins, Wallet, History, Sparkles, BookOpen, TrendingUp, Target, BarChart3, Activity, PlayCircle, ExternalLink, RefreshCw, Zap } from 'lucide-react';
+import { Settings, LogOut, ChevronRight, Moon, Sun, User, AlertTriangle, X, Mail, Lock, ArrowRight, CheckCircle2, Crown, ShieldAlert, Globe, FileText, Calendar, CreditCard, MessageCircle, ChevronLeft, Shield, Ticket, Copy, Share2, Coins, Wallet, History, Sparkles, BookOpen, TrendingUp, Target, BarChart3, Activity, PlayCircle, ExternalLink, RefreshCw, Zap, Eye, EyeOff } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -29,6 +29,7 @@ export const Profile: React.FC<ProfileProps> = ({ initialMode, onBack }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [resetSent, setResetSent] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
     const [legalPage, setLegalPage] = useState<'privacy' | 'terms' | null>(null);
     const [copiedCode, setCopiedCode] = useState(false);
 
@@ -305,14 +306,22 @@ const shareReferral = () => {
                                                     <Lock size={18} />
                                                 </div>
                                                 <input
-                                                    type="password"
+                                                    type={showPassword ? 'text' : 'password'}
                                                     placeholder={t('auth.password_placeholder')}
                                                     value={password}
                                                     onChange={(e) => setPassword(e.target.value)}
-                                                    className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-vantage-cyan/50 focus:border-vantage-cyan/50 text-slate-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 transition-all outline-none text-sm"
+                                                    className="w-full pl-10 pr-10 py-3 bg-slate-100 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-vantage-cyan/50 focus:border-vantage-cyan/50 text-slate-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-600 transition-all outline-none text-sm"
                                                     required={!isForgotMode}
                                                     minLength={6}
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowPassword(v => !v)}
+                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-vantage-cyan transition-colors"
+                                                    title={showPassword ? 'Hide password' : 'Show password'}
+                                                >
+                                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
                                             </div>
 
                                             {/* Referral Code Input - Show in Signup Mode OR if user manually entered one */}
@@ -386,9 +395,28 @@ const shareReferral = () => {
                                     </button>
 
                                     <div className="text-center">
-                                        <button onClick={() => { setIsLoginMode(!isLoginMode); clearError(); }} className="text-xs text-slate-500 dark:text-gray-400 hover:text-vantage-cyan transition-colors">
-                                            {isLoginMode ? t('auth.no_account') : t('auth.has_account')}
-                                        </button>
+                                        {isLoginMode ? (
+                                            <div className="rounded-xl border border-vantage-purple/30 bg-vantage-purple/5 p-3.5 flex items-center justify-between gap-3">
+                                                <div className="text-left min-w-0">
+                                                    <p className="text-xs font-black text-white leading-tight">
+                                                        {language === 'fr' ? 'Nouveau ici ? Créez un compte' : 'New here? Create an account'}
+                                                    </p>
+                                                    <p className="text-[10px] text-gray-500">
+                                                        {language === 'fr' ? 'Picks gratuits chaque jour · sans carte' : 'Free picks daily · no card needed'}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => { setIsLoginMode(false); clearError(); }}
+                                                    className="px-4 py-2 rounded-lg bg-vantage-gradient text-white text-xs font-black shrink-0 active:scale-95 transition-transform"
+                                                >
+                                                    {language === 'fr' ? 'S\'inscrire' : 'Sign Up'}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => { setIsLoginMode(true); clearError(); }} className="text-xs text-slate-500 dark:text-gray-400 hover:text-vantage-cyan transition-colors">
+                                                {t('auth.has_account')}
+                                            </button>
+                                        )}
                                     </div>
                                 </>
                             )}

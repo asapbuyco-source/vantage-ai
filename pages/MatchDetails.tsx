@@ -347,21 +347,33 @@ fetchDetails();
                         const homeP = (match.home_win_prob || 0) * 100;
                         const awayP = (match.away_win_prob || 0) * 100;
                         const favSide = homeP >= awayP ? 'home' : 'away';
-                        const over15 = (match.over15_prob || 0) * 100;
-                        const under15 = (1 - (match.over15_prob || 0)) * 100;
-                        const over35 = (match.over35_prob || 0) * 100;
-                        const under35 = (1 - (match.over35_prob || 0)) * 100;
-                        const goalLean = over15 >= under15 ? 'over' : 'under';
 
-                        // Backtest (n=1614): DC + 1.5/3.5-line are our strongest markets.
-                        // O/U 2.5 & BTTS tested weakest → deliberately excluded here.
+                        // GOALS LEAN must inherit from the Safest Pick when it's a
+                        // goals market — never from Over 1.5 (≥50% almost always,
+                        // which falsely labels every match "over").
+                        const pickRaw = ((match.prediction_en || match.prediction || match.bet_type) || '').toLowerCase();
+                        const topName = getTopProbPicks(match)[0]?.name?.toLowerCase() || '';
+                        const anchor = `${pickRaw} ${topName}`;
+                        let goalLean: 'over' | 'under';
+                        if (anchor.includes('under')) goalLean = 'under';
+                        else if (anchor.includes('over')) goalLean = 'over';
+                        else {
+                            // Non-goals anchor: use expected total goals vs typical 2.6 baseline
+                            const totalXg = (match.expected_goals_home ?? 0) + (match.expected_goals_away ?? 0);
+                            goalLean = totalXg >= 2.6 ? 'over' : 'under';
+                        }
+
+                        // Backtest (n=1614): DC markets are strongest; goals slot uses
+                        // the SAFE line for the inherited lean (over→1.5, under→3.5).
+                        const over15 = (match.over15_prob || 0) * 100;
+                        const over35 = (match.over35_prob || 0) * 100;
                         const candidates: { l: string; code: string; p: number; side?: string; goals?: string }[] = [
                             { l: 'Home or Draw', code: '1X', p: ((match.double_chance_1x || 0) * 100), side: 'home' },
                             { l: 'Draw or Away', code: 'X2', p: ((match.double_chance_x2 || 0) * 100), side: 'away' },
                             { l: 'Home or Away', code: '12', p: ((match.double_chance_12 || 0) * 100) },
                             goalLean === 'over'
                                 ? { l: 'Over 1.5 Goals', code: 'O1.5', p: over15, goals: 'over' }
-                                : { l: 'Under 3.5 Goals', code: 'U3.5', p: under35, goals: 'under' },
+                                : { l: 'Under 3.5 Goals', code: 'U3.5', p: (100 - over35), goals: 'under' },
                         ];
 
                         // Only direction-aligned, value-worthy markets make the cut

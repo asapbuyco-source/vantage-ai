@@ -308,8 +308,8 @@ export const Home: React.FC<HomeProps> = () => {
             className="flex items-center space-x-1 bg-slate-100 dark:bg-white/5 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
           >
             <Globe size={12} className="text-slate-500 dark:text-gray-400" />
-            <span className="text-[10px] font-bold font-display text-vantage-cyan w-5 text-center">
-              {language === 'fr' ? 'EN' : 'FR'}
+            <span className="text-[10px] font-bold font-display text-vantage-cyan whitespace-nowrap">
+              {language === 'fr' ? 'English' : 'Français'}
             </span>
           </button>
           <button
