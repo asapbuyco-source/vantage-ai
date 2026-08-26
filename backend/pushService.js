@@ -8,18 +8,18 @@ const logger = pino({
         : undefined,
 });
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = 'llama-3.1-8b-instant';
+const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
+const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
 
 async function callGroq(messages, temperature = 0.3, maxTokens = 50) {
-    if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not configured');
-    const response = await fetch(GROQ_URL, {
+    if (!AI_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
+    const response = await fetch(AI_URL, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: GROQ_MODEL, messages, temperature, max_tokens: maxTokens })
+        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: AI_MODEL, messages, temperature, max_tokens: maxTokens })
     });
-    if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+    if (!response.ok) throw new Error(`AI error: ${response.status}`);
     const data = await response.json();
     return data.choices?.[0]?.message?.content?.trim() || '';
 }

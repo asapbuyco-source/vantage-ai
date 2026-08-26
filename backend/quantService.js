@@ -27,17 +27,17 @@ const logger = pino({
         : undefined,
 });
 
-// ── AI Analysis via Groq (Llama models) ─────────────────────────────────────
+// ── AI Analysis via OpenRouter (Nemotron free model) ────────────────────────
 async function enrichWithAIAnalysis(predictions) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey) {
-        logger.warn('[QuantService] GROQ_API_KEY not set, skipping AI analysis');
+        logger.warn('[QuantService] OPENROUTER_API_KEY not set, skipping AI analysis');
         return predictions;
     }
 
-    const GROQ_MODEL = 'llama-3.1-8b-instant';
-    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-    const DELAY_MS = 2500; // ~24 calls/minute, under 30 rpm limit
+    const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
+    const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
+    const DELAY_MS = 2500; // ~24 calls/minute
 
     function sleep(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,14 +45,14 @@ async function enrichWithAIAnalysis(predictions) {
 
     async function callGroq(messages, temperature = 0.15, retries = 3) {
         for (let attempt = 0; attempt < retries; attempt++) {
-            const response = await fetch(GROQ_URL, {
+            const response = await fetch(AI_URL, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    model: GROQ_MODEL,
+                    model: AI_MODEL,
                     messages,
                     temperature,
                     max_tokens: 150
@@ -62,16 +62,16 @@ async function enrichWithAIAnalysis(predictions) {
             if (response.status === 429) {
                 const err = await response.text();
                 if (attempt < retries - 1) {
-                    logger.warn(`[QuantService] Groq rate limit hit, retrying in 3s (attempt ${attempt + 1}/${retries - 1})...`);
+                    logger.warn(`[QuantService] AI rate limit hit, retrying in 3s (attempt ${attempt + 1}/${retries - 1})...`);
                     await sleep(3000);
                     continue;
                 }
-                throw new Error(`Groq API error: 429 - ${err}`);
+                throw new Error(`AI API error: 429 - ${err}`);
             }
 
             if (!response.ok) {
                 const err = await response.text();
-                throw new Error(`Groq API error: ${response.status} - ${err}`);
+                throw new Error(`AI API error: ${response.status} - ${err}`);
             }
 
             const data = await response.json();
@@ -123,10 +123,10 @@ return enriched;
 
 // ── AI League Radar ───────────────────────────────────────────────────────────
 async function generateLeagueRadar(predictions) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey || predictions.length === 0) return null;
 
-    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+    const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
     try {
         const leagueStats = {};
@@ -147,13 +147,13 @@ async function generateLeagueRadar(predictions) {
 
         const prompt = `You are a betting analyst. Based on this data, give a 3-sentence summary of the best leagues for betting today:\n\n${JSON.stringify(leagueSummary, null, 2)}\n\nFocus on: Which leagues have the most value? What's the best strategy today? Keep it concise and actionable. Max 60 words.`;
 
-        const response = await fetch(GROQ_URL, {
+        const response = await fetch(AI_URL, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 100 })
+            body: JSON.stringify({ model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 100 })
         });
 
-        if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+        if (!response.ok) throw new Error(`AI error: ${response.status}`);
         const data = await response.json();
         return { leagues: leagueSummary, insight: data.choices?.[0]?.message?.content?.trim() || '', generatedAt: new Date().toISOString() };
     } catch (e) {
@@ -164,10 +164,10 @@ async function generateLeagueRadar(predictions) {
 
 // ── AI Acca Copilot ───────────────────────────────────────────────────────────
 async function generateAccaCopilot(predictions) {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey || predictions.length === 0) return null;
 
-    const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+    const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
     try {
         const vaultPicks = predictions.filter(p => p.vault_eligible && p.odds > 0).sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0)).slice(0, 10);
@@ -177,13 +177,13 @@ async function generateAccaCopilot(predictions) {
 
         const prompt = `You are an accumulator betting expert. From these picks, suggest 2 accumulator combinations:\n\n${JSON.stringify(picksSummary, null, 2)}\n\nRules:\n- Each acca should have 2-4 legs\n- Combined odds should be reasonable (2.0 - 10.0)\n- Mix different leagues if possible\n- Explain why this combo works\n\nOutput format:\n**[Acca 1: Name]** (2-4 legs)\nLeg 1: Team A - Pick @ Odds\nCombined Odds: X.XX\n\nBe concise. Total response under 100 words.`;
 
-        const response = await fetch(GROQ_URL, {
+        const response = await fetch(AI_URL, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 200 })
+            body: JSON.stringify({ model: 'nvidia/nemotron-3-super-120b-a12b:free', messages: [{ role: 'user', content: prompt }], temperature: 0.2, max_tokens: 200 })
         });
 
-        if (!response.ok) throw new Error(`Groq error: ${response.status}`);
+        if (!response.ok) throw new Error(`AI error: ${response.status}`);
         const data = await response.json();
         return { suggestions: data.choices?.[0]?.message?.content?.trim() || '', picks: picksSummary, generatedAt: new Date().toISOString() };
     } catch (e) {
