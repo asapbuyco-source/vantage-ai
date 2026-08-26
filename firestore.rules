@@ -23,9 +23,9 @@ service cloud.firestore {
     }
 
     function doesNotTouchProtectedFields() {
-      let protected = ['isVip', 'vipExpiry', 'vipPlan', 'totalPaid', 'isAdmin', 'isBlocked',
+      let protectedKeys = ['isVip', 'vipExpiry', 'vipPlan', 'totalPaid', 'isAdmin', 'isBlocked',
         'referralEarnings', 'lifetimeEarnings', 'referralCount'];
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protected);
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys);
     }
 
     match /profiles/{userId} {
