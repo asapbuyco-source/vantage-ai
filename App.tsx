@@ -1,6 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
-import { verifySelarOrder } from './services/selar';
+import { verifyTchokopayOrder } from './services/tchokopay';
 import { AnimatePresence } from 'framer-motion';
 import { Loader2, X, Crown, RefreshCw } from 'lucide-react';
 import { NavigationTab } from './types';
@@ -147,31 +147,31 @@ function AppContent() {
     const checkPayments = async () => {
       const urlParams = new URLSearchParams(window.location.search);
 
-      // 1️⃣  Selar (card / global payment) — check first
-      let selarRef = urlParams.get('selar_ref');
-      if (!selarRef) {
-        const pending = localStorage.getItem('pendingSelarRef');
-        if (pending) selarRef = pending;
+      // 1️⃣  TchokoPay (global card / crypto) — check first
+      let tchokoRef = urlParams.get('tchokopay_ref');
+      if (!tchokoRef) {
+        const pending = localStorage.getItem('pendingTchokopayRef');
+        if (pending) tchokoRef = pending;
       }
 
-      if (selarRef) {
+      if (tchokoRef) {
         paymentChecked.current = true;
         window.history.replaceState({}, document.title, window.location.pathname);
-        localStorage.removeItem('pendingSelarRef');
+        localStorage.removeItem('pendingTchokopayRef');
 
-        const result = await verifySelarOrder(selarRef);
-        if (result.success) {
-          await verifyTransaction(`SELAR_${selarRef}`);
+        const result = await verifyTchokopayOrder(tchokoRef);
+        if (result) {
+          await verifyTransaction(`TCHOKOPAY_${tchokoRef}`);
           showToast(
-            language === 'fr' ? '✅ Paiement Selar confirmé ! Bienvenue VIP 🎉' : '✅ Selar payment confirmed! Welcome VIP 🎉',
+            language === 'fr' ? '✅ Paiement confirmé ! Bienvenue VIP 🎉' : '✅ Payment confirmed! Welcome VIP 🎉',
             'success'
           );
           navigate('/vip');
-        } else if (urlParams.get('selar_ref')) {
-          localStorage.removeItem('pendingSelarRef');
+        } else if (urlParams.get('tchokopay_ref')) {
+          localStorage.removeItem('pendingTchokopayRef');
           localStorage.removeItem('pendingVipPlan');
           showToast(
-            language === 'fr' ? 'Vérification Selar échouée. Contactez le support.' : 'Selar verification failed. Please contact support.',
+            language === 'fr' ? 'Vérification échouée. Contactez le support.' : 'Verification failed. Please contact support.',
             'error'
           );
         }

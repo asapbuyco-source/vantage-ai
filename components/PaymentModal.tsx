@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard, Smartphone, CheckCircle2, ShieldCheck, ArrowRight, Loader2, Globe, AlertTriangle, Mail, MessageCircle } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { initiateFapshiPayment } from '../services/fapshi';
-import { initiateSelarPayment } from '../services/selar';
+import { initiateTchokoPayPayment } from '../services/tchokopay';
 import { useAppContext } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { getPricingForCountry } from '../services/pricing';
@@ -24,7 +24,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
   const { t, language, showToast } = useAppContext();
   const { user, userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [gateway, setGateway] = useState<'fapshi' | 'selar'>('fapshi');
+  const [gateway, setGateway] = useState<'fapshi' | 'tchokopay'>('fapshi');
   const [paymentFailed, setPaymentFailed] = useState(false);
 
   const userEmail = user?.email || '';
@@ -32,7 +32,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
   React.useEffect(() => {
     if (isOpen && userProfile) {
       if (userProfile.country && !['cm', 'ci', 'sn', 'other'].includes(userProfile.country)) {
-        setGateway('selar');
+        setGateway('tchokopay');
       } else {
         setGateway('fapshi');
       }
@@ -75,23 +75,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
         }
         window.location.href = link;
       } else {
-        // For Selar, verify the user has an email before proceeding
-        if (!user.email) {
-          showToast(
-            language === 'fr'
-              ? "Votre compte n'a pas d'email associé. Contactez le support."
-              : "Your account has no email address. Please contact support.",
-            "error"
-          );
-          setLoading(false);
-          return;
-        }
-        const { checkout_url } = await initiateSelarPayment(
-          plan.id,
-          user.email,
-          user.uid
-        );
-        window.location.href = checkout_url;
+        const { checkoutUrl } = await initiateTchokoPayPayment(plan.id);
+        window.location.href = checkoutUrl;
       }
     } catch (e: any) {
       showToast(e.message || "Payment initiation failed", "error");
@@ -156,58 +141,30 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
                   <span className="text-xs font-bold">Cameroon (MoMo)</span>
                 </button>
                 <button
-                  onClick={() => setGateway('selar')}
-                  className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${gateway === 'selar' ? 'border-vantage-cyan bg-vantage-cyan/10 text-vantage-cyan' : 'border-slate-200 dark:border-white/10 text-gray-500 dark:text-gray-400'}`}
+                  onClick={() => setGateway('tchokopay')}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-2 transition-all ${gateway === 'tchokopay' ? 'border-vantage-cyan bg-vantage-cyan/10 text-vantage-cyan' : 'border-slate-200 dark:border-white/10 text-gray-500 dark:text-gray-400'}`}
                 >
                   <Globe size={20} />
-                  <span className="text-xs font-bold">Global (Selar)</span>
+                  <span className="text-xs font-bold">Global (Card & Crypto)</span>
                 </button>
               </div>
 
-              {/* ── Selar Email Warning ─────────────────────────────────────────────
-                  Critical: if the user pays in Selar with a different email than
-                  their Vantage account, the server cannot match the payment to
-                  their account and VIP will not be granted automatically.
+              {/* ── TchokoPay Info ──────────────────────────────────────────────
+                  Payment is matched to your account automatically via order ID —
+                  no email matching needed.
               */}
-              {gateway === 'selar' && userEmail && (
+              {gateway === 'tchokopay' && (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30"
+                  className="mb-5 p-3 rounded-xl bg-vantage-cyan/10 border border-vantage-cyan/30"
                 >
                   <div className="flex items-start gap-2.5">
-                    <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-bold text-amber-400 mb-1">
-                        {language === 'fr' ? '⚠️ Email important' : '⚠️ Important — Email Match Required'}
-                      </p>
-                      <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                        {language === 'fr'
-                          ? <>Utilisez <strong className="text-amber-200">{userEmail}</strong> lors du paiement Selar. Un email différent empêchera l'activation automatique.</>
-                          : <>Use <strong className="text-amber-200">{userEmail}</strong> when paying on Selar. Using a different email will prevent automatic VIP activation. Also after payment wait for atleast 2 min for the system to confirm your payment and activate your VIP</>
-                        }
-                      </p>
-                      <div className="flex items-center gap-1.5 mt-2 px-2 py-1 bg-amber-500/15 rounded-lg w-fit">
-                        <Mail size={10} className="text-amber-300" />
-                        <span className="text-[10px] font-mono font-bold text-amber-200">{userEmail}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {gateway === 'selar' && !userEmail && (
-                <motion.div
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-5 p-3 rounded-xl bg-red-500/10 border border-red-500/30"
-                >
-                  <div className="flex items-start gap-2.5">
-                    <AlertTriangle size={15} className="text-red-400 shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-red-300 leading-relaxed">
+                    <ShieldCheck size={15} className="text-vantage-cyan shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-gray-300 leading-relaxed">
                       {language === 'fr'
-                        ? 'Votre compte n\'a pas d\'email associé. Veuillez utiliser Mobile Money à la place.'
-                        : 'Your account has no email address. Please use Mobile Money instead.'
+                        ? <>Payez par <strong className="text-white">carte ou crypto</strong> (Bitcoin, USDT…). Votre VIP s'active automatiquement après confirmation — patientez ~2 minutes.</>
+                        : <>Pay by <strong className="text-white">card or crypto</strong> (Bitcoin, USDT…). Your VIP activates automatically after confirmation — please wait ~2 minutes.</>
                       }
                     </p>
                   </div>
@@ -216,7 +173,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, pla
 
               <button
                 onClick={handlePayment}
-                disabled={loading || (gateway === 'selar' && !userEmail)}
+                disabled={loading}
                 className="w-full py-4 bg-vantage-purple hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all shadow-lg shadow-vantage-purple/30 flex items-center justify-center space-x-2"
               >
                 {loading ? (

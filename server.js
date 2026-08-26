@@ -1009,6 +1009,176 @@ app.post('/api/payments/selar/webhook', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// TCHOKOPAY — global cards & crypto (all locations except Cameroon)
+// ══════════════════════════════════════════════════════════════════════
+const TCHOKOPAY_API = 'https://connect.tchokopay.com/v1';
+const TCHOKOPAY_API_KEY = process.env.TCHOKOPAY_API_KEY;
+const TCHOKOPAY_WEBHOOK_SECRET = process.env.TCHOKOPAY_WEBHOOK_SECRET;
+
+function verifyTchokoWebhook(rawBody, signatureHeader, timestampHeader) {
+    if (!TCHOKOPAY_WEBHOOK_SECRET) return { ok: false, status: 503, error: 'Webhook secret not configured' };
+    if (!signatureHeader || !timestampHeader) return { ok: false, status: 400, error: 'Missing signature headers' };
+
+    const expected = createHmac('sha256', TCHOKOPAY_WEBHOOK_SECRET)
+        .update(`${timestampHeader}.${rawBody}`)
+        .digest('hex');
+    const provided = String(signatureHeader).replace('sha256=', '');
+
+    let valid = false;
+    try {
+        valid = timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+    } catch {
+        valid = false;
+    }
+    if (!valid) return { ok: false, status: 401, error: 'Invalid signature' };
+
+    // Replay protection: reject events older than 5 minutes
+    const age = Math.abs(Date.now() / 1000 - Number(timestampHeader));
+    if (age > 300) return { ok: false, status: 400, error: 'Event too old' };
+
+    return { ok: true };
+}
+
+app.use('/api/payments/tchokopay/webhook', express.raw({ type: 'application/json', limit: '5mb' }));
+
+app.post('/api/payments/tchokopay/initiate', requireFirebaseUser, async (req, res) => {
+    try {
+        if (!TCHOKOPAY_API_KEY) {
+            return res.status(503).json({ error: 'TchokoPay is not configured on this server.' });
+        }
+        const { plan } = req.body || {};
+        const cfg = assertValidPlan(plan);
+
+        const merchantRef = `VTP_${req.firebaseUser.uid}_${plan}_${Date.now().toString(36)}`;
+
+        const createResp = await fetch(`${TCHOKOPAY_API}/payments`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${TCHOKOPAY_API_KEY}`,
+                'Content-Type': 'application/json',
+                'Idempotency-Key': merchantRef,
+            },
+            body: JSON.stringify({
+                amount: cfg.amount,
+                currency: 'XAF',
+                description: `Vantage AI — ${plan} plan`,
+                reference: merchantRef,
+                expiresInMinutes: 60,
+            }),
+        });
+
+        if (!createResp.ok) {
+            const errText = await createResp.text();
+            logger.error({ status: createResp.status, errText }, '[TchokoPay] Create payment failed');
+            return res.status(502).json({ error: 'TchokoPay could not create the payment' });
+        }
+
+        const payment = await createResp.json();
+
+        await admin.firestore().collection('tchokopay_pending').doc(payment.reference).set({
+            uid: req.firebaseUser.uid,
+            plan,
+            merchantRef,
+            amount: cfg.amount,
+            status: 'pending',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        res.json({ checkoutUrl: payment.checkoutUrl, reference: payment.reference });
+    } catch (e) {
+        logger.error({ error: e }, '[TchokoPay] Initiate error');
+        res.status(e.status || 500).json({ error: e.message || 'TchokoPay initiation failed' });
+    }
+});
+
+async function getTchokoPayment(reference) {
+    const r = await fetch(`${TCHOKOPAY_API}/payments/${encodeURIComponent(reference)}`, {
+        headers: { 'Authorization': `Bearer ${TCHOKOPAY_API_KEY}` },
+    });
+    if (!r.ok) return null;
+    return r.json();
+}
+
+async function fulfillTchokoPayment(reference, payment) {
+    const db = admin.firestore();
+    const ref = db.collection('tchokopay_pending').doc(reference);
+    const snap = await ref.get();
+    if (!snap.exists) return null;
+    const pending = snap.data();
+
+    const cfg = assertValidPlan(pending.plan);
+    // Verify requested XAF amount matches the selected plan
+    const requested = Number(payment.requestedAmount);
+    if (requested !== cfg.amount) {
+        logger.warn({ reference, requested, expected: cfg.amount }, '[TchokoPay] Amount mismatch');
+        return { error: 'Payment amount does not match selected plan' };
+    }
+
+    await fulfillVipPayment({
+        uid: pending.uid,
+        provider: 'tchokopay',
+        transactionId: reference,
+        plan: pending.plan,
+        amount: cfg.amount,
+        raw: payment,
+    });
+
+    await ref.set({ status: 'used', verifiedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return { success: true };
+}
+
+app.post('/api/payments/tchokopay/verify', requireFirebaseUser, async (req, res) => {
+    try {
+        const { reference } = req.body || {};
+        if (!reference) return res.status(400).json({ error: 'Missing reference' });
+
+        const db = admin.firestore();
+        const snap = await db.collection('tchokopay_pending').doc(reference).get();
+        if (!snap.exists) return res.status(404).json({ error: 'Pending payment not found' });
+        if (snap.data().uid !== req.firebaseUser.uid) return res.status(403).json({ error: 'Not your payment' });
+
+        const payment = await getTchokoPayment(reference);
+        if (!payment) return res.status(502).json({ error: 'Could not reach TchokoPay' });
+
+        if (payment.status === 'SUCCESS') {
+            await fulfillTchokoPayment(reference, payment);
+            return res.json({ status: 'SUCCESS' });
+        }
+        if (payment.status === 'FAILED') {
+            return res.status(400).json({ status: 'FAILED', error: 'Payment failed' });
+        }
+        return res.status(202).json({ status: 'PENDING' });
+    } catch (e) {
+        logger.error({ error: e }, '[TchokoPay] Verify error');
+        res.status(e.status || 500).json({ error: e.message || 'Verification failed' });
+    }
+});
+
+app.post('/api/payments/tchokopay/webhook', async (req, res) => {
+    try {
+        const rawBody = req.body.toString();
+        const authResult = verifyTchokoWebhook(
+            rawBody,
+            req.headers['x-tchokopay-signature'],
+            req.headers['x-tchokopay-timestamp'],
+        );
+        if (!authResult.ok) return res.status(authResult.status).json({ error: authResult.error });
+
+        const event = JSON.parse(rawBody);
+        if (event.status !== 'SUCCESS') return res.status(202).json({ ignored: true });
+
+        const payment = await getTchokoPayment(event.invoiceReference);
+        if (!payment) return res.status(502).json({ error: 'Could not fetch payment' });
+
+        await fulfillTchokoPayment(event.invoiceReference, payment);
+        res.json({ ok: true });
+    } catch (e) {
+        logger.error({ error: e }, '[TchokoPay] Webhook error');
+        res.status(500).json({ error: 'Webhook processing failed' });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // REVENUECAT WEBHOOK — Android Google Play subscriptions
 // ══════════════════════════════════════════════════════════════════════
 const REVENUECAT_WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
