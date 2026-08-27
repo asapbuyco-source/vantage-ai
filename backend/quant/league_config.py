@@ -101,6 +101,60 @@ for _league_id, _name in TIER_3.items():
 for _league_id, _name in TIER_4.items():
     ALL_APPROVED_LEAGUES[_league_id] = {"name": _name, "tier": 4, "weight": 0.55}
 
+# ── API-Football league IDs (current data source) ─────────────────────────
+# The pipeline now fetches via API-Football, whose league IDs differ from the
+# Sportmonks IDs above. Without these, every fixture is dropped as "unapproved".
+API_LEAGUE_IDS: dict[int, dict] = {
+    # Tier 1 — top European + global
+    39:  {"name": "English Premier League", "tier": 1, "weight": 1.0},
+    2:   {"name": "UEFA Champions League", "tier": 1, "weight": 1.0},
+    3:   {"name": "UEFA Europa League", "tier": 1, "weight": 1.0},
+    140: {"name": "La Liga", "tier": 1, "weight": 1.0},
+    78:  {"name": "Bundesliga", "tier": 1, "weight": 1.0},
+    135: {"name": "Serie A", "tier": 1, "weight": 1.0},
+    1:   {"name": "FIFA World Cup", "tier": 1, "weight": 1.0},
+    # Tier 2
+    61:  {"name": "Ligue 1", "tier": 2, "weight": 0.85},
+    94:  {"name": "Primeira Liga", "tier": 2, "weight": 0.85},
+    848: {"name": "UEFA Europa Conference League", "tier": 2, "weight": 0.85},
+    88:  {"name": "Eredivisie", "tier": 2, "weight": 0.85},
+    40:  {"name": "Championship", "tier": 2, "weight": 0.85},
+    179: {"name": "Scottish Premiership", "tier": 2, "weight": 0.85},
+    144: {"name": "Jupiler Pro League", "tier": 2, "weight": 0.85},
+    98:  {"name": "J1 League (Japan)", "tier": 2, "weight": 0.85},
+    262: {"name": "Liga MX (Mexico)", "tier": 2, "weight": 0.85},
+    169: {"name": "Chinese Super League", "tier": 2, "weight": 0.85},
+    # Tier 3
+    253: {"name": "Major League Soccer", "tier": 3, "weight": 0.70},
+    71:  {"name": "Brasileirão Série A", "tier": 3, "weight": 0.70},
+    128: {"name": "Argentine Primera División", "tier": 3, "weight": 0.70},
+    203: {"name": "Turkish Süper Lig", "tier": 3, "weight": 0.70},
+    307: {"name": "Saudi Pro League", "tier": 3, "weight": 0.70},
+    103: {"name": "Eliteserien (Norway)", "tier": 3, "weight": 0.70},
+    113: {"name": "Allsvenskan (Sweden)", "tier": 3, "weight": 0.70},
+    244: {"name": "Veikkausliiga (Finland)", "tier": 3, "weight": 0.70},
+    292: {"name": "K League 1 (South Korea)", "tier": 3, "weight": 0.70},
+    288: {"name": "Ekstraklasa (Poland)", "tier": 3, "weight": 0.70},
+    1406: {"name": "CAF Champions League", "tier": 3, "weight": 0.70},
+    1405: {"name": "CAF Confederation Cup", "tier": 3, "weight": 0.70},
+    141: {"name": "Segunda División (Spain)", "tier": 3, "weight": 0.70},
+    81:  {"name": "2. Bundesliga (Germany)", "tier": 3, "weight": 0.70},
+    136: {"name": "Serie B (Italy)", "tier": 3, "weight": 0.70},
+    60:  {"name": "Ligue 2 (France)", "tier": 3, "weight": 0.70},
+    2532: {"name": "USL Championship (USA)", "tier": 3, "weight": 0.70},
+    1062: {"name": "Premier Soccer League (South Africa)", "tier": 3, "weight": 0.70},
+    # Tier 4
+    119: {"name": "England League 1", "tier": 4, "weight": 0.55},
+    120: {"name": "England League 2", "tier": 4, "weight": 0.55},
+    121: {"name": "England National League", "tier": 4, "weight": 0.55},
+    1447: {"name": "Liga Portugal 2", "tier": 4, "weight": 0.55},
+    378: {"name": "1. Division (Cyprus)", "tier": 4, "weight": 0.55},
+    1589: {"name": "Friendlies Clubs", "tier": 4, "weight": 0.55},
+    2331: {"name": "Canadian Championship", "tier": 4, "weight": 0.55},
+}
+for _league_id, _info in API_LEAGUE_IDS.items():
+    ALL_APPROVED_LEAGUES[_league_id] = _info
+
 APPROVED_LEAGUE_IDS = set(ALL_APPROVED_LEAGUES.keys())
 
 # ── Name-based matching (case-insensitive substrings) ─────────────────────
