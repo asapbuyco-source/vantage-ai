@@ -44,39 +44,67 @@ async function enrichWithAIAnalysis(predictions) {
     }
 
     async function callGroq(messages, temperature = 0.15, retries = 3) {
-        for (let attempt = 0; attempt < retries; attempt++) {
-            const response = await fetch(AI_URL, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: AI_MODEL,
-                    messages,
-                    temperature,
-                    max_tokens: 150
-                })
-            });
-
-            if (response.status === 429) {
-                const err = await response.text();
-                if (attempt < retries - 1) {
-                    logger.warn(`[QuantService] AI rate limit hit, retrying in 3s (attempt ${attempt + 1}/${retries - 1})...`);
-                    await sleep(3000);
+        // Free models throttle heavily — fall back across models on 429/5xx
+        const models = [
+            'nvidia/nemotron-3-super-120b-a12b:free',
+            'openrouter/auto',
+            'deepseek/deepseek-chat',
+        ];
+        for (const model of models) {
+            for (let attempt = 0; attempt < retries; attempt++) {
+                let response;
+                try {
+                    response = await fetch(AI_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model,
+                            messages,
+                            temperature,
+                            max_tokens: model === 'openrouter/auto' ? 600 : 150
+                        })
+                    });
+                } catch (netErr) {
+                    logger.warn(`[QuantService] AI network error on ${model}: ${netErr.message}`);
+                    if (attempt < retries - 1) await sleep(3000);
                     continue;
                 }
-                throw new Error(`AI API error: 429 - ${err}`);
-            }
 
-            if (!response.ok) {
-                const err = await response.text();
-                throw new Error(`AI API error: ${response.status} - ${err}`);
-            }
+                if (response.status === 429 || response.status >= 500) {
+                    const err = await response.text();
+                    if (attempt < retries - 1) {
+                        logger.warn(`[QuantService] AI ${response.status} on ${model}, retrying (attempt ${attempt + 1}/${retries - 1})...`);
+                        await sleep(3000);
+                        continue;
+                    }
+                    logger.warn(`[QuantService] AI ${response.status} exhausted retries on ${model}, trying next model...`);
+                    break;
+                }
 
-            const data = await response.json();
-            return data.choices?.[0]?.message?.content?.trim() || '';
+                if (!response.ok) {
+                    const err = await response.text();
+                    throw new Error(`AI API error: ${response.status} - ${err}`);
+                }
+
+                const data = await response.json();
+                const content = data.choices?.[0]?.message?.content?.trim() || '';
+                if (content) return content;
+                // Reasoning models (e.g. DeepSeek via /auto) may only emit `reasoning`:
+                // strip the chain-of-thought header and return the final answer portion.
+                const reasoning = data.choices?.[0]?.message?.reasoning || '';
+                if (reasoning) {
+                    const lines = String(reasoning).split('\n').filter(Boolean);
+                    // Last meaningful line is usually the final answer
+                    const last = lines[lines.length - 1]?.trim();
+                    if (last && last.length > 5) return last;
+                }
+                return '';
+            }
         }
+        throw new Error('AI API error: all models failed');
     }
 
     const enriched = [];
@@ -87,11 +115,15 @@ async function enrichWithAIAnalysis(predictions) {
         const safestProb = safestBet && Array.isArray(safestBet) ? Math.round(safestBet[1] * 100) : Math.round((pred.calibrated_probability || pred.probability || 0) * 100);
 
         const prompt = `Match: ${pred.home_team} vs ${pred.away_team} (${pred.league})
-User sees: "${safestLabel} at ${safestProb}%" | Model pick: ${pred.bet_type} at ${(pred.calibrated_probability || pred.probability * 100).toFixed(1)}% | EV: ${(pred.expected_value * 100).toFixed(1)}%
+Safest pick shown to users: "${safestLabel}" at ${safestProb}%
+Model pick: ${pred.bet_type} at ${((pred.calibrated_probability || pred.probability || 0) * 100).toFixed(1)}%
+EV: ${(pred.expected_value * 100).toFixed(1)}%
 Home form: ${pred.home_form || 'N/A'} | Away form: ${pred.away_form || 'N/A'}
 Home xG: ${pred.expected_goals_home?.toFixed(2) || 'N/A'} | Away xG: ${pred.expected_goals_away?.toFixed(2) || 'N/A'}
 
-Write a 2-sentence professional betting rationale. Align with the SAFEST PICK shown to users (${safestLabel}). Be specific (use team names and stats). Tone: confident but measured. End with the key risk factor. Max 60 words.`;
+Write a 2-sentence professional betting rationale supporting "${safestLabel}" (${pred.home_team} to win or draw). Use the team names and stats above. End with one short risk factor. Max 60 words.
+
+IMPORTANT: Output ONLY the rationale text. Do not repeat these instructions, do not use labels like "Rationale:" or "Risk:", do not mention percentages or confidence. Just 2 sentences of analysis.`;
 
         // Rate-limit: delay 2.5s per prediction (2 calls each → ~24 calls/min, under 30 rpm limit)
         if (enriched.length > 0) await sleep(DELAY_MS);
