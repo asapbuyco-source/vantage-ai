@@ -141,10 +141,15 @@ def run(args):
     team_maps = {}
 
     print(f"[Backtest] Pulling intel teams for {len(leagues)} league(s)…")
+    prev_maps = {}
     for lg_name, lg_id in leagues:
         tm = fetch_teams(lg_name.strip(), args.season_intel)
         team_maps[int(lg_id)] = tm
         print(f"   {lg_name}: {len(tm)} club entries")
+        if args.season_intel_prev:
+            pm = fetch_teams(lg_name.strip(), args.season_intel_prev)
+            prev_maps[int(lg_id)] = pm
+            print(f"   {lg_name} (prev {args.season_intel_prev}): {len(pm)} club entries")
 
     print("[Backtest] Pulling finished fixtures from API-Football…")
     for lg_name, lg_id in leagues:
@@ -177,6 +182,12 @@ def run(args):
     blend_brier = {w: [0.0, 0] for w in BLEND_W}
     lg_stats = defaultdict(lambda: [0.0, 0])  # league_id -> [brier, n]
 
+    # Momentum comparison: apply the 3-season VTI-trend multiplier (±4%) to λ
+    # (uses the season BEFORE the test season as the prior reference).
+    from intel_model_feed import momentum_from_vti
+    mom_brier = [0.0, 0]   # baseline (no momentum)
+    mom_brier_m = [0.0, 0] # with momentum
+
     def vti_p3(home_row, away_row):
         hv = (home_row.get("scores") or {}).get("vti")
         av = (away_row.get("scores") or {}).get("vti")
@@ -205,6 +216,24 @@ def run(args):
             continue
         lam_h, lam_a = lams
 
+        # ── Momentum adjustment (VTI trend from prev season → ±4% λ) ─────
+        mom_h = mom_a = 1.0
+        pm_ = prev_maps.get(lg_id, {}) if args.season_intel_prev else {}
+        if pm_:
+            ph_ = lookup(pm_, h_name)
+            pa_ = lookup(pm_, a_name)
+            vti_h = (home.get("scores") or {}).get("vti")
+            vti_a = (away.get("scores") or {}).get("vti")
+            pv_h = (ph_.get("scores") or {}).get("vti") if ph_ else None
+            pv_a = (pa_.get("scores") or {}).get("vti") if pa_ else None
+            if vti_h is not None:
+                mom_h = momentum_from_vti(float(vti_h), float(pv_h) if pv_h is not None else None)
+            if vti_a is not None:
+                mom_a = momentum_from_vti(float(vti_a), float(pv_a) if pv_a is not None else None)
+
+        lam_h_m = max(0.15, lam_h * mom_h)
+        lam_a_m = max(0.15, lam_a * mom_a)
+
         goals = fx["goals"]
         hg, ag = goals["home"], goals["away"]
         if hg is None or ag is None:
@@ -215,8 +244,13 @@ def run(args):
         grid = compute_score_grid(lam_h, lam_a, DIXON_COLES_RHO)
         mp = derive_markets(grid)
         p3 = (mp.home_win, mp.draw, mp.away_win)
+        grid_m = compute_score_grid(lam_h_m, lam_a_m, DIXON_COLES_RHO)
+        mp_m = derive_markets(grid_m)
+        p3_m = (mp_m.home_win, mp_m.draw, mp_m.away_win)
 
         actual_idx = 0 if hg > ag else (1 if hg == ag else 2)
+        mom_brier[0] += brier_multiclass(p3, actual_idx); mom_brier[1] += 1
+        mom_brier_m[0] += brier_multiclass(p3_m, actual_idx); mom_brier_m[1] += 1
         total_goals = hg + ag
         over25 = total_goals > 2
         btts = hg > 0 and ag > 0
@@ -312,6 +346,9 @@ def run(args):
         b, t = blend_brier[w]
         tag = "  ← pure Poisson" if w == 0 else ("  ← best" if b == min(v[0] for v in blend_brier.values()) and t else "")
         print(f"    w={w:.1f}: brier {b/t:.4f}{tag}")
+    print("\n  ── Momentum on/off (3-season VTI trend, ±4% λ) ──")
+    print(f"    baseline      : brier {mom_brier[0]/mom_brier[1]:.4f}  ({mom_brier[1]} fixtures)")
+    print(f"    with momentum : brier {mom_brier_m[0]/mom_brier_m[1]:.4f}  ({mom_brier_m[1]} fixtures)")
     print("════════════════════════════════════════════════════")
 
 
@@ -321,5 +358,6 @@ if __name__ == "__main__":
                     help='Comma list "IntelLeagueName:ApiFootballId" e.g. "Premier League:39"')
     ap.add_argument("--season-api", type=int, required=True, help="API-Football season year, e.g. 2024")
     ap.add_argument("--season-intel", required=True, help="Intel DB season label, e.g. 2024-2025")
+    ap.add_argument("--season-intel-prev", default="", help="Prev intel season for momentum, e.g. 2023-2024")
     ap.add_argument("--max-fixtures", type=int, default=380)
     run(ap.parse_args())

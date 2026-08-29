@@ -386,19 +386,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                         mu_away = mu_away * a_rel + a_prior * (1 - a_rel)
                         intel_notes.append(f"λ-prior {match.away_team} {mu_away:.2f}")
 
-                    # #4: 3-season momentum from VTI trend
-                    h_trend = intel.get_vti_trend(match.home_team)
-                    a_trend = intel.get_vti_trend(match.away_team)
-                    if len(h_trend) >= 2:
-                        mom = intel.momentum_from_vti(h_trend[-1][1], h_trend[-2][1])
-                        mu_home *= mom
-                        if mom != 1.0:
-                            intel_notes.append(f"momentum {match.home_team} x{mom:.2f}")
-                    if len(a_trend) >= 2:
-                        mom = intel.momentum_from_vti(a_trend[-1][1], a_trend[-2][1])
-                        mu_away *= mom
-                        if mom != 1.0:
-                            intel_notes.append(f"momentum {match.away_team} x{mom:.2f}")
+                    # #4: 3-season momentum — DISABLED after backtest validation
+                    # (Brier 0.5908 with AND without momentum on 1,614 Big-5 fixtures;
+                    #  signal is too weak to matter — kept in intel_model_feed for future tuning)
 
                     # #5: Squad-depth injury impact — star quality amplifies loss
                     h_squad = intel.get_squad_top(match.home_team)
