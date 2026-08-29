@@ -12,6 +12,8 @@ import {
   TeamIntelligence,
   PlayerIntelligence,
   SearchResult,
+  MatchIntelligence,
+  PositionBattle,
 } from './types';
 
 export interface TeamBaseline {
@@ -257,6 +259,70 @@ export async function fetchCoverageStats(): Promise<CoverageStats | null> {
   } catch {
     return null;
   }
+}
+
+// ── Match intelligence (H2H battles) ──────────────────────────────────────────
+
+function mapBattles(raw: unknown): PositionBattle[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Row[]).map(b => ({
+    position: String(b.position ?? ''),
+    home_player: {
+      name: String((b.home_player as Row)?.name ?? ''),
+      attacking_score: Number((b.home_player as Row)?.attacking_score ?? 0),
+      defensive_score: Number((b.home_player as Row)?.defensive_score ?? 0),
+    },
+    away_player: {
+      name: String((b.away_player as Row)?.name ?? ''),
+      attacking_score: Number((b.away_player as Row)?.attacking_score ?? 0),
+      defensive_score: Number((b.away_player as Row)?.defensive_score ?? 0),
+    },
+  }));
+}
+
+/**
+ * Find a stored H2H matchup (match_intelligence) between two teams.
+ * The table holds one row per big-matchup per season with `battles[]`
+ * (up to 3 star player duels). Falls back through seasons newest → oldest.
+ */
+export async function fetchMatchIntelligence(
+  homeName: string,
+  awayName: string
+): Promise<MatchIntelligence | null> {
+  if (!homeName || !awayName) return null;
+  const h = normalizeClubName(homeName);
+  const a = normalizeClubName(awayName);
+  if (!h || !a) return null;
+
+  try {
+    const { data, error } = await db()
+      .from('match_intelligence')
+      .select('*')
+      .or(`name.ilike.%${h}%,name.ilike.%${a}%`)
+      .order('season', { ascending: false })
+      .limit(8);
+    if (error || !data || data.length === 0) return null;
+
+    for (const row of data as Row[]) {
+      const name = String(row.name ?? '');
+      const hasHome = name.toLowerCase().includes(h);
+      const hasAway = name.toLowerCase().includes(a);
+      if (hasHome && hasAway) {
+        const homeTeam = row.home_team as Row | null;
+        const awayTeam = row.away_team as Row | null;
+        if (!homeTeam || !awayTeam) continue;
+        return {
+          match_id: String(row.id ?? ''),
+          home_team: mapTeam({ ...homeTeam, id: homeTeam.team_id ?? '' }),
+          away_team: mapTeam({ ...awayTeam, id: awayTeam.team_id ?? '' }),
+          battles: mapBattles(row.battles),
+        };
+      }
+    }
+  } catch {
+    // fall through to null
+  }
+  return null;
 }
 
 export async function searchIntelligence(query: string, filter?: 'player' | 'team'): Promise<SearchResult[]> {

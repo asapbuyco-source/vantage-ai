@@ -5,6 +5,8 @@ import { X, ArrowLeft, Activity, Scale, ShieldAlert, Zap, Loader2, Trophy, Cross
 import { GlassCard } from '../components/GlassCard';
 import { NavigationTab, Match, MatchNews } from '../types';
 import { getLiveOddsFromDB, getH2HFromDB, getMatchNewsFromDB, getFixtureLineupsFromDB, getMatchStatsFromDB, getMatchFactsFromDB, LineupPlayer, H2HRecord, MatchOdds, MatchStatsData, MatchFact } from '../services/sportsData';
+import { fetchMatchIntelligence, findTeamByName } from '../services/intelligence/db';
+import { MatchIntelligence, SquadPlayer } from '../services/intelligence/types';
 import { TeamLogo } from '../components/TeamLogo';
 import { VisualPitch } from '../components/VisualPitch';
 import { useAppContext } from '../context/AppContext';
@@ -35,6 +37,8 @@ export const MatchDetails: React.FC = () => {
     const [odds, setOdds] = useState<MatchOdds | null>(null);
     const [realH2H, setRealH2H] = useState<H2HRecord | null>(null);
     const [lineup, setLineup] = useState<{ home: LineupPlayer[]; away: LineupPlayer[] } | null>(null);
+    const [intelMatch, setIntelMatch] = useState<MatchIntelligence | null>(null);
+    const [intelSquads, setIntelSquads] = useState<{ home: SquadPlayer[]; away: SquadPlayer[] } | null>(null);
     const [detailSheet, setDetailSheet] = useState<'home' | 'away' | null>(null);
     const [matchStats, setMatchStats] = useState<MatchStatsData | null>(null);
     const [matchFacts, setMatchFacts] = useState<MatchFact[]>([]);
@@ -87,12 +91,26 @@ export const MatchDetails: React.FC = () => {
                     fixtureId ? getMatchFactsFromDB(fixtureId) : [],
                 ]);
 
+                // Intelligence DB fallbacks: H2H battles + squad (top players) per team
+                const homeName = match.homeTeam || match.home_team || '';
+                const awayName = match.awayTeam || match.away_team || '';
+                const [intelH2H, homeReport, awayReport] = await Promise.all([
+                    fetchMatchIntelligence(homeName, awayName).catch(() => null),
+                    findTeamByName(homeName).catch(() => null),
+                    findTeamByName(awayName).catch(() => null),
+                ]);
+
                 if (isMounted) {
                     setOdds(od);
                     setRealH2H(h2hData);
                     setLineup(lineupData);
                     setMatchStats(statsData);
                     setMatchFacts(factsData || []);
+                    setIntelMatch(intelH2H);
+                    setIntelSquads({
+                        home: homeReport?.team.squad ?? [],
+                        away: awayReport?.team.squad ?? [],
+                    });
                     setIsLoadingDetails(false);
                 }
             } catch (e) {
@@ -942,11 +960,46 @@ fetchDetails();
                                     {[...Array(6)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-white/5 animate-pulse" />)}
                                 </div>
                             ) : !lineup || (lineup.home.length === 0 && lineup.away.length === 0) ? (
+                                !intelSquads || (intelSquads.home.length === 0 && intelSquads.away.length === 0) ? (
                                 <div className="rounded-xl border border-dashed border-white/15 px-4 py-10 text-center">
                                     <Users size={24} className="mx-auto text-gray-600 mb-2" />
                                     <p className="text-sm font-semibold text-gray-400">Lineup unavailable</p>
                                     <p className="text-[11px] text-gray-600 mt-1">Published lineups appear here once confirmed.</p>
                                 </div>
+                                ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {(['home', 'away'] as const).map(sideKey => {
+                                        const players: LineupPlayer[] = (sideKey === 'home' ? intelSquads.home : intelSquads.away).map(s => ({
+                                            name: s.player_name,
+                                            position: s.position,
+                                            number: Math.round(s.vpii || 0),
+                                            teamName: sideKey === 'home' ? match.homeTeam : match.awayTeam,
+                                            isHome: sideKey === 'home',
+                                        }));
+                                        const name = sideKey === 'home' ? match.homeTeam : match.awayTeam;
+                                        const logo = sideKey === 'home' ? match.homeTeamLogo : match.awayTeamLogo;
+                                        const accent = sideKey === 'home' ? 'text-vantage-cyan' : 'text-vantage-purple';
+                                        return (
+                                            <div key={sideKey} className="bg-slate-900/60 border border-white/5 rounded-xl p-4">
+                                                <div className="flex items-center gap-2.5 mb-3">
+                                                    <TeamLogo src={logo} teamName={name} className="w-8 h-8" />
+                                                    <h3 className={`text-sm font-bold ${accent}`}>{name}</h3>
+                                                </div>
+                                                <p className="text-[9px] uppercase tracking-widest text-gray-500 mb-1.5">Top players (VPII)</p>
+                                                <div className="space-y-1">
+                                                    {players.map((p, i) => (
+                                                        <div key={i} className="flex items-center gap-2.5 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+                                                            <span className="w-6 h-6 rounded-full bg-white/[0.06] flex items-center justify-center text-[9px] font-black font-mono text-vantage-cyan shrink-0">{p.number ?? '–'}</span>
+                                                            <span className="text-xs font-semibold text-white truncate flex-1">{p.name}</span>
+                                                            {p.position && <span className="text-[9px] font-bold text-gray-500 shrink-0">{p.position}</span>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                )
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {(['home', 'away'] as const).map(sideKey => {
@@ -1001,10 +1054,44 @@ fetchDetails();
                     {secondaryTab === 'H2H' && (
                         <div className="pb-6">
                             {!realH2H ? (
+                                !intelMatch || intelMatch.battles.length === 0 ? (
                                 <div className="rounded-xl border border-dashed border-white/15 px-4 py-10 text-center">
                                     <Scale size={22} className="mx-auto text-gray-600 mb-2" />
                                     <p className="text-sm font-semibold text-gray-400">Head-to-head unavailable</p>
                                 </div>
+                                ) : (
+                                <div className="space-y-4">
+                                    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-4">
+                                        <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Key player battles</h3>
+                                        <div className="space-y-3">
+                                            {intelMatch.battles.map((b, i) => (
+                                                <div key={i} className="rounded-lg bg-white/[0.03] px-3 py-2.5">
+                                                    <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-2">{b.position}</p>
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-bold text-white truncate">{b.home_player.name}</p>
+                                                            <div className="flex gap-2 mt-0.5">
+                                                                <span className="text-[9px] text-vantage-cyan font-mono">ATK {b.home_player.attacking_score}</span>
+                                                                <span className="text-[9px] text-gray-500 font-mono">DEF {b.home_player.defensive_score}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center px-2 shrink-0">
+                                                            <span className="text-[9px] font-black text-gray-600">VS</span>
+                                                        </div>
+                                                        <div className="flex-1 min-w-0 text-right">
+                                                            <p className="text-xs font-bold text-white truncate">{b.away_player.name}</p>
+                                                            <div className="flex gap-2 mt-0.5 justify-end">
+                                                                <span className="text-[9px] text-vantage-purple font-mono">ATK {b.away_player.attacking_score}</span>
+                                                                <span className="text-[9px] text-gray-500 font-mono">DEF {b.away_player.defensive_score}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                )
                             ) : (
                                 <div className="space-y-4">
                                     <div className="grid grid-cols-3 gap-3">
