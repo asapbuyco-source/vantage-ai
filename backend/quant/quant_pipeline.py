@@ -46,11 +46,17 @@ from datetime import datetime, timezone, timedelta
 from data_pipeline import fetch_matches, MatchData, TeamStats, _league_avg
 from poisson_model import compute_probabilities, compute_dynamic_rho, top_scorelines, compute_score_grid
 import math as _math
-from elo_rating import load_ratings_from_firestore, match_probabilities as elo_probs, save_dirty_ratings, get_team_rating, is_derby_match, DEFAULT_ELO
+from elo_rating import load_ratings_from_firestore, match_probabilities as elo_probs, save_dirty_ratings, get_team_rating, set_rating, is_derby_match, DEFAULT_ELO
 from form_model import compute_form_probabilities
 from probability_engine import compute_combined, CombinedProbabilities
 from ev_engine import evaluate_all_markets, get_best_value_bet
 from calibration_registry import MARKET_FACTORS, get_calibration_factor, get_dynamic_calibration_factor
+try:
+    import intel_model_feed as intel
+    HAS_INTEL = True
+except ImportError:
+    intel = None
+    HAS_INTEL = False
 from risk_filters import (
     filter_bets,
     grade_risk,
@@ -347,6 +353,69 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             home_id = match.home_team_id
             away_id = match.away_team_id
             
+            # ── INTEL MODEL FEED (Supabase intelligence) ────────────────────
+            # All 5 improvements are applied defensively — never crash the
+            # pipeline if Supabase is down. Each is a soft adjustment.
+            intel_notes = []
+            if HAS_INTEL:
+                try:
+                    home_intel = intel.get_team_xg(match.home_team) or {}
+                    away_intel = intel.get_team_xg(match.away_team) or {}
+
+                    # #1: VTI-seeded Elo — unknown teams start at real strength
+                    if get_team_rating(home_id) == DEFAULT_ELO and home_intel.get("vti") is not None:
+                        _seed = intel.vti_to_elo(float(home_intel["vti"]))
+                        set_rating(home_id, _seed)
+                        intel_notes.append(f"Elo-seed {match.home_team} {_seed:.0f}")
+                    if get_team_rating(away_id) == DEFAULT_ELO and away_intel.get("vti") is not None:
+                        _seed = intel.vti_to_elo(float(away_intel["vti"]))
+                        set_rating(away_id, _seed)
+                        intel_notes.append(f"Elo-seed {match.away_team} {_seed:.0f}")
+
+                    # #2 + #3: λ priors + consistency shrinkage.
+                    # Blend form-derived mu with season xG aggregates; streaky
+                    # teams (low consistency) lean MORE on the stable season xG.
+                    if home_intel.get("xg_per90") is not None and home_intel.get("xga_per90") is not None:
+                        h_prior = 0.5 * (float(home_intel["xg_per90"]) + float(home_intel["xga_per90"]))
+                        h_rel = intel.dispersion_reliability(home_intel.get("consistency"))
+                        mu_home = mu_home * h_rel + h_prior * (1 - h_rel)
+                        intel_notes.append(f"λ-prior {match.home_team} {mu_home:.2f}")
+                    if away_intel.get("xg_per90") is not None and away_intel.get("xga_per90") is not None:
+                        a_prior = 0.5 * (float(away_intel["xg_per90"]) + float(away_intel["xga_per90"]))
+                        a_rel = intel.dispersion_reliability(away_intel.get("consistency"))
+                        mu_away = mu_away * a_rel + a_prior * (1 - a_rel)
+                        intel_notes.append(f"λ-prior {match.away_team} {mu_away:.2f}")
+
+                    # #4: 3-season momentum from VTI trend
+                    h_trend = intel.get_vti_trend(match.home_team)
+                    a_trend = intel.get_vti_trend(match.away_team)
+                    if len(h_trend) >= 2:
+                        mom = intel.momentum_from_vti(h_trend[-1][1], h_trend[-2][1])
+                        mu_home *= mom
+                        if mom != 1.0:
+                            intel_notes.append(f"momentum {match.home_team} x{mom:.2f}")
+                    if len(a_trend) >= 2:
+                        mom = intel.momentum_from_vti(a_trend[-1][1], a_trend[-2][1])
+                        mu_away *= mom
+                        if mom != 1.0:
+                            intel_notes.append(f"momentum {match.away_team} x{mom:.2f}")
+
+                    # #5: Squad-depth injury impact — star quality amplifies loss
+                    h_squad = intel.get_squad_top(match.home_team)
+                    a_squad = intel.get_squad_top(match.away_team)
+                    h_inj = intel.squad_injury_penalty(h_squad, match.home_sidelined_count)
+                    a_inj = intel.squad_injury_penalty(a_squad, match.away_sidelined_count)
+                    mu_home *= (1.0 - h_inj)
+                    mu_away *= (1.0 - a_inj)
+                    if h_inj:
+                        intel_notes.append(f"squad-pen {match.home_team} -{h_inj*100:.0f}%")
+                    if a_inj:
+                        intel_notes.append(f"squad-pen {match.away_team} -{a_inj*100:.0f}%")
+                except Exception as _e:
+                    intel_notes.append(f"intel-feed error: {_e}")
+            else:
+                intel_notes.append("intel feed unavailable")
+            
             home_stats = match.home_stats if match.home_stats else TeamStats(team_id=home_id, team_name=match.home_team)
             away_stats = match.away_stats if match.away_stats else TeamStats(team_id=away_id, team_name=match.away_team)
             
@@ -617,6 +686,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "away_fatigue_penalty": getattr(match, "away_fatigue_penalty", 1.0),
                 "home_injury_penalty": getattr(match, "home_injury_penalty", 1.0),
                 "away_injury_penalty": getattr(match, "away_injury_penalty", 1.0),
+                # Intel model feed trace (which adjustments fired for this match)
+                "intel_notes": intel_notes,
 
                 "max_stake_pct": round(
                     market_max_stake_pct(best_bet.market, best_bet.calibration_tier) * 100,
