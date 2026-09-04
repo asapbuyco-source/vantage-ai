@@ -303,7 +303,26 @@ async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
     });
     if (!response.ok) throw new Error(`AI error: ${response.status}`);
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || '';
+    let content = data.choices?.[0]?.message?.content?.trim() || '';
+    // Nemotron/DeepSeek reasoning leak: content may be chain-of-thought starting with "We need to..."
+    if (content && /We need to produce|We need to|The match:/i.test(content)) {
+        const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+        // Last line that doesn't look like reasoning is the tip
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (!/We need to|The match:/i.test(lines[i]) && lines[i].length > 10) {
+                content = lines[i];
+                break;
+            }
+        }
+    }
+    if (!content) {
+        const reasoning = data.choices?.[0]?.message?.reasoning || '';
+        if (reasoning) {
+            const lines = String(reasoning).split('\n').filter(Boolean);
+            content = lines[lines.length - 1]?.trim() || '';
+        }
+    }
+    return content;
 }
 
 async function generateLeagueRadar(predictions) {
@@ -353,7 +372,7 @@ async function generateDailyTip(predictions) {
         const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0)
             .sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0))[0];
         if (!bestPick) return null;
-        const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."`;
+        const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."\n\nOutput ONLY the tip sentence. No preamble, no reasoning, no quotes.`;
         const tip = await callGroq([{ role: 'user', content: prompt }], 0.3, 50);
         return { tip, match: `${bestPick.home_team} vs ${bestPick.away_team}`, pick: bestPick.bet_type, odds: bestPick.odds, ev: ((bestPick.expected_value || 0) * 100).toFixed(1), generatedAt: new Date().toISOString() };
     } catch (e) {

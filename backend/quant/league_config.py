@@ -127,6 +127,7 @@ API_LEAGUE_IDS: dict[int, dict] = {
     # Tier 3
     253: {"name": "Major League Soccer", "tier": 3, "weight": 0.70},
     71:  {"name": "Brasileirão Série A", "tier": 3, "weight": 0.70},
+    72:  {"name": "Brasileirão Série B", "tier": 4, "weight": 0.55},
     128: {"name": "Argentine Primera División", "tier": 3, "weight": 0.70},
     203: {"name": "Turkish Süper Lig", "tier": 3, "weight": 0.70},
     307: {"name": "Saudi Pro League", "tier": 3, "weight": 0.70},
