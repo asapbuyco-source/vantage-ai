@@ -182,3 +182,60 @@ def squad_injury_penalty(squad: list, sidelined: int) -> float:
     avg = sum(top5) / len(top5)
     star_factor = max(0.5, min(1.5, avg / 80.0))
     return min(0.12, sidelined * 0.03 * star_factor * 0.5)
+
+
+def _battle_edge_from_squads(home_squad: list, away_squad: list) -> float:
+    """VPII diff of top-3 players per side → edge [-0.04,+0.04]. Works for any pair."""
+    if not home_squad or not away_squad:
+        return 0.0
+    hs = sorted(home_squad, key=lambda p: float(p.get("vpii", 0) or 0), reverse=True)[:3]
+    aws = sorted(away_squad, key=lambda p: float(p.get("vpii", 0) or 0), reverse=True)[:3]
+    n = min(len(hs), len(aws), 3)
+    if n == 0:
+        return 0.0
+    s = sum(float(hs[i].get("vpii", 50) or 50) - float(aws[i].get("vpii", 50) or 50) for i in range(n))
+    return max(-0.04, min(0.04, s * 0.0012))
+
+
+def _get_match_rows():
+    """Bulk-cached match_intelligence (1 fetch per process, not per pair)."""
+    return _cached("match_rows", lambda: _sb("match_intelligence", {"select": "name,battles", "limit": "200"}))
+
+
+def get_battle_edge(home_name: str, away_name: str) -> float:
+    """Supabase H2H player battles → small λ adjustment.
+    Sums ATK diff across up to 3 star duels; maps to [-0.04, +0.04] μ multiplier.
+    Cached per pair. Tries stored match_intelligence first, falls back to
+    dynamic VPII battles from squads for 100% coverage."""
+    if not home_name or not away_name:
+        return 0.0
+    hn, an = _norm(home_name), _norm(away_name)
+    if not hn or not an:
+        return 0.0
+    cache_key = f"battle:{hn}|{an}"
+    if cache_key in _cache and time.time() - _cache_ts.get(cache_key, 0) < TTL:
+        return _cache[cache_key]
+
+    def _fetch():
+        try:
+            rows = _get_match_rows()
+            for r in rows:
+                name = (r.get("name") or "").lower()
+                if hn in name and an in name:
+                    battles = r.get("battles") or []
+                    s = 0.0
+                    for b in battles:
+                        ha = float((b.get("home_player") or {}).get("attacking_score", 50))
+                        aa = float((b.get("away_player") or {}).get("attacking_score", 50))
+                        s += (ha - aa)
+                    edge = max(-0.04, min(0.04, s * 0.0015))
+                    return edge
+            # Fallback: generate from squads (covers all pairs)
+            hs = get_squad_top(home_name)
+            aws = get_squad_top(away_name)
+            return _battle_edge_from_squads(hs, aws)
+        except Exception:
+            return 0.0
+
+    edge = _cached(cache_key, _fetch)
+    return edge

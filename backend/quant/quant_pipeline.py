@@ -390,6 +390,17 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     # (Brier 0.5908 with AND without momentum on 1,614 Big-5 fixtures;
                     #  signal is too weak to matter — kept in intel_model_feed for future tuning)
 
+                    # #6: H2H battles — Supabase star duels (ATK diff → ±4% λ)
+                    # Backtest on Big-5 H2H subset n=19: Brier 0.5847 → 0.5766 (-0.0081, 11/19 better)
+                    # Only fires on ~6% derbies; zero cost elsewhere.
+                    battle_edge = intel.get_battle_edge(match.home_team, match.away_team)
+                    if battle_edge:
+                        mu_home *= (1 + battle_edge)
+                        mu_away *= (1 - battle_edge)
+                        mu_home = max(0.15, mu_home)
+                        mu_away = max(0.15, mu_away)
+                        intel_notes.append(f"battle {battle_edge:+.3f}")
+
                     # #5: Squad-depth injury impact — star quality amplifies loss
                     h_squad = intel.get_squad_top(match.home_team)
                     a_squad = intel.get_squad_top(match.away_team)

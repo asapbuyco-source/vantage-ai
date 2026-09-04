@@ -320,8 +320,29 @@ export async function fetchMatchIntelligence(
       }
     }
   } catch {
-    // fall through to null
+    // fall through to dynamic fallback
   }
+  // Fallback: generate battles from squads (100% coverage, no stored row)
+  try {
+    const [homeR, awayR] = await Promise.all([findTeamByName(homeName), findTeamByName(awayName)]);
+    const hs = (homeR?.team.squad ?? []).slice().sort((a, b) => (b.vpii ?? 0) - (a.vpii ?? 0)).slice(0, 3);
+    const aws = (awayR?.team.squad ?? []).slice().sort((a, b) => (b.vpii ?? 0) - (a.vpii ?? 0)).slice(0, 3);
+    const n = Math.min(hs.length, aws.length, 3);
+    if (n > 0) {
+      const battles: PositionBattle[] = [];
+      for (let i = 0; i < n; i++) {
+        battles.push({
+          position: `${hs[i].position} vs ${aws[i].position}`,
+          home_player: { name: hs[i].player_name, attacking_score: Math.round(hs[i].vpii ?? 50), defensive_score: 50 },
+          away_player: { name: aws[i].player_name, attacking_score: Math.round(aws[i].vpii ?? 50), defensive_score: 50 },
+        });
+      }
+      // Build minimal team objects for display (use fetched reports)
+      const homeTeam = homeR?.team ?? { team_id: '', team_name: homeName, league: '', season: '', last_updated: '', raw_stats: {} as any, scores: {} as any, squad: hs };
+      const awayTeam = awayR?.team ?? { team_id: '', team_name: awayName, league: '', season: '', last_updated: '', raw_stats: {} as any, scores: {} as any, squad: aws };
+      return { match_id: `${homeName} vs ${awayName}`, home_team: homeTeam as any, away_team: awayTeam as any, battles };
+    }
+  } catch { /* ignore */ }
   return null;
 }
 
