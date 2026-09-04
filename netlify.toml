@@ -13,7 +13,7 @@
     # unsafe-none is required for Firebase signInWithPopup: Firebase opens a popup and checks
     # window.closed on it. A restrictive COOP policy blocks that cross-origin window access.
     Cross-Origin-Opener-Policy = "unsafe-none"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://fwatymrvrtvcixtpbncu.supabase.co https://vantageai.online https://vantage-ai-backend.railway.app https://vantage-ai-production-ed4b.up.railway.app http://localhost:8080 https://firestore.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://apis.google.com https://vantage-ai-4d17d.firebaseapp.com https://api.sportmonks.com https://live.fapshi.com https://api.openai.com https://generativelanguage.googleapis.com https://www.facebook.com https://connect.facebook.net https://mpc-prod-25-s6uit34pua-wl.a.run.app https://demo-1.conversionsapigateway.com; frame-src https://www.facebook.com https://accounts.google.com https://vantage-ai-4d17d.firebaseapp.com; worker-src 'self' blob:"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://fwatymrvrtvcixtpbncu.supabase.co https://vantageai.online https://vantage-ai-backend.railway.app https://vantage-ai-production-ed4b.up.railway.app https://vantage-ai-production-1ee1.up.railway.app http://localhost:8080 https://firestore.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://firebase.googleapis.com https://apis.google.com https://vantage-ai-4d17d.firebaseapp.com https://api.sportmonks.com https://live.fapshi.com https://api.openai.com https://generativelanguage.googleapis.com https://www.facebook.com https://connect.facebook.net https://mpc-prod-25-s6uit34pua-wl.a.run.app https://demo-1.conversionsapigateway.com; frame-src https://www.facebook.com https://accounts.google.com https://vantage-ai-4d17d.firebaseapp.com; worker-src 'self' blob:"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains"
 
 # Prevent caching of the main entry point so users always get the latest version
@@ -47,12 +47,12 @@
 
 [[redirects]]
   from = "/predictions/*"
-  to = "https://vantage-ai-backend.railway.app/predictions/:splat"
+  to = "https://vantage-ai-production-1ee1.up.railway.app/predictions/:splat"
   status = 200
 
 [[redirects]]
   from = "/sitemap.xml"
-  to = "https://vantage-ai-backend.railway.app/sitemap.xml"
+  to = "https://vantage-ai-production-1ee1.up.railway.app/sitemap.xml"
   status = 200
 
 [[redirects]]
