@@ -135,8 +135,10 @@ export const Admin: React.FC<AdminProps> = () => {
     // Fetch a fresh JWT on mount using the current user's Firebase ID token.
     useEffect(() => {
         if (adminJwt) return; // Already have one (from sessionStorage)
-        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        let backendUrl = import.meta.env.VITE_BACKEND_URL as string | undefined;
         if (!backendUrl) return;
+        backendUrl = backendUrl.replace("vantage-ai-production-ed4b.up.railway.app", "vantage-ai-production-1ee1.up.railway.app")
+                               .replace("vantage-ai-backend.railway.app", "vantage-ai-production-1ee1.up.railway.app");
 
         const currentUser = auth.currentUser;
         if (!currentUser) return;
