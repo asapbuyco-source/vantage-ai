@@ -3,11 +3,8 @@ import { auth } from "../firebaseConfig";
 let cachedJwt: { token: string; expiresAt: number } | null = null;
 
 const backendUrl = () => {
-  let url = import.meta.env.VITE_BACKEND_URL as string | undefined;
+  const url = import.meta.env.VITE_BACKEND_URL;
   if (!url) throw new Error("VITE_BACKEND_URL is not configured");
-  // Runtime fix for stale builds still pointing at decommissioned hosts
-  url = url.replace("vantage-ai-production-ed4b.up.railway.app", "vantage-ai-production-1ee1.up.railway.app")
-           .replace("vantage-ai-backend.railway.app", "vantage-ai-production-1ee1.up.railway.app");
   return url.replace(/\/$/, "");
 };
 
