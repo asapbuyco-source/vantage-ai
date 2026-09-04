@@ -451,6 +451,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 rho=rho,
                 weights_override=weights_override,
                 league_tier=match.league_tier if hasattr(match, 'league_tier') else 2,
+                league_id=match.league_id,
                 is_derby=is_derby,
             )
 

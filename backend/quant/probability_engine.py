@@ -233,9 +233,12 @@ def compute_combined(
     adj_mu_home = max(0.20, mu_home * (1.0 - home_injury_penalty))
     adj_mu_away = max(0.20, mu_away * (1.0 - away_injury_penalty))
 
-    # FIX-5: Home advantage is now read from the league_tier parameter
+    # FIX-5: Home advantage — per-league override (empirical 2024 FT: Ligue1 46.6% HW, Bundes 38.3%)
+    # Derived from 1614 Big-5 fixtures: Ligue1/LaLiga strongest home, Bundes weakest
     HOME_ADVANTAGE = {1: 1.10, 2: 1.08, 3: 1.05, 4: 1.03, 5: 1.00}
-    adj_mu_home *= HOME_ADVANTAGE.get(league_tier, 1.08)
+    LEAGUE_HOME_ADVANTAGE = {39: 1.08, 140: 1.10, 78: 1.05, 135: 1.08, 61: 1.10}
+    ha = LEAGUE_HOME_ADVANTAGE.get(league_id, HOME_ADVANTAGE.get(league_tier, 1.08))
+    adj_mu_home *= ha
 
     # Bias correction: Poisson model systematically overestimates goals (~8% overconfident).
     # Global xG deflator derived from calibration data: predicted=88% vs actual=82% for O2.5.
