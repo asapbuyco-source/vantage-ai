@@ -206,7 +206,19 @@ export const getVipDailyData = async (dateStr: string, bustCache = false): Promi
 
 export const getPredictionsForDate = async (dateStr: string): Promise<Match[] | null> => {
     const data = await getDailyData(dateStr);
-    return data ? data.matches : null;
+    let matches = data ? data.matches : null;
+    // Keep yesterday's pending predictions visible until they are played/graded.
+    // At 00:00 Lagos the dateKey rolls over, but quant docs for the new day don't exist until 07:00.
+    // Without this, the UI shows empty from midnight-07:00 even though yesterday's evening games are still pending.
+    if (dateStr === getGlobalTodayKey() && (!matches || matches.length === 0)) {
+        const yKey = getGlobalYesterdayKey();
+        const yData = await getDailyData(yKey);
+        if (yData?.matches?.length) {
+            const pending = yData.matches.filter((m: any) => m.status === 'pending');
+            if (pending.length > 0) return yData.matches;
+        }
+    }
+    return matches;
 };
 
 export const getAccumulatorsForDate = async (dateStr: string): Promise<AccumulatorSet | null> => {
@@ -285,7 +297,23 @@ export const saveAccumulatorsForDate = async (dateStr: string, accumulators: Acc
 };
 
 export const getFirestorePredictionsOnly = async (): Promise<Match[] | null> => {
-    return getPredictionsForDate(getGlobalTodayKey());
+    const todayKey = getGlobalTodayKey();
+    const todayMatches = await getPredictionsForDate(todayKey);
+    // Merge any still-pending matches from yesterday (e.g. 21:00-23:00 kickoffs that haven't been graded at 22:00 yet)
+    // so predictions don't vanish at midnight until actually played.
+    const yKey = getGlobalYesterdayKey();
+    const yData = await getDailyData(yKey);
+    const pendingYesterday = yData?.matches?.filter((m: any) => m.status === 'pending') ?? [];
+    if (todayMatches && todayMatches.length > 0) {
+        if (pendingYesterday.length > 0) {
+            const todayIds = new Set(todayMatches.map((m: any) => String(m.fixture_id ?? m.id ?? '')));
+            const extra = pendingYesterday.filter((m: any) => !todayIds.has(String(m.fixture_id ?? m.id ?? '')));
+            if (extra.length > 0) return [...todayMatches, ...extra];
+        }
+        return todayMatches;
+    }
+    if (pendingYesterday.length > 0) return pendingYesterday;
+    return todayMatches;
 };
 
 export const getTodaysPredictions = getFirestorePredictionsOnly;

@@ -566,7 +566,8 @@ export const initScheduler = () => {
     const tomorrowTask = cron.schedule('0 21 * * *',
         withLock('tomorrow_fixtures', 60, async () => {
             logger.info('[Scheduler] Running tomorrow fixtures job...');
-            await triggerFootballGeneration();
+            const tomorrowKey = new Date(Date.now() + 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
+            await triggerFootballGeneration(tomorrowKey);
         }),
         { timezone: 'Africa/Lagos' }
     );
