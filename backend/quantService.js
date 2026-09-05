@@ -44,11 +44,11 @@ async function enrichWithAIAnalysis(predictions) {
     }
 
     async function callGroq(messages, temperature = 0.15, retries = 3) {
-        // Free models throttle heavily — fall back across models on 429/5xx
+        // Free instruct models for 2-sentence tips — Nemotron reasoning leaks "We need to output..."
         const models = [
+            'google/gemma-2-9b-it:free',
+            'meta-llama/llama-3.1-8b-instruct:free',
             'nvidia/nemotron-3-super-120b-a12b:free',
-            'openrouter/auto',
-            'deepseek/deepseek-chat',
         ];
         for (const model of models) {
             for (let attempt = 0; attempt < retries; attempt++) {
@@ -90,14 +90,28 @@ async function enrichWithAIAnalysis(predictions) {
                 }
 
                 const data = await response.json();
-                const content = data.choices?.[0]?.message?.content?.trim() || '';
+                let content = data.choices?.[0]?.message?.content?.trim() || '';
+                // Strip Nemotron reasoning leak (starts with "We need to output...")
+                if (content && /We need to output|We need to produce|No labels, no percentages/i.test(content)) {
+                    const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        if (!/We need to output|We need to produce|No labels|Must not mention|End with one short/i.test(lines[i]) && lines[i].length > 15) {
+                            content = lines[i];
+                            break;
+                        }
+                    }
+                    // If still looks like instructions, try last sentence
+                    if (/We need to/i.test(content)) content = '';
+                }
                 if (content) return content;
                 // Reasoning models (e.g. DeepSeek via /auto) may only emit `reasoning`:
-                // strip the chain-of-thought header and return the final answer portion.
-                const reasoning = data.choices?.[0]?.message?.reasoning || '';
+                const reasoning = data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.message?.reasoning_content || '';
                 if (reasoning) {
                     const lines = String(reasoning).split('\n').filter(Boolean);
-                    // Last meaningful line is usually the final answer
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        const last = lines[i]?.trim();
+                        if (last && last.length > 15 && !/We need to/i.test(last)) return last;
+                    }
                     const last = lines[lines.length - 1]?.trim();
                     if (last && last.length > 5) return last;
                 }
@@ -114,38 +128,50 @@ async function enrichWithAIAnalysis(predictions) {
         const safestLabel = safestBet && Array.isArray(safestBet) ? safestBet[0] : (safestBet || pred.prediction || pred.bet_type);
         const safestProb = safestBet && Array.isArray(safestBet) ? Math.round(safestBet[1] * 100) : Math.round((pred.calibrated_probability || pred.probability || 0) * 100);
 
+        function templateAnalysis() {
+            const h = pred.home_team, a = pred.away_team, lg = pred.league;
+            const hxg = pred.expected_goals_home?.toFixed(2) ?? 'balanced';
+            const axg = pred.expected_goals_away?.toFixed(2) ?? 'balanced';
+            const hf = pred.home_form || 'mixed', af = pred.away_form || 'mixed';
+            const p = safestLabel.toLowerCase();
+            if (p.includes('under')) return `${h}'s tight shape (${hf}) and ${a}'s low scoring (${axg} xG) point to ${safestLabel}. Risk: an early goal could open the game.`;
+            if (p.includes('over')) return `${h}'s attack (${hxg} xG) meets ${a}'s open games (${af}) — ${safestLabel} is value. Risk: a cautious start could keep it tight.`;
+            if (p.includes('double chance')) return `${h} are solid at home (${hf}) while ${a} struggle away (${af}) — ${safestLabel} covers the form gap. Risk: ${a} could steal a point late.`;
+            if (p.includes('btts')) return `Both ${h} and ${a} have scored in recent form (${hf} vs ${af}) — ${safestLabel} fits. Risk: a tight first half could deny it.`;
+            return `${h} vs ${a} in ${lg} — ${safestLabel} fits the form (${hf} vs ${af}) and xG (${hxg} vs ${axg}). Risk: a red card could swing it.`;
+        }
+
         const prompt = `Match: ${pred.home_team} vs ${pred.away_team} (${pred.league})
-Safest pick shown to users: "${safestLabel}" at ${safestProb}%
-Model pick: ${pred.bet_type} at ${((pred.calibrated_probability || pred.probability || 0) * 100).toFixed(1)}%
-EV: ${(pred.expected_value * 100).toFixed(1)}%
+Safest pick: "${safestLabel}"
 Home form: ${pred.home_form || 'N/A'} | Away form: ${pred.away_form || 'N/A'}
 Home xG: ${pred.expected_goals_home?.toFixed(2) || 'N/A'} | Away xG: ${pred.expected_goals_away?.toFixed(2) || 'N/A'}
 
-Write a 2-sentence professional betting rationale supporting "${safestLabel}" (${pred.home_team} to win or draw). Use the team names and stats above. End with one short risk factor. Max 60 words.
+Write a 2-sentence professional betting rationale supporting "${safestLabel}" for this match. Use team names and stats above. End with one short risk factor. Max 60 words.
 
-IMPORTANT: Output ONLY the rationale text. Do not repeat these instructions, do not use labels like "Rationale:" or "Risk:", do not mention percentages or confidence. Just 2 sentences of analysis.`;
+Output ONLY the 2 sentences. No labels, no percentages, no confidence, no preamble.`;
 
         // Rate-limit: delay 2.5s per prediction (2 calls each → ~24 calls/min, under 30 rpm limit)
         if (enriched.length > 0) await sleep(DELAY_MS);
 
+        let analysis = '';
         try {
-            const analysis = await callGroq([{ role: 'user', content: prompt }]);
+            analysis = await callGroq([{ role: 'user', content: prompt }]);
+            if (!analysis || /We need to output|We need to produce|No labels/i.test(analysis) || analysis.split(' ').length < 8) throw new Error('AI leak or empty');
             enriched.push({ ...pred, analysis_en: analysis });
-
-            // Translate to French
             try {
                 const frPrompt = `Translate to French, keep all numbers and team names exactly as-is:\n\n${analysis}`;
                 const frAnalysis = await callGroq([{ role: 'user', content: frPrompt }], 0.1);
+                if (!frAnalysis || /We need to/i.test(frAnalysis)) throw new Error('FR leak');
                 enriched[enriched.length - 1].analysis_fr = frAnalysis;
             } catch (frErr) {
                 logger.warn(`[QuantService] French translation failed for ${pred.fixture_id}: ${frErr.message}`);
                 enriched[enriched.length - 1].analysis_fr = enriched[enriched.length - 1].analysis_en;
             }
-
             logger.info(`[QuantService] ✅ AI analysis for ${pred.fixture_id}: ${pred.home_team} vs ${pred.away_team}`);
         } catch (pickErr) {
-            logger.warn(`[QuantService] AI analysis failed for ${pred.fixture_id}: ${pickErr.message}`);
-            enriched.push(pred);
+            logger.warn(`[QuantService] AI analysis failed for ${pred.fixture_id}: ${pickErr.message} — using template`);
+            const tpl = templateAnalysis();
+            enriched.push({ ...pred, analysis_en: tpl, analysis_fr: tpl });
         }
         // Short pause between EN and FR calls to stay under token-per-minute cap
         await sleep(500);
