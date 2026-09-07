@@ -28,12 +28,17 @@ node backend/personal_arb/arb_scanner_live.js --once    # single scan
 node backend/personal_arb/arb_scanner_live.js --loop=3  # poll every 3 min (default)
 ```
 
-## Server deploy (Linux VPS / Railway)
-1. Copy repo to server (private branch), `npm i -D playwright`, `npx playwright install --with-deps chromium`
-2. Warm cookies once: run `--warm` on the server via `xvfb-run` (virtual display) or copy `.playwright_profile` from a local `--warm`
-3. `pm2 start "node backend/personal_arb/arb_scanner_live.js --loop=2" --name arb`
-   (or `systemd`: see `arb.service`)
-4. Keep server close to books (EU/Africa) + use `--loop=1` pre-kickoff for best latency
+## Server deploy (Linux VPS — runs forever)
+1. `sudo bash backend/personal_arb/deploy_server.sh` (installs node, xvfb, chromium, clones `personal/arb`, installs systemd service)
+2. Edit `/opt/vantage-ai/.env.local` → real `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`
+3. Warm profiles once (1xbet/pmuc/betpawa/premierbet need cookies):
+   `cd /opt/vantage-ai && xvfb-run -a node backend/personal_arb/arb_scanner_live.js --warm`
+4. `sudo systemctl start arb` — runs `--loop=2` forever, auto-restarts on crash/reboot (systemd `Restart=always`)
+5. Watch: `journalctl -u arb -f` | Status: `systemctl status arb`
+
+Why xvfb: 1xbet blocks headless Chromium — xvfb provides a virtual display so headed mode works on a server with no screen. pmuc/betpawa/premierbet headless work after profiles are warmed.
+
+For Railway/Docker instead: `xvfb-run -a node ... --loop=2` as start command, `npx playwright install --with-deps chromium` in build, and warm profiles via a one-time job before serving.
 
 ## Telegram
 On arb found: `🎯 ARB <market> <pct>% <home> vs <away> [books] <odds> — stake <per-leg>`.
