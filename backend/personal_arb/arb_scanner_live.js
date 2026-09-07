@@ -198,20 +198,20 @@ async function report(kind, pct, msg, legs) {
   await sendTelegram(full);
 }
 
-async function scan() {
-  console.log(`[Arb] Scan ${new Date().toISOString()}`);
-const bf = await fetchBetfrenzy().catch(() => []);
+async function collectCandidates() {
+  console.log(`[Arb] Fetch ${new Date().toISOString()}`);
+  const bf = await fetchBetfrenzy().catch(() => []);
   const bp = await fetchBetpawa().catch(() => []);
   const pm = await fetchPmuc().catch(() => []);
   const pb = await fetchPremierbet().catch(() => []);
   const xb = await fetch1xbet().catch(() => []);
   console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}`);
   const all = [...bf, ...bp, ...pm, ...pb, ...xb];
+  const found = [];
 
   // 1X2 grouping
   const g = new Map();
   for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
-  let arbs = 0;
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
     const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h } : b, { book: '', odds: 0 });
@@ -220,7 +220,7 @@ for (const [k, grp] of g) {
     const srcs = new Set([h.book, d.book, a.book].filter(Boolean));
     if (srcs.size < 2) continue; // needs >=2 distinct books across the 3 legs
     const inv = 1/h.odds + 1/d.odds + 1/a.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); await report('1X2', (1-inv)*100, grp.matches[0].home + ' vs ' + grp.matches[0].away + ' [' + [...srcs].join(',') + '] 1:' + h.odds + '(' + h.book + ') X:' + d.odds + '(' + d.book + ') 2:' + a.odds + '(' + a.book + ')', r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); found.push({ key: `1X2|${k}`, kind: '1X2', pct: (1-inv)*100, msg: grp.matches[0].home + ' vs ' + grp.matches[0].away + ' [' + [...srcs].join(',') + '] 1:' + h.odds + '(' + h.book + ') X:' + d.odds + '(' + d.book + ') 2:' + a.odds + '(' + a.book + ')', legs: r.stakes }); }
   }
 
 // ── O/U grouping (asian lines) — best over & best under must be DIFFERENT books ──
@@ -232,7 +232,7 @@ for (const [k, grp] of g) {
     const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue; // same book both sides = voided, not arb
     const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: 'over', odds: over.odds }, { book: 'under', odds: under.odds }]); await report('O/U ' + k.split('|')[2], (1-inv)*100, k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + over.book + '+' + under.book + '] Over ' + over.odds + ' Under ' + under.odds, r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: 'over', odds: over.odds }, { book: 'under', odds: under.odds }]); found.push({ key: `OU|${k}`, kind: 'O/U ' + k.split('|')[2], pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + over.book + '+' + under.book + '] Over ' + over.odds + ' Under ' + under.odds, legs: r.stakes }); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
@@ -246,7 +246,7 @@ for (const [k, grp] of g) {
     const srcs = new Set([b1x.book, bx2.book, b12.book].filter(Boolean));
     if (srcs.size < 2) continue;
     const inv = 1/b1x.odds + 1/bx2.odds + 1/b12.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: '1X', odds: b1x.odds }, { book: 'X2', odds: bx2.odds }, { book: '12', odds: b12.odds }]); await report('DC', (1-inv)*100, k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + [...srcs].join(',') + '] 1X ' + b1x.odds + ' X2 ' + bx2.odds + ' 12 ' + b12.odds, r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: '1X', odds: b1x.odds }, { book: 'X2', odds: bx2.odds }, { book: '12', odds: b12.odds }]); found.push({ key: `DC|${k}`, kind: 'DC', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + [...srcs].join(',') + '] 1X ' + b1x.odds + ' X2 ' + bx2.odds + ' 12 ' + b12.odds, legs: r.stakes }); }
   }
 
 // ── AH pairing (home -hcp vs away +hcp) — best sides must be DIFFERENT books ──
@@ -258,7 +258,7 @@ for (const [k, grp] of g) {
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: 'home', odds: bHome.odds }, { book: 'away', odds: bAway.odds }]); await report('AH ' + k.split('|')[2], (1-inv)*100, k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: 'home', odds: bHome.odds }, { book: 'away', odds: bAway.odds }]); found.push({ key: `AH|${k}`, kind: 'AH ' + k.split('|')[2], pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, legs: r.stakes }); }
   }
 // ── BTTS grouping (2-way yes/no) — best sides must be DIFFERENT books ──
   const bts = new Map();
@@ -269,7 +269,7 @@ for (const [k, grp] of g) {
     const bNo = grp.matches.reduce((b, m) => m.no > b.odds ? { book: m.book, odds: m.no } : b, { book: '', odds: 0 });
     if (!bYes.book || bYes.book === bNo.book) continue;
     const inv = 1/bYes.odds + 1/bNo.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: 'BTTS-Y', odds: bYes.odds }, { book: 'BTTS-N', odds: bNo.odds }]); await report('BTTS', (1-inv)*100, k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bYes.book + '+' + bNo.book + '] Yes ' + bYes.odds + ' No ' + bNo.odds, r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: 'BTTS-Y', odds: bYes.odds }, { book: 'BTTS-N', odds: bNo.odds }]); found.push({ key: `BTTS|${k}`, kind: 'BTTS', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bYes.book + '+' + bNo.book + '] Yes ' + bYes.odds + ' No ' + bNo.odds, legs: r.stakes }); }
   }
 // ── DNB grouping (2-way home/away) — best sides must be DIFFERENT books ──
   const dnb = new Map();
@@ -280,9 +280,25 @@ for (const [k, grp] of g) {
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { arbs++; const r = calcArb([{ book: 'DNB-H', odds: bHome.odds }, { book: 'DNB-A', odds: bAway.odds }]); await report('DNB', (1-inv)*100, k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, r.stakes); }
+    if (inv < 1) { const r = calcArb([{ book: 'DNB-H', odds: bHome.odds }, { book: 'DNB-A', odds: bAway.odds }]); found.push({ key: `DNB|${k}`, kind: 'DNB', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, legs: r.stakes }); }
   }
-  console.log(`[Arb] Done. ${arbs} arbs (${g.size} 1X2, ${ou.size} O/U, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
+  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
+  return found;
+}
+
+async function scan() {
+  const first = await collectCandidates();
+  if (first.length === 0) { console.log('[Verify] 0 candidates — nothing to verify.'); return; }
+  // Two-pass verification: wait 20s, re-fetch, only report arbs that PERSIST
+  console.log(`[Verify] ${first.length} candidates — re-fetching in 20s to confirm...`);
+  await new Promise(r => setTimeout(r, 20000));
+  const second = await collectCandidates();
+  const secondKeys = new Set(second.map(c => c.key));
+  const confirmed = first.filter(c => secondKeys.has(c.key));
+  const vanished = first.filter(c => !secondKeys.has(c.key));
+  console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale lines dropped).`);
+  for (const c of confirmed) await report(c.kind, c.pct, c.msg, c.legs);
+  for (const c of vanished) console.log(`[Verify] dropped stale: ${c.kind} ${c.msg.slice(0, 80)}`);
 }
 
 // ── Modes ──
