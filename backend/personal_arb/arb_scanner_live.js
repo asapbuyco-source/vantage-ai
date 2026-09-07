@@ -13,8 +13,11 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Load .env.local for Telegram creds (same file server.js uses)
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
 const prof = name => { const p = path.join(PROFILE_ROOT, name); if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); return p; };
 // Real cross-book arbs are ~1-5%. >15% means a stale/wrong line — flag but don't trust.
