@@ -15,7 +15,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROFILE_DIR = path.join(__dirname, '../../.playwright_profile');
+const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
+const prof = name => { const p = path.join(PROFILE_ROOT, name); if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); return p; };
 const args = process.argv.slice(2);
 const warm = args.includes('--warm');
 const once = args.includes('--once');
@@ -40,7 +41,7 @@ async function fetchBetfrenzy() {
 }
 
 async function fetchBetpawa() {
-  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, viewport: { width: 1280, height: 800 } });
+  const ctx = await chromium.launchPersistentContext(prof('betpawa'), { headless: true, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   let items = [];
   page.on('response', async r => { const u = r.url();
@@ -51,7 +52,7 @@ async function fetchBetpawa() {
 }
 
 async function fetchPmuc() {
-  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, viewport: { width: 1280, height: 800 } });
+  const ctx = await chromium.launchPersistentContext(prof('pmuc'), { headless: true, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   let events = [];
   page.on('response', async r => { const u = r.url();
@@ -65,8 +66,37 @@ async function fetchPmuc() {
   return events;
 }
 
+async function fetch1xbet() {
+  const ctx = await chromium.launchPersistentContext(prof('1xbet'), { headless: false, viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  const events = [];
+page.on('response', async r => {
+    const u = r.url();
+    if (u.includes('/v3/games1x2')) {
+      try { const j = await r.json();
+        let fb = 0, parsed = 0;
+        for (const ev of j) {
+          if (ev.sport?.id !== 1) continue;
+          fb++;
+          const o = ev.eventGroups?.[0]?.events;
+          if (o && o[0]?.[0]?.cf) {
+            const find = t => o.find(x => x[0]?.type === t)?.[0]?.cf;
+            if (find(1) && find(3)) { parsed++; events.push({ book: '1xbet', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name,
+              h: parseFloat(find(1)), d: find(2) ? parseFloat(find(2)) : null, a: parseFloat(find(3)) }); }
+          }
+        }
+        console.log(`[1xbet] football ${fb}, parsed ${parsed}`);
+      } catch (e) { console.log('[1xbet] parse fail', e.message.slice(0, 50)); }
+    }
+  });
+  await page.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(12000);
+  await ctx.close();
+  return events.filter(e => e.h);
+}
+
 async function fetchPremierbet() {
-  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: true, viewport: { width: 1280, height: 800 } });
+  const ctx = await chromium.launchPersistentContext(prof('premierbet'), { headless: true, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   const events = [];
   let eventIds = [];
@@ -119,9 +149,13 @@ async function sendTelegram(text) {
 
 async function scan() {
   console.log(`[Arb] Scan ${new Date().toISOString()}`);
-  const [bf, bp, pm, pb] = await Promise.all([fetchBetfrenzy().catch(() => []), fetchBetpawa().catch(() => []), fetchPmuc().catch(() => []), fetchPremierbet().catch(() => [])]);
-  console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}`);
-  const all = [...bf, ...bp, ...pm, ...pb];
+const bf = await fetchBetfrenzy().catch(() => []);
+  const bp = await fetchBetpawa().catch(() => []);
+  const pm = await fetchPmuc().catch(() => []);
+  const pb = await fetchPremierbet().catch(() => []);
+  const xb = await fetch1xbet().catch(() => []);
+  console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}`);
+  const all = [...bf, ...bp, ...pm, ...pb, ...xb];
 
   // 1X2 grouping
   const g = new Map();
@@ -185,7 +219,7 @@ async function scan() {
 
 // ── Modes ──
 if (warm) {
-  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, viewport: { width: 1280, height: 800 } });
+  const ctx = await chromium.launchPersistentContext(prof('warm'), { headless: false, viewport: { width: 1280, height: 800 } });
   for (const url of ['https://www.betpawa.cm/', 'https://www.pmuc.cm/sports', 'https://www.premierbet.com/cm/']) {
     const page = await ctx.newPage();
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }); } catch {}
@@ -198,3 +232,4 @@ if (warm) {
   console.log(`[Arb] Loop mode: scanning every ${loopMin} min. Ctrl+C to stop.`);
   for (;;) { await scan(); await new Promise(r => setTimeout(r, loopMin * 60000)); }
 }
+
