@@ -196,10 +196,23 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
-async function report(kind, pct, msg, legs) {
+async function report(c) {
+  const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
-  const tag = suspicious ? '⚠️ SUSPECT (stale/wrong line — verify)' : '🎯';
-  const full = `${tag} ARB ${kind} ${pct.toFixed(2)}% ${msg} — stake ${legs.map(s => `${s.book} ${s.stake}→${s.payout}`).join(' | ')}${suspicious ? ' | DO NOT BET UNVERIFIED' : ''}`;
+  const lines = [];
+  lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
+  lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
+  lines.push(`Market: ${c.kind}  |  Profit: ${pct.toFixed(2)}%`);
+  lines.push('─'.repeat(32));
+  c.legs.forEach((s, i) => {
+    const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
+    lines.push(`${i + 1}) ON ${cap.toUpperCase()} → bet: ${s.bet}`);
+    lines.push(`    Odds ${s.odds} | Stake ${s.stake} XAF → wins ${s.payout} XAF`);
+  });
+  lines.push('─'.repeat(32));
+  lines.push(`Total stake 100 XAF → pays ${c.legs[0]?.payout} XAF whatever the result`);
+  if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
+  const full = lines.join('\n');
   console.log(full);
   await sendTelegram(full);
 }
@@ -214,6 +227,7 @@ async function collectCandidates() {
   console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}`);
   const all = [...bf, ...bp, ...pm, ...pb, ...xb];
   const found = [];
+  const cand = (key, kind, teams, legs, inv) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100 });
 
   // 1X2 grouping
   const g = new Map();
@@ -226,7 +240,10 @@ for (const [k, grp] of g) {
     const srcs = new Set([h.book, d.book, a.book].filter(Boolean));
     if (srcs.size < 2) continue; // needs >=2 distinct books across the 3 legs
     const inv = 1/h.odds + 1/d.odds + 1/a.odds;
-    if (inv < 1) { const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); found.push({ key: `1X2|${k}`, kind: '1X2', pct: (1-inv)*100, msg: grp.matches[0].home + ' vs ' + grp.matches[0].away + ' [' + [...srcs].join(',') + '] 1:' + h.odds + '(' + h.book + ') X:' + d.odds + '(' + d.book + ') 2:' + a.odds + '(' + a.book + ')', legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); cand(`1X2|${k}`, '1X2 — Match Winner', [grp.matches[0].home, grp.matches[0].away],
+      [{ book: h.book, bet: grp.matches[0].home + ' to win (1)', odds: h.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: d.book, bet: 'Draw (X)', odds: d.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout },
+       { book: a.book, bet: grp.matches[0].away + ' to win (2)', odds: a.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout }], inv); }
   }
 
 // ── O/U grouping (asian lines) — best over & best under must be DIFFERENT books ──
@@ -238,7 +255,9 @@ for (const [k, grp] of g) {
     const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue; // same book both sides = voided, not arb
     const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { const r = calcArb([{ book: 'over', odds: over.odds }, { book: 'under', odds: under.odds }]); found.push({ key: `OU|${k}`, kind: 'O/U ' + k.split('|')[2], pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + over.book + '+' + under.book + '] Over ' + over.odds + ' Under ' + under.odds, legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); cand(`OU|${k}`, `Over/Under ${k.split('|')[2]} Goals`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: over.book, bet: `Over ${k.split('|')[2]} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: under.book, bet: `Under ${k.split('|')[2]} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout }], inv); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
@@ -252,7 +271,10 @@ for (const [k, grp] of g) {
     const srcs = new Set([b1x.book, bx2.book, b12.book].filter(Boolean));
     if (srcs.size < 2) continue;
     const inv = 1/b1x.odds + 1/bx2.odds + 1/b12.odds;
-    if (inv < 1) { const r = calcArb([{ book: '1X', odds: b1x.odds }, { book: 'X2', odds: bx2.odds }, { book: '12', odds: b12.odds }]); found.push({ key: `DC|${k}`, kind: 'DC', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + [...srcs].join(',') + '] 1X ' + b1x.odds + ' X2 ' + bx2.odds + ' 12 ' + b12.odds, legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: b1x.book, odds: b1x.odds }, { book: bx2.book, odds: bx2.odds }, { book: b12.book, odds: b12.odds }]); cand(`DC|${k}`, 'Double Chance', [k.split('|')[0], k.split('|')[1]],
+      [{ book: b1x.book, bet: k.split('|')[0] + ' or Draw (1X)', odds: b1x.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: bx2.book, bet: k.split('|')[1] + ' or Draw (X2)', odds: bx2.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout },
+       { book: b12.book, bet: 'No Draw (12)', odds: b12.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout }], inv); }
   }
 
 // ── AH pairing (home -hcp vs away +hcp) — best sides must be DIFFERENT books ──
@@ -264,7 +286,9 @@ for (const [k, grp] of g) {
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { const r = calcArb([{ book: 'home', odds: bHome.odds }, { book: 'away', odds: bAway.odds }]); found.push({ key: `AH|${k}`, kind: 'AH ' + k.split('|')[2], pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); cand(`AH|${k}`, `Asian Handicap ${k.split('|')[2]}`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: bHome.book, bet: k.split('|')[0] + ' -' + k.split('|')[2], odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: bAway.book, bet: k.split('|')[1] + ' +' + k.split('|')[2], odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout }], inv); }
   }
 // ── BTTS grouping (2-way yes/no) — best sides must be DIFFERENT books ──
   const bts = new Map();
@@ -275,7 +299,9 @@ for (const [k, grp] of g) {
     const bNo = grp.matches.reduce((b, m) => m.no > b.odds ? { book: m.book, odds: m.no } : b, { book: '', odds: 0 });
     if (!bYes.book || bYes.book === bNo.book) continue;
     const inv = 1/bYes.odds + 1/bNo.odds;
-    if (inv < 1) { const r = calcArb([{ book: 'BTTS-Y', odds: bYes.odds }, { book: 'BTTS-N', odds: bNo.odds }]); found.push({ key: `BTTS|${k}`, kind: 'BTTS', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bYes.book + '+' + bNo.book + '] Yes ' + bYes.odds + ' No ' + bNo.odds, legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: bYes.book, odds: bYes.odds }, { book: bNo.book, odds: bNo.odds }]); cand(`BTTS|${k}`, 'Both Teams To Score', [k.split('|')[0], k.split('|')[1]],
+      [{ book: bYes.book, bet: 'Both teams score (Yes)', odds: bYes.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: bNo.book, bet: 'Not both score (No)', odds: bNo.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout }], inv); }
   }
 // ── DNB grouping (2-way home/away) — best sides must be DIFFERENT books ──
   const dnb = new Map();
@@ -286,7 +312,9 @@ for (const [k, grp] of g) {
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { const r = calcArb([{ book: 'DNB-H', odds: bHome.odds }, { book: 'DNB-A', odds: bAway.odds }]); found.push({ key: `DNB|${k}`, kind: 'DNB', pct: (1-inv)*100, msg: k.split('|')[0] + ' vs ' + k.split('|')[1] + ' [' + bHome.book + '+' + bAway.book + '] H ' + bHome.odds + ' A ' + bAway.odds, legs: r.stakes }); }
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); cand(`DNB|${k}`, 'Draw No Bet', [k.split('|')[0], k.split('|')[1]],
+      [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout },
+       { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout }], inv); }
   }
   console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
   return found;
@@ -306,15 +334,15 @@ async function scan() {
     const c2 = secondByKey.get(c.key);
     if (!c2) { vanished.push(c); continue; }
     // Odds must be stable within 5% between passes — big moves = live repricing, not a persistent arb
-    const odds1 = c.legs.map(l => l.odds || parseFloat(l.payout) / parseFloat(l.stake) || 0);
-    const odds2 = c2.legs.map(l => l.odds || parseFloat(l.payout) / parseFloat(l.stake) || 0);
+    const odds1 = c.legs.map(l => l.odds);
+    const odds2 = c2.legs.map(l => l.odds);
     const stable = odds1.length === odds2.length && odds1.every((o, i) => Math.abs(o - odds2[i]) / o < 0.05);
     if (stable) confirmed.push(c);
-    else { vanished.push(c); console.log(`[Verify] dropped repriced: ${c.kind} ${c.msg.slice(0, 80)}`); }
+    else { vanished.push(c); console.log(`[Verify] dropped repriced: ${c.kind} ${c.teams.join(' vs ')}`); }
   }
   console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale/repriced dropped).`);
-  for (const c of confirmed) await report(c.kind, c.pct, c.msg, c.legs);
-  for (const c of vanished) console.log(`[Verify] dropped: ${c.kind} ${c.msg.slice(0, 80)}`);
+  for (const c of confirmed) await report(c);
+  for (const c of vanished) console.log(`[Verify] dropped: ${c.kind} ${c.teams.join(' vs ')}`);
 }
 
 // ── Modes ──
