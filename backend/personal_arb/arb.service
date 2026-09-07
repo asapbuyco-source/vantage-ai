@@ -1,0 +1,22 @@
+# systemd unit for Vantage Personal Arb Scanner
+# Place in /etc/systemd/system/arb.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now arb
+# Requires .playwright_profile warmed first (see README).
+
+[Unit]
+Description=Vantage Arbitrage Scanner
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vantage-ai
+ExecStart=/usr/bin/node backend/personal_arb/arb_scanner_live.js --loop=2
+Restart=always
+RestartSec=10
+Environment=TELEGRAM_BOT_TOKEN=
+Environment=TELEGRAM_CHAT_ID=
+Environment=FIREBASE_SERVICE_ACCOUNT=
+
+[Install]
+WantedBy=multi-user.target
