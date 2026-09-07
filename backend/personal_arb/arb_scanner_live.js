@@ -30,19 +30,25 @@ const loopMin = parseInt(args.find(a => a.startsWith('--loop='))?.split('=')[1] 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '').replace(/fc$/,'').slice(0, 6);
 
 async function fetchBetfrenzy() {
-  const r = await fetch('https://betfrenzy.cm/api/v1/sports/matchs?SportId=1&EventStatus=PRE', { headers: { 'User-Agent': 'Mozilla/5.0' } });
-  if (!r.ok) return [];
-  const j = await r.json();
-  const out = [];
-  for (const lg of j) for (const ev of lg.events || []) {
-    const o = ev.odds || {};
-    if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name,
-      h: parseFloat(o['1_1'].home_od), d: parseFloat(o['1_1'].draw_od), a: parseFloat(o['1_1'].away_od),
-      dc: o['1_8'] ? { '1x': parseFloat(o['1_8'].home_od), 'x2': parseFloat(o['1_8'].draw_od), '12': parseFloat(o['1_8'].away_od) } : null,
-      ah: [o['1_2'], o['1_5']].filter(Boolean).map(x => ({ hcp: x.handicap, home: parseFloat(x.home_od), away: parseFloat(x.away_od) })),
-      ou: [o['1_3'], o['1_6'], o['1_7']].filter(Boolean).map(x => ({ hcp: x.handicap, over: parseFloat(x.over_od), under: parseFloat(x.under_od) })) });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch('https://betfrenzy.cm/api/v1/sports/matchs?SportId=1&EventStatus=PRE', { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!r.ok) { await new Promise(r => setTimeout(r, 3000)); continue; }
+      const j = await r.json();
+      const out = [];
+      for (const lg of j) for (const ev of lg.events || []) {
+        const o = ev.odds || {};
+        if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name,
+          h: parseFloat(o['1_1'].home_od), d: parseFloat(o['1_1'].draw_od), a: parseFloat(o['1_1'].away_od),
+          dc: o['1_8'] ? { '1x': parseFloat(o['1_8'].home_od), 'x2': parseFloat(o['1_8'].draw_od), '12': parseFloat(o['1_8'].away_od) } : null,
+          ah: [o['1_2'], o['1_5']].filter(Boolean).map(x => ({ hcp: x.handicap, home: parseFloat(x.home_od), away: parseFloat(x.away_od) })),
+          ou: [o['1_3'], o['1_6'], o['1_7']].filter(Boolean).map(x => ({ hcp: x.handicap, over: parseFloat(x.over_od), under: parseFloat(x.under_od) })).filter(x => x.over && x.under && parseFloat(x.hcp) <= 3.5) });
+      }
+      if (out.length > 0) return out;
+      await new Promise(r => setTimeout(r, 3000));
+    } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
   }
-  return out;
+  return [];
 }
 
 async function fetchBetpawa() {
@@ -289,16 +295,26 @@ for (const [k, grp] of g) {
 async function scan() {
   const first = await collectCandidates();
   if (first.length === 0) { console.log('[Verify] 0 candidates — nothing to verify.'); return; }
-  // Two-pass verification: wait 20s, re-fetch, only report arbs that PERSIST
+  // Two-pass verification: wait 20s, re-fetch, only report arbs that PERSIST with stable odds
   console.log(`[Verify] ${first.length} candidates — re-fetching in 20s to confirm...`);
   await new Promise(r => setTimeout(r, 20000));
   const second = await collectCandidates();
-  const secondKeys = new Set(second.map(c => c.key));
-  const confirmed = first.filter(c => secondKeys.has(c.key));
-  const vanished = first.filter(c => !secondKeys.has(c.key));
-  console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale lines dropped).`);
+  const secondByKey = new Map(second.map(c => [c.key, c]));
+  const confirmed = [];
+  const vanished = [];
+  for (const c of first) {
+    const c2 = secondByKey.get(c.key);
+    if (!c2) { vanished.push(c); continue; }
+    // Odds must be stable within 5% between passes — big moves = live repricing, not a persistent arb
+    const odds1 = c.legs.map(l => l.odds || parseFloat(l.payout) / parseFloat(l.stake) || 0);
+    const odds2 = c2.legs.map(l => l.odds || parseFloat(l.payout) / parseFloat(l.stake) || 0);
+    const stable = odds1.length === odds2.length && odds1.every((o, i) => Math.abs(o - odds2[i]) / o < 0.05);
+    if (stable) confirmed.push(c);
+    else { vanished.push(c); console.log(`[Verify] dropped repriced: ${c.kind} ${c.msg.slice(0, 80)}`); }
+  }
+  console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale/repriced dropped).`);
   for (const c of confirmed) await report(c.kind, c.pct, c.msg, c.legs);
-  for (const c of vanished) console.log(`[Verify] dropped stale: ${c.kind} ${c.msg.slice(0, 80)}`);
+  for (const c of vanished) console.log(`[Verify] dropped: ${c.kind} ${c.msg.slice(0, 80)}`);
 }
 
 // ── Modes ──
