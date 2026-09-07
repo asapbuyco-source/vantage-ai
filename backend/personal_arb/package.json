@@ -1,0 +1,14 @@
+{
+  "name": "vantage-arb",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node arb_scanner_live.js --loop=2",
+    "arb:once": "node arb_scanner_live.js --once",
+    "arb:warm": "node arb_scanner_live.js --warm"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0",
+    "dotenv": "^17.3.1"
+  }
+}

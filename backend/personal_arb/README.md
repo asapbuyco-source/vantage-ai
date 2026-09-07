@@ -36,9 +36,15 @@ node backend/personal_arb/arb_scanner_live.js --loop=3  # poll every 3 min (defa
 4. `sudo systemctl start arb` — runs `--loop=2` forever, auto-restarts on crash/reboot (systemd `Restart=always`)
 5. Watch: `journalctl -u arb -f` | Status: `systemctl status arb`
 
-Why xvfb: 1xbet blocks headless Chromium — xvfb provides a virtual display so headed mode works on a server with no screen. pmuc/betpawa/premierbet headless work after profiles are warmed.
+For Railway (container):
+1. New Project → Deploy from repo `asapbuyco-source/vantage-ai` → **Root Directory: `backend/personal_arb`** (uses its own Dockerfile/railway.toml, not the app's)
+2. Variables → `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (Railway injects into env — `.env.local` optional)
+3. **Volume required** (Railway FS is ephemeral): mount a volume at `/app/.playwright_profile` so book cookies survive restarts (else pmuc/betpawa 403 after each deploy)
+4. Deploy once, then **warm profiles**: Railway → Deploy → Open Shell → `xvfb-run -a node arb_scanner_live.js --warm` (headed via xvfb, saves cookies to volume)
+5. Restart service — `restartPolicyType=ON_FAILURE` + infinite `--loop=2` keeps it running forever
+6. Region: pick Europe/SA for lower book latency
 
-For Railway/Docker instead: `xvfb-run -a node ... --loop=2` as start command, `npx playwright install --with-deps chromium` in build, and warm profiles via a one-time job before serving.
+Why xvfb: 1xbet blocks headless Chromium — xvfb provides a virtual display so headed mode works in a container with no screen. pmuc/betpawa/premierbet headless work after profiles are warmed.
 
 ## Telegram
 On arb found: `🎯 ARB <market> <pct>% <home> vs <away> [books] <odds> — stake <per-leg>`.

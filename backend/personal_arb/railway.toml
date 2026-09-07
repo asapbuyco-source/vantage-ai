@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+
+[deploy]
+startCommand = "xvfb-run -a node arb_scanner_live.js --loop=2"
+restartPolicyType = "ON_FAILURE"
+healthcheckPath = ""
+healthcheckTimeout = 100
+
+[env]
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID = ""
