@@ -132,8 +132,14 @@ page.on('response', async r => {
       } catch (e) { console.log('[1xbet] parse fail', e.message.slice(0, 50)); }
     }
   });
-  await page.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 60000 });
+await page.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(12000);
+  // Container IPs often get a first-load bot challenge — reload once to clear it
+  if (events.length === 0) {
+    console.log('[1xbet] no feed on first load — reloading once (bot challenge?)');
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    await page.waitForTimeout(12000);
+  }
   await ctx.close();
   return events.filter(e => e.h);
 }
