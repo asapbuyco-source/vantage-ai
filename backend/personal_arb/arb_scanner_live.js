@@ -214,7 +214,7 @@ async function sendTelegram(text) {
 }
 
 // Screenshot a book's match page and send it to Telegram — so you SEE the exact bet
-async function sendBookScreenshot(book, link, caption) {
+async function sendBookScreenshot(book, link, caption, oddsValue) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chat || !link) return;
   const SHOT_DIR = path.join(__dirname, '../../arb_screenshots');
@@ -228,7 +228,34 @@ async function sendBookScreenshot(book, link, caption) {
     const page = await ctx.newPage();
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(book === '1xbet' ? 16000 : 9000); // let markets render
-    await page.screenshot({ path: file, fullPage: true });
+    // Highlight the odds button: find element whose text matches the odds, outline + scroll to it
+    if (oddsValue) {
+      const found = await page.evaluate((odds) => {
+        const target = String(odds);
+        const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
+        let hit = null;
+        for (const el of els) {
+          const t = (el.textContent || '').trim();
+          if (t === target) { hit = el; break; }
+        }
+        if (!hit) {
+          // fuzzy: element whose text STARTS with the odds (book adds suffixes)
+          for (const el of els) {
+            const t = (el.textContent || '').trim();
+            if (t.startsWith(target) && t.length <= target.length + 6) { hit = el; break; }
+          }
+        }
+        if (!hit) return false;
+        hit.scrollIntoView({ block: 'center', inline: 'center' });
+        hit.style.outline = '4px solid #ff2d2d';
+        hit.style.outlineOffset = '2px';
+        hit.style.boxShadow = '0 0 0 6px rgba(255,45,45,0.4)';
+        return true;
+      }, oddsValue);
+      console.log(`[Shot] ${book} highlighted odds ${oddsValue}: ${found ? 'YES' : 'no exact match (plain shot)'}`);
+      await page.waitForTimeout(1500);
+    }
+    await page.screenshot({ path: file, fullPage: false });
     await ctx.close();
     ctx = null;
     // Send as photo
@@ -269,9 +296,9 @@ async function report(c) {
   const full = lines.join('\n');
   console.log(full);
   await sendTelegram(full);
-  // Screenshot each book's match page so you can SEE the exact bet
+  // Screenshot each book's match page so you can SEE the exact bet (odds button highlighted)
   for (const s of c.legs) {
-    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet} @ ${s.odds} (${s.book.toUpperCase()})`);
+    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
   }
 }
 
