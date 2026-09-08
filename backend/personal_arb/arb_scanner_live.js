@@ -82,6 +82,11 @@ async function fetchPmuc() {
   return events;
 }
 
+async function fetchSportybet() {
+  // DISABLED: SportyBet WAF blocks scripted fetches to the odds API (SyntaxError anti-injection).
+  return [];
+}
+
 async function fetch1xbet() {
   const ctx = await chromium.launchPersistentContext(prof('1xbet'), { headless: false, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
@@ -240,8 +245,9 @@ async function collectCandidates() {
   const pm = await fetchPmuc().catch(() => []);
   const pb = await fetchPremierbet().catch(() => []);
   const xb = await fetch1xbet().catch(() => []);
-  console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}`);
-  const all = [...bf, ...bp, ...pm, ...pb, ...xb];
+  const sb = await fetchSportybet().catch(() => []);
+  console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, sportybet ${sb.length}`);
+  const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...sb];
   const found = [];
   const cand = (key, kind, teams, legs, inv) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100 });
 
