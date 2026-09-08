@@ -200,6 +200,7 @@ async function report(c) {
   lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
   lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
   lines.push(`Market: ${c.kind}  |  Profit: ${pct.toFixed(2)}%`);
+  lines.push(`Prices checked at ${new Date().toISOString().slice(11, 19)} UTC — verify on site NOW`);
   lines.push('─'.repeat(32));
   c.legs.forEach((s, i) => {
     const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
@@ -332,11 +333,11 @@ async function scan() {
   for (const c of first) {
     const c2 = secondByKey.get(c.key);
     if (!c2) { vanished.push(c); continue; }
-    // Odds must be stable within 5% between passes — big moves = live repricing, not a persistent arb
+    // Odds must be stable within 2% between passes — bigger move = repricing, arb dead
     const odds1 = c.legs.map(l => l.odds);
     const odds2 = c2.legs.map(l => l.odds);
-    const stable = odds1.length === odds2.length && odds1.every((o, i) => Math.abs(o - odds2[i]) / o < 0.05);
-    if (stable) confirmed.push(c);
+    const stable = odds1.length === odds2.length && odds1.every((o, i) => Math.abs(o - odds2[i]) / o < 0.02);
+    if (stable) confirmed.push(c2); // report the FRESHEST pass-2 odds
     else { vanished.push(c); console.log(`[Verify] dropped repriced: ${c.kind} ${c.teams.join(' vs ')}`); }
   }
   console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale/repriced dropped).`);
