@@ -1,8 +1,9 @@
 FROM node:20-bookworm-slim
 
 # xvfb = virtual display so 1xbet's headed check works on a server with no screen
+# xauth required by xvfb-run
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    xvfb ca-certificates wget && \
+    xvfb xauth ca-certificates wget && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
