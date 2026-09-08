@@ -278,7 +278,7 @@ for (const [k, grp] of g) {
     const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue; // same book both sides = voided, not arb
     const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = k.split('|')[4]; cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = k.split('|').pop(); cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
        { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], inv); }
   }
@@ -309,7 +309,7 @@ for (const [k, grp] of g) {
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const hcp = k.split('|')[4]; cand(`AH|${k}`, `Asian Handicap ${hcp}`, [k.split('|')[0], k.split('|')[1]],
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const hcp = k.split('|').pop(); cand(`AH|${k}`, `Asian Handicap ${hcp}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: bHome.book, bet: k.split('|')[0] + ' -' + hcp, odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
        { book: bAway.book, bet: k.split('|')[1] + ' +' + hcp, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], inv); }
   }
