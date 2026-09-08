@@ -27,7 +27,7 @@ const warm = args.includes('--warm');
 const once = args.includes('--once');
 const loopMin = parseInt(args.find(a => a.startsWith('--loop='))?.split('=')[1] || '3', 10);
 
-const norm = s => (s || '').toLowerCase().replace(/[^a-z]/g, '').replace(/fc$/,'').slice(0, 6);
+const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/fc$|cf$|sc$|ac$/g, '');
 
 async function fetchBetfrenzy() {
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -231,9 +231,9 @@ async function collectCandidates() {
   const found = [];
   const cand = (key, kind, teams, legs, inv) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100 });
 
-  // 1X2 grouping
+  // 1X2 grouping — include league in key when available (youth/senior same-name guard)
   const g = new Map();
-  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${norm(ev.league || '')}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
     const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h } : b, { book: '', odds: 0 });
