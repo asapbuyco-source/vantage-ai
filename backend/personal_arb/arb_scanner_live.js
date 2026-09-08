@@ -28,6 +28,16 @@ const once = args.includes('--once');
 const loopMin = parseInt(args.find(a => a.startsWith('--loop='))?.split('=')[1] || '3', 10);
 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/fc$|cf$|sc$|ac$/g, '');
+// Canonical league token — strips generic words so books that name the same
+// competition differently ("UEFA Champions League" vs "Ligue des Champions UEFA")
+// still match, while youth/senior stay distinct ("youth" vs "champions").
+const canonLeague = s => {
+  if (!s) return '';
+  let t = String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  for (const w of ['league','ligue','liga','uefa','europa','european','cup','coupe','copa','championship','world','club','football','competition','trophy','meisterschaft','des','de','el','la','the','e','italy','spain','england','germany','france']) t = t.split(w).join('');
+  return t;
+};
+const youthMark = s => /u19|u20|u21|youth|reserve|junior|women/.test((s || '').toLowerCase());
 
 async function fetchBetfrenzy() {
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -229,9 +239,10 @@ async function collectCandidates() {
   const found = [];
   const cand = (key, kind, teams, legs, inv) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100 });
 
-  // 1X2 grouping — include league in key when available (youth/senior same-name guard)
+  // 1X2 grouping — league + youth/senior aware key so same-name matches in
+  // different competitions (Champions League vs Youth League) never merge
   const g = new Map();
-  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${norm(ev.league || '')}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
     const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away } : b, { book: '', odds: 0 });
@@ -248,21 +259,21 @@ for (const [k, grp] of g) {
 
 // ── O/U grouping (asian lines) — best over & best under must be DIFFERENT books ──
   const ou = new Map();
-  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${o.hcp}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under }); } }
+  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link }); } }
   for (const [k, grp] of ou) {
     if (grp.matches.length < 2) continue;
     const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link } : b, { book: '', odds: 0 });
     const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue; // same book both sides = voided, not arb
     const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); cand(`OU|${k}`, `Over/Under ${k.split('|')[2]} Goals`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: over.book, bet: `Over ${k.split('|')[2]} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${k.split('|')[2]} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], inv); }
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = k.split('|')[4]; cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: over.book, bet: `Over ${hcp} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
+       { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], inv); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
   const dc = new Map();
-  for (const ev of all) { if (ev.dc) { const k = `${norm(ev.home)}|${norm(ev.away)}`; (dc.get(k) || dc.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, dc: ev.dc }); } }
+  for (const ev of all) { if (ev.dc) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}`; (dc.get(k) || dc.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, dc: ev.dc, link: ev.link }); } }
   for (const [k, grp] of dc) {
     if (grp.matches.length < 2) continue;
     const b1x = grp.matches.reduce((b, m) => m.dc['1x'] > b.odds ? { book: m.book, odds: m.dc['1x'], link: m.link } : b, { book: '', odds: 0 });
@@ -279,20 +290,20 @@ for (const [k, grp] of g) {
 
 // ── AH pairing (home -hcp vs away +hcp) — best sides must be DIFFERENT books ──
   const ah = new Map();
-  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${o.hcp}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link }); } }
+  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link }); } }
   for (const [k, grp] of ah) {
     if (grp.matches.length < 2) continue;
     const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link } : b, { book: '', odds: 0 });
     const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const inv = 1/bHome.odds + 1/bAway.odds;
-    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); cand(`AH|${k}`, `Asian Handicap ${k.split('|')[2]}`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: bHome.book, bet: k.split('|')[0] + ' -' + k.split('|')[2], odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
-       { book: bAway.book, bet: k.split('|')[1] + ' +' + k.split('|')[2], odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], inv); }
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const hcp = k.split('|')[4]; cand(`AH|${k}`, `Asian Handicap ${hcp}`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: bHome.book, bet: k.split('|')[0] + ' -' + hcp, odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
+       { book: bAway.book, bet: k.split('|')[1] + ' +' + hcp, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], inv); }
   }
 // ── BTTS grouping (2-way yes/no) — best sides must be DIFFERENT books ──
   const bts = new Map();
-  for (const ev of all) { if (ev.btts) { const k = `${norm(ev.home)}|${norm(ev.away)}`; (bts.get(k) || bts.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, yes: ev.btts.yes, no: ev.btts.no, link: ev.link }); } }
+  for (const ev of all) { if (ev.btts) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}`; (bts.get(k) || bts.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, yes: ev.btts.yes, no: ev.btts.no, link: ev.link }); } }
   for (const [k, grp] of bts) {
     if (grp.matches.length < 2) continue;
     const bYes = grp.matches.reduce((b, m) => m.yes > b.odds ? { book: m.book, odds: m.yes, link: m.link } : b, { book: '', odds: 0 });
@@ -305,7 +316,7 @@ for (const [k, grp] of g) {
   }
 // ── DNB grouping (2-way home/away) — best sides must be DIFFERENT books ──
   const dnb = new Map();
-  for (const ev of all) { if (ev.dnb) { const k = `${norm(ev.home)}|${norm(ev.away)}`; (dnb.get(k) || dnb.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: ev.dnb.home, away: ev.dnb.away, link: ev.link }); } }
+  for (const ev of all) { if (ev.dnb) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}`; (dnb.get(k) || dnb.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: ev.dnb.home, away: ev.dnb.away, link: ev.link }); } }
   for (const [k, grp] of dnb) {
     if (grp.matches.length < 2) continue;
     const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link } : b, { book: '', odds: 0 });
