@@ -358,13 +358,21 @@ async function scan() {
 
 // ── Modes ──
 if (warm) {
+  // pmuc/premierbet share one profile; 1xbet uses its own (separate session)
   const ctx = await chromium.launchPersistentContext(prof('warm'), { headless: false, viewport: { width: 1280, height: 800 } });
   for (const url of ['https://www.pmuc.cm/sports', 'https://www.premierbet.com/cm/']) {
     const page = await ctx.newPage();
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }); } catch {}
     console.log(`[Warm] ${url}`); await page.waitForTimeout(12000); await page.close();
   }
-  await ctx.close(); console.log('[Warm] done. Run without --warm now.');
+  await ctx.close();
+  const xb = await chromium.launchPersistentContext(prof('1xbet'), { headless: false, viewport: { width: 1280, height: 800 } });
+  const xpage = await xb.newPage();
+  try { await xpage.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 40000 }); } catch {}
+  console.log('[Warm] https://1xbet.cm/en/line (saving session...)');
+  await xpage.waitForTimeout(20000);
+  await xb.close();
+  console.log('[Warm] done. Run without --warm now.');
 } else if (once) {
   await scan();
 } else {
