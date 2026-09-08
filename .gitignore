@@ -107,3 +107,5 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
+
+# Personal arb browser profiles (cookies — never commit).playwright_profile/
