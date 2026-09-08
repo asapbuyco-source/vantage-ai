@@ -245,15 +245,44 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
             if (t.startsWith(target) && t.length <= target.length + 6) { hit = el; break; }
           }
         }
-        if (!hit) return false;
+        if (!hit) return { ok: false };
         hit.scrollIntoView({ block: 'center', inline: 'center' });
         hit.style.outline = '4px solid #ff2d2d';
         hit.style.outlineOffset = '2px';
         hit.style.boxShadow = '0 0 0 6px rgba(255,45,45,0.4)';
-        return true;
+        return { ok: true, el: hit };
       }, oddsValue);
-      console.log(`[Shot] ${book} highlighted odds ${oddsValue}: ${found ? 'YES' : 'no exact match (plain shot)'}`);
+      console.log(`[Shot] ${book} highlighted odds ${oddsValue}: ${found.ok ? 'YES' : 'no exact match (plain shot)'}`);
       await page.waitForTimeout(1500);
+      // Auto-CLICK the odds button (adds to bet slip — does NOT place the bet), then re-screenshot
+      if (found.ok) {
+        try {
+          const clicked = await page.evaluate((odds) => {
+            const target = String(odds);
+            const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
+            let hit = null;
+            for (const el of els) {
+              const t = (el.textContent || '').trim();
+              if (t === target) { hit = el; break; }
+            }
+            if (!hit) for (const el of els) {
+              const t = (el.textContent || '').trim();
+              if (t.startsWith(target) && t.length <= target.length + 6) { hit = el; break; }
+            }
+            if (!hit) return false;
+            // click the odds element, or its closest clickable ancestor
+            let targetEl = hit;
+            const ce = hit.closest('a, button, [class*="odd"], [class*="bet"], [class*="selection"], [class*="outcome"], [role="button"]');
+            if (ce) targetEl = ce;
+            targetEl.click();
+            return true;
+          }, oddsValue);
+          console.log(`[Shot] ${book} auto-clicked odds: ${clicked ? 'YES (bet slip updated)' : 'no'}`);
+          await page.waitForTimeout(3000);
+        } catch (e) {
+          console.log(`[Shot] ${book} click failed: ${e.message.slice(0, 60)}`);
+        }
+      }
     }
     await page.screenshot({ path: file, fullPage: false });
     await ctx.close();
@@ -296,9 +325,12 @@ async function report(c) {
   const full = lines.join('\n');
   console.log(full);
   await sendTelegram(full);
-  // Screenshot each book's match page so you can SEE the exact bet (odds button highlighted)
-  for (const s of c.legs) {
-    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
+  // Screenshot each book's match page — only for Asian Handicap (the trickiest to identify:
+  // handicap sign ± matters). Auto-click the odds button so the bet slip shows the selection.
+  if (c.kind.startsWith('Asian Handicap')) {
+    for (const s of c.legs) {
+      if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
+    }
   }
 }
 
