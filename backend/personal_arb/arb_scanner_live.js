@@ -199,6 +199,7 @@ async function sendTelegram(text) {
 async function report(c) {
   const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
+  const has1xbet = c.legs.some(l => l.book === '1xbet');
   const lines = [];
   lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
   lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
@@ -211,6 +212,7 @@ async function report(c) {
   });
   lines.push('─'.repeat(32));
   lines.push(`Total stake 100 XAF → pays ${c.legs[0]?.payout} XAF whatever the result`);
+  if (has1xbet) lines.push('⚠️ 1XBET odds come from their feed, NOT the live page. Confirm the price on 1xbet BEFORE betting — if it moved, the arb is gone.');
   if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
   const full = lines.join('\n');
   console.log(full);
