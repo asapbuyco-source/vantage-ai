@@ -15,6 +15,8 @@ RUN npx playwright install --with-deps chromium
 
 COPY . .
 
-# Never stop: systemd isn't in Railway, but restartPolicyType=ON_FAILURE in railway.toml
-# + the infinite --loop keeps it alive. xvfb-run gives headed Chromium a virtual display.
-CMD ["xvfb-run", "-a", "node", "arb_scanner_live.js", "--loop=2"]
+RUN chmod +x start.sh
+
+# Never stop: restartPolicyType=ON_FAILURE in railway.toml + infinite --loop keeps it alive.
+# xvfb-run gives headed Chromium a virtual display.
+CMD ["/bin/bash", "start.sh"]
