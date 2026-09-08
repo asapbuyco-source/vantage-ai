@@ -109,3 +109,6 @@ __pycache__/
 *.egg-info/
 
 # Personal arb browser profiles (cookies — never commit).playwright_profile/
+
+# Arb screenshots (temp).gitignore
+arb_screenshots/

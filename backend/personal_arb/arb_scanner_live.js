@@ -213,6 +213,39 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
+// Screenshot a book's match page and send it to Telegram — so you SEE the exact bet
+async function sendBookScreenshot(book, link, caption) {
+  const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chat || !link) return;
+  const SHOT_DIR = path.join(__dirname, '../../arb_screenshots');
+  if (!fs.existsSync(SHOT_DIR)) fs.mkdirSync(SHOT_DIR, { recursive: true });
+  const file = path.join(SHOT_DIR, `${book}_${Date.now()}.png`);
+  let ctx;
+  try {
+    // 1xbet runs headed (needs display); others headless
+    const headed = book === '1xbet';
+    ctx = await chromium.launchPersistentContext(prof(book), { headless: !headed, viewport: { width: 1400, height: 1000 } });
+    const page = await ctx.newPage();
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(book === '1xbet' ? 16000 : 9000); // let markets render
+    await page.screenshot({ path: file, fullPage: true });
+    await ctx.close();
+    ctx = null;
+    // Send as photo
+    const form = new FormData();
+    form.append('chat_id', chat);
+    form.append('caption', caption);
+    form.append('photo', new Blob([fs.readFileSync(file)], { type: 'image/png' }), `${book}.png`);
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
+    const j = await r.json().catch(() => ({}));
+    console.log(`[Shot] ${book} → ${j.ok ? 'sent' : j.description || 'failed'}`);
+  } catch (e) {
+    console.log(`[Shot] ${book} screenshot failed: ${e.message.slice(0, 80)}`);
+  } finally {
+    if (ctx) await ctx.close().catch(() => {});
+  }
+}
+
 async function report(c) {
   const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
@@ -236,6 +269,10 @@ async function report(c) {
   const full = lines.join('\n');
   console.log(full);
   await sendTelegram(full);
+  // Screenshot each book's match page so you can SEE the exact bet
+  for (const s of c.legs) {
+    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet} @ ${s.odds} (${s.book.toUpperCase()})`);
+  }
 }
 
 async function collectCandidates() {
