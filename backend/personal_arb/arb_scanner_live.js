@@ -135,10 +135,8 @@ async function fetch1xbet() {
     const buf = Buffer.from(await r.arrayBuffer());
     const j = JSON.parse(buf.toString('utf8'));
     const seen = new Set();
-    let fb = 0, parsed = 0;
+    let fb = 0, parsed = 0, other = 0;
     for (const ev of Array.isArray(j) ? j : []) {
-      if (ev.sport?.id !== 1) continue;
-      fb++;
       const groups = {};
       for (const g of ev.eventGroups || []) groups[g.groupId] = g.events || [];
       const cf = (arr, t) => arr?.find(x => x[0]?.type === t)?.[0]?.cf;
@@ -146,30 +144,35 @@ async function fetch1xbet() {
       if (cf(g1, 1) && cf(g1, 3)) {
         parsed++;
         const evObj = { book: '1xbet', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name,
-          link: `https://1xbet.cm/en/line/football/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          link: `https://1xbet.cm/en/line/${ev.sport?.name?.toLowerCase()}/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
           h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
-        const ou = [];
-        for (const [gid, name] of [[17, '2.5'], [15, '1.5'], [62, '0.5']]) {
-          const g = groups[gid] || [];
-          const over = cf(g, gid === 17 ? 9 : gid === 15 ? 11 : 13);
-          const under = cf(g, gid === 17 ? 10 : gid === 15 ? 12 : 14);
-          if (over && under) ou.push({ hcp: name, over: parseFloat(over), under: parseFloat(under) });
+        if (ev.sport?.id === 1) {
+          fb++;
+          const ou = [];
+          for (const [gid, name] of [[17, '2.5'], [15, '1.5'], [62, '0.5']]) {
+            const g = groups[gid] || [];
+            const over = cf(g, gid === 17 ? 9 : gid === 15 ? 11 : 13);
+            const under = cf(g, gid === 17 ? 10 : gid === 15 ? 12 : 14);
+            if (over && under) ou.push({ hcp: name, over: parseFloat(over), under: parseFloat(under) });
+          }
+          if (ou.length) evObj.ou = ou;
+          const g2 = groups[2] || [];
+          const dnbH = cf(g2, 7), dnbA = cf(g2, 8);
+          if (dnbH && dnbA) evObj.dnb = { home: parseFloat(dnbH), away: parseFloat(dnbA) };
+          const gah = groups[2854] || [];
+          const ahH = cf(gah, 3829), ahA = cf(gah, 3830);
+          if (ahH && ahA) evObj.ah = [{ hcp: '0.25', home: parseFloat(ahH), away: parseFloat(ahA) }];
+          const g19 = groups[19] || [];
+          const yes = cf(g19, 180), no = cf(g19, 181);
+          if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
+        } else {
+          other++;
         }
-        if (ou.length) evObj.ou = ou;
-        const g2 = groups[2] || [];
-        const dnbH = cf(g2, 7), dnbA = cf(g2, 8);
-        if (dnbH && dnbA) evObj.dnb = { home: parseFloat(dnbH), away: parseFloat(dnbA) };
-        const gah = groups[2854] || [];
-        const ahH = cf(gah, 3829), ahA = cf(gah, 3830);
-        if (ahH && ahA) evObj.ah = [{ hcp: '0.25', home: parseFloat(ahH), away: parseFloat(ahA) }];
-        const g19 = groups[19] || [];
-        const yes = cf(g19, 180), no = cf(g19, 181);
-        if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
-        const key = `${ev.opponent1?.fullName?.toLowerCase()}|${ev.opponent2?.fullName?.toLowerCase()}`;
+        const key = `${ev.sport?.id}:${ev.opponent1?.fullName?.toLowerCase()}|${ev.opponent2?.fullName?.toLowerCase()}`;
         if (!seen.has(key)) { seen.add(key); events.push(evObj); }
       }
     }
-    console.log(`[1xbet] football ${fb}, parsed ${parsed}, unique ${events.length}`);
+    console.log(`[1xbet] football ${fb}, other sports ${other}, parsed ${parsed}, unique ${events.length}`);
   } catch (e) {
     console.log(`[1xbet] fetch fail: ${e.message.slice(0, 90)}`);
   }
@@ -180,45 +183,52 @@ async function fetchPremierbet() {
   // PremierBet via raw fetch through the residential proxy (ARB_PROXY) — no browser/session.
   // The `upcoming` endpoint returns events with 1X2 (and more) markets inline.
   const events = [];
-  try {
+try {
     const proxyUrl = new URL(ARB_PROXY);
     const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
     const today = new Date().toISOString().slice(0, 10);
-    const url = `https://sports-api.premierbet.com/cm/v1/events/upcoming?country=CM&group=g1&platform=desktop&locale=fr&timeOffset=-60&sportId=1&pageId=6465c8bfec1ecc07f3a373e9&date=${today}`;
-    const r = await fetch(url, { headers: {
-      'Proxy-Authorization': auth,
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-      'Accept': 'application/json', 'Accept-Encoding': 'identity',
-    } });
-    if (!r.ok) { console.log(`[premierbet] HTTP ${r.status}`); return []; }
-    const j = await r.json();
-    for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
-      if (!ev.eventNames?.[0]) continue;
-      const o12 = (ev.markets || []).find(m => m.name === '1X2');
-      const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
-      const evObj = { book: 'premierbet', home: ev.eventNames[0], away: ev.eventNames[1], league: comp.name,
-        link: `https://www.premierbet.com/cm/event/${ev.id}` };
-      if (o12) { const O = o(o12); evObj.h = O['1']; evObj.d = O['X']; evObj.a = O['2']; }
-      // O/U from Total de Buts (grouped by handicap)
-      const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts');
-      if (ouMkt) {
-        const byHcp = {};
-        for (const oc of ouMkt.outcomes || []) {
-          if (!oc.handicap || !oc.value) continue;
-          byHcp[oc.handicap] = byHcp[oc.handicap] || {};
-          if (oc.name === 'Plus de') byHcp[oc.handicap].over = parseFloat(oc.value);
-          if (oc.name === 'Moins de') byHcp[oc.handicap].under = parseFloat(oc.value);
+    // Football (1), Basketball (2), Tennis (5) — 1X2 markets from each
+    const sportNames = { 1: 'football', 2: 'basketball', 5: 'tennis' };
+    for (const [sportId, sportName] of Object.entries(sportNames)) {
+      const url = `https://sports-api.premierbet.com/cm/v1/events/upcoming?country=CM&group=g1&platform=desktop&locale=fr&timeOffset=-60&sportId=${sportId}&pageId=6465c8bfec1ecc07f3a373e9&date=${today}`;
+      const r = await fetch(url, { headers: {
+        'Proxy-Authorization': auth,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+        'Accept': 'application/json', 'Accept-Encoding': 'identity',
+      } });
+      if (!r.ok) { console.log(`[premierbet ${sportName}] HTTP ${r.status}`); continue; }
+      const j = await r.json();
+      const before = events.length;
+      for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
+        if (!ev.eventNames?.[0]) continue;
+        const o12 = (ev.markets || []).find(m => m.name === '1X2');
+        const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
+        const evObj = { book: 'premierbet', home: ev.eventNames[0], away: ev.eventNames[1], league: `${sportName}:${comp.name}`,
+          link: `https://www.premierbet.com/cm/event/${ev.id}` };
+        if (o12) { const O = o(o12); evObj.h = O['1']; evObj.d = O['X']; evObj.a = O['2']; }
+        // O/U from Total de Buts (football only — basketball/tennis totals differ)
+        if (sportName === 'football') {
+          const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts');
+          if (ouMkt) {
+            const byHcp = {};
+            for (const oc of ouMkt.outcomes || []) {
+              if (!oc.handicap || !oc.value) continue;
+              byHcp[oc.handicap] = byHcp[oc.handicap] || {};
+              if (oc.name === 'Plus de') byHcp[oc.handicap].over = parseFloat(oc.value);
+              if (oc.name === 'Moins de') byHcp[oc.handicap].under = parseFloat(oc.value);
+            }
+            const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under }));
+            if (lines.length) evObj.ou = lines;
+          }
         }
-        const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under }));
-        if (lines.length) evObj.ou = lines;
+        const dc = (ev.markets || []).find(m => m.name === 'Double Chance');
+        if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'] }; }
+        const btts = (ev.markets || []).find(m => m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent');
+        if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'] }; }
+        if (evObj.h) events.push(evObj);
       }
-      const dc = (ev.markets || []).find(m => m.name === 'Double Chance');
-      if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'] }; }
-      const btts = (ev.markets || []).find(m => m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent');
-      if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'] }; }
-      if (evObj.h) events.push(evObj);
+      console.log(`[premierbet ${sportName}] +${events.length - before} events via proxy`);
     }
-    console.log(`[premierbet] ${events.length} events via proxy`);
   } catch (e) {
     console.log(`[premierbet] fetch fail: ${e.message.slice(0, 90)}`);
   }
