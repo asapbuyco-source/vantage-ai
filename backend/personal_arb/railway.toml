@@ -10,3 +10,5 @@ healthcheckTimeout = 100
 [env]
 TELEGRAM_BOT_TOKEN = ""
 TELEGRAM_CHAT_ID = ""
+# Residential proxy (optional but recommended for 1xbet): http://user:pass@host:port
+ARB_PROXY = ""

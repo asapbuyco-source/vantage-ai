@@ -18,6 +18,17 @@ import dotenv from 'dotenv';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env.local for Telegram creds (same file server.js uses)
 dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
+
+// Residential proxy (optional): ARB_PROXY=http://user:pass@host:port
+// Applies to all browser sessions so bookmaker bot checks see a residential IP.
+const ARB_PROXY = process.env.ARB_PROXY || '';
+
+// Wrapper that injects the proxy into every Playwright launch
+async function launchBook(profileName, opts = {}) {
+  const launchOpts = { ...opts };
+  if (ARB_PROXY) launchOpts.proxy = { server: ARB_PROXY };
+  return chromium.launchPersistentContext(prof(profileName), launchOpts);
+}
 const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
 const prof = name => { const p = path.join(PROFILE_ROOT, name); if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); return p; };
 // Real cross-book arbs are ~1-5%. >15% means a stale/wrong line — flag but don't trust.
@@ -68,7 +79,7 @@ async function fetchBetpawa() {
 }
 
 async function fetchPmuc() {
-  const ctx = await chromium.launchPersistentContext(prof('pmuc'), { headless: true, viewport: { width: 1280, height: 800 } });
+  const ctx = await launchBook('pmuc', { headless: true, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   let events = [];
   page.on('response', async r => { const u = r.url();
@@ -88,7 +99,7 @@ async function fetchSportybet() {
 }
 
 async function fetch1xbet() {
-  const ctx = await chromium.launchPersistentContext(prof('1xbet'), { headless: false, viewport: { width: 1280, height: 800 } });
+  const ctx = await launchBook('1xbet', { headless: false, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   const events = [];
 page.on('response', async r => {
@@ -150,7 +161,7 @@ await page.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', tim
 }
 
 async function fetchPremierbet() {
-  const ctx = await chromium.launchPersistentContext(prof('premierbet'), { headless: true, viewport: { width: 1280, height: 800 } });
+  const ctx = await launchBook('premierbet', { headless: true, viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();
   const events = [];
   let eventIds = [];
@@ -224,7 +235,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
   try {
     // 1xbet runs headed (needs display); others headless
     const headed = book === '1xbet';
-    ctx = await chromium.launchPersistentContext(prof(book), { headless: !headed, viewport: { width: 1400, height: 1000 } });
+    ctx = await launchBook(book, { headless: !headed, viewport: { width: 1400, height: 1000 } });
     const page = await ctx.newPage();
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(book === '1xbet' ? 16000 : 9000); // let markets render
@@ -467,14 +478,14 @@ async function scan() {
 // ── Modes ──
 if (warm) {
   // pmuc/premierbet share one profile; 1xbet uses its own (separate session)
-  const ctx = await chromium.launchPersistentContext(prof('warm'), { headless: false, viewport: { width: 1280, height: 800 } });
+  const ctx = await launchBook('warm', { headless: false, viewport: { width: 1280, height: 800 } });
   for (const url of ['https://www.pmuc.cm/sports', 'https://www.premierbet.com/cm/']) {
     const page = await ctx.newPage();
     try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 }); } catch {}
     console.log(`[Warm] ${url}`); await page.waitForTimeout(12000); await page.close();
   }
   await ctx.close();
-  const xb = await chromium.launchPersistentContext(prof('1xbet'), { headless: false, viewport: { width: 1280, height: 800 } });
+  const xb = await launchBook('1xbet', { headless: false, viewport: { width: 1280, height: 800 } });
   const xpage = await xb.newPage();
   try { await xpage.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 40000 }); } catch {}
   console.log('[Warm] https://1xbet.cm/en/line (saving session...)');
@@ -487,4 +498,5 @@ if (warm) {
   console.log(`[Arb] Loop mode: scanning every ${loopMin} min. Ctrl+C to stop.`);
   for (;;) { await scan(); await new Promise(r => setTimeout(r, loopMin * 60000)); }
 }
+
 
