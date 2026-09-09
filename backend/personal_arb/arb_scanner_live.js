@@ -79,27 +79,36 @@ async function fetchBetpawa() {
 }
 
 async function fetchPmuc() {
-  // Retry with a FRESH (temp) profile if the saved session returns nothing —
-  // pmuc's session cookies expire and silently 403/redirect. 2 attempts.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const useFresh = attempt === 1;
-    const profileDir = useFresh ? prof('pmuc_fresh') : prof('pmuc');
-    const ctx = await launchBook('pmuc', { headless: true, viewport: { width: 1280, height: 800 } });
-    const page = await ctx.newPage();
-    let events = [];
-    page.on('response', async r => { const u = r.url();
-      if (u.includes('/api/events/sports/popular') && u.includes('betTypeId=10001')) { try { const j = await r.json();
-        for (const ev of j) for (const bt of ev.eventBetTypes || []) if (bt.name === 'Résultat du match' || bt.name.includes('match')) {
-          const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds, ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds, o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
+  // PMUC via raw fetch through the residential proxy (ARB_PROXY).
+  // Requires Origin + Referer headers (their CDN 403s otherwise) + proxy.
+  const events = [];
+  try {
+    const proxyUrl = new URL(ARB_PROXY);
+    const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
+    const r = await fetch('https://hg-event-api-prod.sporty-tech.net/api/events/sports/popular?take=10&entryPointId=101&betTypeId=10001&l=fr', { headers: {
+      'Proxy-Authorization': auth,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+      'Origin': 'https://www.pmuc.cm',
+      'Referer': 'https://www.pmuc.cm/sports',
+      'Accept': 'application/json', 'Accept-Encoding': 'identity',
+    } });
+    if (!r.ok) { console.log(`[pmuc] HTTP ${r.status}`); return []; }
+    const j = await r.json();
+    for (const ev of Array.isArray(j) ? j : []) {
+      for (const bt of ev.eventBetTypes || []) {
+        if (bt.name === 'Résultat du match' || bt.name.includes('match')) {
+          const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds,
+                ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds,
+                o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
           if (o1) events.push({ book: 'pmuc', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2 });
-        } } catch {} } });
-    await page.goto('https://www.pmuc.cm/sports', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(7000); await ctx.close();
-    if (events.length > 0) return events;
-    console.log(`[pmuc] attempt ${attempt + 1} returned 0${attempt === 0 ? ' — retrying fresh session' : ''}`);
-    if (useFresh) { try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch {} }
+        }
+      }
+    }
+    console.log(`[pmuc] ${events.length} events via proxy`);
+  } catch (e) {
+    console.log(`[pmuc] fetch fail: ${e.message.slice(0, 90)}`);
   }
-  return [];
+  return events;
 }
 
 async function fetchSportybet() {
@@ -168,43 +177,31 @@ async function fetch1xbet() {
 }
 
 async function fetchPremierbet() {
-  const ctx = await launchBook('premierbet', { headless: true, viewport: { width: 1280, height: 800 } });
-  const page = await ctx.newPage();
+  // PremierBet via raw fetch through the residential proxy (ARB_PROXY) — no browser/session.
+  // The `upcoming` endpoint returns events with 1X2 (and more) markets inline.
   const events = [];
-  let eventIds = [];
-  page.on('response', async r => {
-    const u = r.url();
-    if (u.includes('sports-api.premierbet') && u.includes('competitionId=')) {
-      try { const j = await r.json();
-        for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
-          if (ev.id && ev.eventNames?.[0]) eventIds.push({ id: ev.id, home: ev.eventNames[0], away: ev.eventNames[1] });
-        } } catch {}
-    }
-  });
-  await page.goto('https://www.premierbet.com/cm/sport/football/competition/1047522?sportRef=1&competitionId=1047522&name=Ligue%20des%20Champions%20UEFA&isGroup=false', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(6000);
-  // Batch-fetch each event's full markets via same-origin fetch (cookies from session)
-  for (const e of eventIds.slice(0, 10)) {
-    try {
-      const j = await page.evaluate(async (id) => {
-        const r = await fetch(`https://sports-api.premierbet.com/cm/v1/events/${id}?country=CM&group=g1&platform=desktop&locale=fr`);
-        return r.ok ? r.json() : null;
-      }, e.id);
-      if (!j) continue;
-      const groups = j.marketGroups || [];
-      const flat = [];
-      for (const g of groups) for (const m of g.markets || []) flat.push(m);
-const o12 = flat.find(m => m.name === '1X2');
-      const ouMkt = flat.find(m => m.name === 'Total de Buts');
-      const dc = flat.find(m => m.name === 'Double Chance');
-      const btts = flat.find(m => m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent');
+  try {
+    const proxyUrl = new URL(ARB_PROXY);
+    const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
+    const today = new Date().toISOString().slice(0, 10);
+    const url = `https://sports-api.premierbet.com/cm/v1/events/upcoming?country=CM&group=g1&platform=desktop&locale=fr&timeOffset=-60&sportId=1&pageId=6465c8bfec1ecc07f3a373e9&date=${today}`;
+    const r = await fetch(url, { headers: {
+      'Proxy-Authorization': auth,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+      'Accept': 'application/json', 'Accept-Encoding': 'identity',
+    } });
+    if (!r.ok) { console.log(`[premierbet] HTTP ${r.status}`); return []; }
+    const j = await r.json();
+    for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
+      if (!ev.eventNames?.[0]) continue;
+      const o12 = (ev.markets || []).find(m => m.name === '1X2');
       const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
-      const evObj = { book: 'premierbet', home: e.home, away: e.away, link: `https://www.premierbet.com/cm/event/${e.id}`,
-        h: o12 ? parseFloat(o12.outcomes.find(x => x.name === '1')?.value) : null,
-        d: o12 ? parseFloat(o12.outcomes.find(x => x.name === 'X')?.value) : null,
-        a: o12 ? parseFloat(o12.outcomes.find(x => x.name === '2')?.value) : null };
+      const evObj = { book: 'premierbet', home: ev.eventNames[0], away: ev.eventNames[1], league: comp.name,
+        link: `https://www.premierbet.com/cm/event/${ev.id}` };
+      if (o12) { const O = o(o12); evObj.h = O['1']; evObj.d = O['X']; evObj.a = O['2']; }
+      // O/U from Total de Buts (grouped by handicap)
+      const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts');
       if (ouMkt) {
-        // group outcomes by handicap: { '2.5': {over, under}, ... }
         const byHcp = {};
         for (const oc of ouMkt.outcomes || []) {
           if (!oc.handicap || !oc.value) continue;
@@ -215,13 +212,16 @@ const o12 = flat.find(m => m.name === '1X2');
         const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under }));
         if (lines.length) evObj.ou = lines;
       }
+      const dc = (ev.markets || []).find(m => m.name === 'Double Chance');
       if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'] }; }
+      const btts = (ev.markets || []).find(m => m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent');
       if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'] }; }
       if (evObj.h) events.push(evObj);
-} catch (e) {}
+    }
+    console.log(`[premierbet] ${events.length} events via proxy`);
+  } catch (e) {
+    console.log(`[premierbet] fetch fail: ${e.message.slice(0, 90)}`);
   }
-  await page.waitForTimeout(1000);
-  await ctx.close();
   return events;
 }
 
