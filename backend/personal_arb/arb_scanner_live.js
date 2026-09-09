@@ -79,18 +79,27 @@ async function fetchBetpawa() {
 }
 
 async function fetchPmuc() {
-  const ctx = await launchBook('pmuc', { headless: true, viewport: { width: 1280, height: 800 } });
-  const page = await ctx.newPage();
-  let events = [];
-  page.on('response', async r => { const u = r.url();
-    if (u.includes('/api/events/sports/popular') && u.includes('betTypeId=10001')) { try { const j = await r.json();
-      for (const ev of j) for (const bt of ev.eventBetTypes || []) if (bt.name === 'Résultat du match' || bt.name.includes('match')) {
-        const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds, ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds, o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
-        if (o1) events.push({ book: 'pmuc', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2 });
-      } } catch {} } });
-  await page.goto('https://www.pmuc.cm/sports', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(7000); await ctx.close();
-  return events;
+  // Retry with a FRESH (temp) profile if the saved session returns nothing —
+  // pmuc's session cookies expire and silently 403/redirect. 2 attempts.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const useFresh = attempt === 1;
+    const profileDir = useFresh ? prof('pmuc_fresh') : prof('pmuc');
+    const ctx = await launchBook('pmuc', { headless: true, viewport: { width: 1280, height: 800 } });
+    const page = await ctx.newPage();
+    let events = [];
+    page.on('response', async r => { const u = r.url();
+      if (u.includes('/api/events/sports/popular') && u.includes('betTypeId=10001')) { try { const j = await r.json();
+        for (const ev of j) for (const bt of ev.eventBetTypes || []) if (bt.name === 'Résultat du match' || bt.name.includes('match')) {
+          const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds, ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds, o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
+          if (o1) events.push({ book: 'pmuc', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2 });
+        } } catch {} } });
+    await page.goto('https://www.pmuc.cm/sports', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(7000); await ctx.close();
+    if (events.length > 0) return events;
+    console.log(`[pmuc] attempt ${attempt + 1} returned 0${attempt === 0 ? ' — retrying fresh session' : ''}`);
+    if (useFresh) { try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch {} }
+  }
+  return [];
 }
 
 async function fetchSportybet() {
@@ -343,6 +352,31 @@ async function report(c) {
   }
 }
 
+// Alert once per book outage (not every 2-min cycle) — resets when the book recovers
+const bookDown = new Set();
+const bookDownSince = {};
+async function alertBookFailure(counts) {
+  const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, sportybet: 5 };
+  for (const [book, count] of Object.entries(counts)) {
+    const min = MIN_EVENTS[book];
+    if (min === undefined) continue;
+    const isDown = count < min;
+    if (isDown && !bookDown.has(book)) {
+      bookDown.add(book);
+      bookDownSince[book] = new Date().toISOString().slice(11, 19);
+      const msg = `⚠️ ${book.toUpperCase()} is DOWN (${count} events) since ${bookDownSince[book]} UTC — check session/proxy. Recovery will be notified.`;
+      console.log('[Alert]', msg);
+      if (token && chat) await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text: msg }) });
+    } else if (!isDown && bookDown.has(book)) {
+      bookDown.delete(book);
+      const msg = `✅ ${book.toUpperCase()} is BACK (${count} events)`;
+      console.log('[Alert]', msg);
+      if (token && chat) await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text: msg }) });
+    }
+  }
+}
+
 async function collectCandidates() {
   console.log(`[Arb] Fetch ${new Date().toISOString()}`);
   const bf = await fetchBetfrenzy().catch(() => []);
@@ -352,6 +386,7 @@ async function collectCandidates() {
   const xb = await fetch1xbet().catch(() => []);
   const sb = await fetchSportybet().catch(() => []);
   console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, sportybet ${sb.length}`);
+  await alertBookFailure({ betfrenzy: bf.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, sportybet: sb.length });
   const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...sb];
   const found = [];
   const cand = (key, kind, teams, legs, inv) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100 });
