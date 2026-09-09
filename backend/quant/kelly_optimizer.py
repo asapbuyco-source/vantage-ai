@@ -70,7 +70,10 @@ def kelly_stake_pct(
 ) -> float:
     """Return stake as a percentage value on a 0-100 scale."""
     max_pct = market_max_stake_pct(market, calibration_tier)
-    return round(kelly_stake(probability, decimal_odds, max_stake_pct=max_pct) * 100, 2)
+    stake = round(kelly_stake(probability, decimal_odds, max_stake_pct=max_pct) * 100, 2)
+    # AUDIT: MIN_STAKE_PCT defined but never enforced — tiny Kelly stakes (0.1%)
+    # fall below transaction minimums. Enforce the floor.
+    return max(stake, MIN_STAKE_PCT * 100)
 
 
 def dynamic_kelly_multiplier(

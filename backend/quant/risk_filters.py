@@ -63,6 +63,11 @@ def apply_filters(bet: ValueBet, league_tier: int = 1) -> FilterResult:
         t_min_ev = max(t_min_ev, 0.08)
 
     # ── Logic ──────────────────────────────────────────────────────────────────
+    # AUDIT: historically weak markets (home_win 21% hit rate) gated in ev_engine
+    # via is_value_filtered — hard-reject so they can never become a pick.
+    if getattr(bet, "is_value_filtered", False):
+        return FilterResult(False, "Historically weak market (calibration < 0.5) — gated")
+
     if bet.odds < MIN_ODDS:
         return FilterResult(False, f"Odds too low ({bet.odds:.2f} < {MIN_ODDS})")
 

@@ -194,6 +194,7 @@ class ValueBet:
     expected_value: float   # EV (positive = value)
     inefficiency: float     # model_prob - market_prob
     is_value: bool          # Passes all filters
+    is_value_filtered: bool = False  # True = intentionally gated (historically weak market)
     raw_model_prob: float = 0.0
     calibration_factor: float = 1.0
     calibration_tier: str = "stable"
@@ -395,10 +396,16 @@ def evaluate_all_markets(
         # requirements instead of being hard-disabled. Calibration factors (home_win 0.37,
         # away_win 0.27, draw 0.41) already severely discount these; only genuinely strong
         # signals will survive both calibration and this elevated threshold.
+        # AUDIT: home_win actual hit rate 21% vs implied ~50% → raise gate from 2x to 3x MIN_EV (15%)
         HISTORICALLY_WEAK = {"Home Win", "Away Win", "Draw", "Double Chance (X2)"}
         if market in HISTORICALLY_WEAK:
-            if ev < MIN_EV * 2.0:  # 2x EV threshold for weak markets
-                continue
+            if ev < MIN_EV * 3.0:  # 15% EV minimum for weak markets (was 2x/10%)
+                is_value = False  # keep in results for auditing, but never a pick
+                is_value_filtered = True
+            else:
+                is_value_filtered = False
+        else:
+            is_value_filtered = False
 
         # STEP 1: Cap EV at 15% to prevent wild overconfidence while preserving true edge signals
         capped_ev = min(ev, 0.15)
@@ -412,6 +419,7 @@ def evaluate_all_markets(
             expected_value=round(capped_ev, 4),
             inefficiency=round(inefficiency, 4),
             is_value=is_value,
+            is_value_filtered=is_value_filtered,
             raw_model_prob=round(raw_model_prob, 4),
             calibration_factor=round(calibration_factor, 4),
             calibration_tier=calibration_tier,
