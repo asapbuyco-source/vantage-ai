@@ -99,65 +99,63 @@ async function fetchSportybet() {
 }
 
 async function fetch1xbet() {
-  const ctx = await launchBook('1xbet', { headless: false, viewport: { width: 1280, height: 800 } });
-  const page = await ctx.newPage();
+  // 1xbet via raw fetch through the residential proxy (ARB_PROXY) — no browser needed.
+  // Chromium can't auth HTTP proxies reliably, but Node fetch + Proxy-Authorization works.
   const events = [];
-page.on('response', async r => {
-    const u = r.url();
-    if (u.includes('/v3/games1x2')) {
-      try { const j = await r.json();
-        const seen = new Set();
-        const snapshot = [];
-        let fb = 0, parsed = 0;
-        for (const ev of j) {
-          if (ev.sport?.id !== 1) continue;
-          fb++;
-          const groups = {};
-          for (const g of ev.eventGroups || []) groups[g.groupId] = g.events || [];
-          const cf = (arr, t) => arr?.find(x => x[0]?.type === t)?.[0]?.cf;
-          const g1 = groups[1] || [];
-          if (cf(g1, 1) && cf(g1, 3)) {
-            parsed++;
-            const evObj = { book: '1xbet', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name,
-              link: `https://1xbet.cm/en/line/football/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-              h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
-            const ou = [];
-            for (const [gid, name] of [[17, '2.5'], [15, '1.5'], [62, '0.5']]) {
-              const g = groups[gid] || [];
-              const over = cf(g, gid === 17 ? 9 : gid === 15 ? 11 : 13);
-              const under = cf(g, gid === 17 ? 10 : gid === 15 ? 12 : 14);
-              if (over && under) ou.push({ hcp: name, over: parseFloat(over), under: parseFloat(under) });
-            }
-            if (ou.length) evObj.ou = ou;
-            const g2 = groups[2] || [];
-            const dnbH = cf(g2, 7), dnbA = cf(g2, 8);
-            if (dnbH && dnbA) evObj.dnb = { home: parseFloat(dnbH), away: parseFloat(dnbA) };
-            const gah = groups[2854] || [];
-            const ahH = cf(gah, 3829), ahA = cf(gah, 3830);
-            if (ahH && ahA) evObj.ah = [{ hcp: '0.25', home: parseFloat(ahH), away: parseFloat(ahA) }];
-            const g19 = groups[19] || [];
-            const yes = cf(g19, 180), no = cf(g19, 181);
-            if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
-            // dedupe by normalized teams — games1x2 fires twice (poll refresh), keep latest
-            const key = `${ev.opponent1?.fullName?.toLowerCase()}|${ev.opponent2?.fullName?.toLowerCase()}`;
-            if (!seen.has(key)) { seen.add(key); snapshot.push(evObj); }
-          }
+  try {
+    const proxyUrl = new URL(ARB_PROXY);
+    const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
+    const headers = {
+      'Proxy-Authorization': auth,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+      'Referer': 'https://1xbet.cm/en/line',
+      'Accept': 'application/json',
+      'Accept-Encoding': 'identity',
+    };
+    const r = await fetch('https://1xbet.cm/service-api/main-line-feed/v3/games1x2?cfView=3&count=40&fcountry=84&gr=654&grMode=4&lng=en&ref=55', { headers });
+    if (!r.ok) { console.log(`[1xbet] HTTP ${r.status}`); return []; }
+    const buf = Buffer.from(await r.arrayBuffer());
+    const j = JSON.parse(buf.toString('utf8'));
+    const seen = new Set();
+    let fb = 0, parsed = 0;
+    for (const ev of Array.isArray(j) ? j : []) {
+      if (ev.sport?.id !== 1) continue;
+      fb++;
+      const groups = {};
+      for (const g of ev.eventGroups || []) groups[g.groupId] = g.events || [];
+      const cf = (arr, t) => arr?.find(x => x[0]?.type === t)?.[0]?.cf;
+      const g1 = groups[1] || [];
+      if (cf(g1, 1) && cf(g1, 3)) {
+        parsed++;
+        const evObj = { book: '1xbet', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name,
+          link: `https://1xbet.cm/en/line/football/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
+        const ou = [];
+        for (const [gid, name] of [[17, '2.5'], [15, '1.5'], [62, '0.5']]) {
+          const g = groups[gid] || [];
+          const over = cf(g, gid === 17 ? 9 : gid === 15 ? 11 : 13);
+          const under = cf(g, gid === 17 ? 10 : gid === 15 ? 12 : 14);
+          if (over && under) ou.push({ hcp: name, over: parseFloat(over), under: parseFloat(under) });
         }
-        events.length = 0; events.push(...snapshot); // latest snapshot wins
-        console.log(`[1xbet] football ${fb}, parsed ${parsed}, unique ${snapshot.length}`);
-      } catch (e) { console.log('[1xbet] parse fail', e.message.slice(0, 50)); }
+        if (ou.length) evObj.ou = ou;
+        const g2 = groups[2] || [];
+        const dnbH = cf(g2, 7), dnbA = cf(g2, 8);
+        if (dnbH && dnbA) evObj.dnb = { home: parseFloat(dnbH), away: parseFloat(dnbA) };
+        const gah = groups[2854] || [];
+        const ahH = cf(gah, 3829), ahA = cf(gah, 3830);
+        if (ahH && ahA) evObj.ah = [{ hcp: '0.25', home: parseFloat(ahH), away: parseFloat(ahA) }];
+        const g19 = groups[19] || [];
+        const yes = cf(g19, 180), no = cf(g19, 181);
+        if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
+        const key = `${ev.opponent1?.fullName?.toLowerCase()}|${ev.opponent2?.fullName?.toLowerCase()}`;
+        if (!seen.has(key)) { seen.add(key); events.push(evObj); }
+      }
     }
-  });
-await page.goto('https://1xbet.cm/en/line', { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(12000);
-  // Container IPs often get a first-load bot challenge — reload once to clear it
-  if (events.length === 0) {
-    console.log('[1xbet] no feed on first load — reloading once (bot challenge?)');
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    await page.waitForTimeout(12000);
+    console.log(`[1xbet] football ${fb}, parsed ${parsed}, unique ${events.length}`);
+  } catch (e) {
+    console.log(`[1xbet] fetch fail: ${e.message.slice(0, 90)}`);
   }
-  await ctx.close();
-  return events.filter(e => e.h);
+  return events;
 }
 
 async function fetchPremierbet() {
