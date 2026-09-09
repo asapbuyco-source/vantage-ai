@@ -357,7 +357,7 @@ const bookDown = new Set();
 const bookDownSince = {};
 async function alertBookFailure(counts) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
-  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, sportybet: 5 };
+  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10 };
   for (const [book, count] of Object.entries(counts)) {
     const min = MIN_EVENTS[book];
     if (min === undefined) continue;
