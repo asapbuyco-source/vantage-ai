@@ -15,7 +15,7 @@ import OpenAI from 'openai';
 import sanitizeHtml from 'sanitize-html';
 import jwt from 'jsonwebtoken';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
-import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerBankerOfTheDay, triggerVipTeaser, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
+import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerBankerOfTheDay, triggerVipTeaser, triggerTelegramResults, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
 import { sendTelegramTestMessage } from './backend/telegramService.js';
 import { requireFirebaseUser } from './backend/authMiddleware.js';
 import { assertValidPlan, inferPlanFromAmount } from './backend/paymentPlans.js';
@@ -583,6 +583,15 @@ app.post('/api/admin/trigger-banker', adminAuth, async (req, res) => {
 app.post('/api/admin/trigger-vip-teaser', adminAuth, async (req, res) => {
     try {
         const result = await triggerVipTeaser();
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/admin/telegram-results', adminAuth, async (req, res) => {
+    try {
+        const result = await triggerTelegramResults();
         res.json({ success: true, ...result });
     } catch (error) {
         res.status(500).json({ error: error.message });

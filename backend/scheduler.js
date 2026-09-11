@@ -13,6 +13,7 @@ import {
     runArbScanner
 } from './quantService.js';
 import { sendTipOfTheDayPush, generateDailyTipFromPredictions } from './pushService.js';
+import { sendDailyFreePicks, sendMemberPicksMessage, sendDailyResultsMessage, sendBankerOfTheDay as sendTopSelection, sendVipTeaser as sendMemberTeaser } from './telegramMessaging.js';
 
 // ESM-compatible __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -165,8 +166,7 @@ export const triggerAccumulatorGeneration = async () => {
 export const triggerTelegramBroadcast = async () => {
     logger.info('[Scheduler] Triggering Telegram broadcast...');
     try {
-        const { sendDailyPredictionsToTelegram } = await import('./telegramService.js');
-        const result = await sendDailyPredictionsToTelegram();
+        const result = await sendDailyFreePicks();
         logger.info('[Scheduler] Telegram broadcast complete.');
         return result || { status: 'success' };
     } catch (e) {
@@ -176,27 +176,37 @@ export const triggerTelegramBroadcast = async () => {
 };
 
 export const triggerBankerOfTheDay = async () => {
-    logger.info('[Scheduler] Triggering Banker of the Day...');
+    logger.info('[Scheduler] Triggering Top Selection...');
     try {
-        const { sendBankerOfTheDay } = await import('./telegramService.js');
-        const result = await sendBankerOfTheDay();
-        logger.info('[Scheduler] Banker of the Day complete.');
+        const result = await sendTopSelection();
+        logger.info('[Scheduler] Top Selection complete.');
         return result || { status: 'success' };
     } catch (e) {
-        logger.error({ error: e }, '[Scheduler] Banker of the Day error');
+        logger.error({ error: e }, '[Scheduler] Top Selection error');
         return { status: 'error', error: e.message };
     }
 };
 
 export const triggerVipTeaser = async () => {
-    logger.info('[Scheduler] Triggering VIP Teaser...');
+    logger.info('[Scheduler] Triggering Member message...');
     try {
-        const { sendVipTeaser } = await import('./telegramService.js');
-        const result = await sendVipTeaser();
-        logger.info('[Scheduler] VIP Teaser complete.');
+        const result = await sendMemberTeaser();
+        logger.info('[Scheduler] Member message complete.');
         return result || { status: 'success' };
     } catch (e) {
-        logger.error({ error: e }, '[Scheduler] VIP Teaser error');
+        logger.error({ error: e }, '[Scheduler] Member message error');
+        return { status: 'error', error: e.message };
+    }
+};
+
+export const triggerTelegramResults = async () => {
+    logger.info('[Scheduler] Triggering Telegram results...');
+    try {
+        const result = await sendDailyResultsMessage();
+        logger.info('[Scheduler] Telegram results complete.');
+        return result || { status: 'success' };
+    } catch (e) {
+        logger.error({ error: e }, '[Scheduler] Telegram results error');
         return { status: 'error', error: e.message };
     }
 };
@@ -396,6 +406,17 @@ export const initScheduler = () => {
     );
     tasks.set('vipTeaser', vipTeaserTask);
     logger.info('🔒 VIP Teaser scheduled at 09:30 Lagos');
+
+    // Daily results post at 22:30 Lagos (after 22:00 quant grading settles picks)
+    const telegramResultsTask = cron.schedule('30 22 * * *',
+        withLock('telegram_results', 10, async () => {
+            logger.info('[Scheduler] Running Telegram results...');
+            await triggerTelegramResults();
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('telegramResults', telegramResultsTask);
+    logger.info('📊 Telegram results scheduled at 22:30 Lagos');
 
     // Tip of the Day push at 08:00 Lagos time (after quant pipeline completes)
     const tipTask = cron.schedule('0 8 * * *',

@@ -22,7 +22,7 @@ const PLAYSTORE_URL = 'https://play.google.com/store/apps/details?id=com.vantage
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 /** Reads Telegram settings from Firestore settings/internal (secrets) and settings/app (config) */
-const getTelegramSettings = async () => {
+export const getTelegramSettings = async () => {
     const db = admin.firestore();
     const [internalSnap, appSnap] = await Promise.all([
         db.collection('settings').doc('internal').get(),
@@ -43,7 +43,7 @@ const getTelegramSettings = async () => {
  * Calls the Telegram sendMessage API with a 30-second timeout.
  * Supports an optional `replyMarkup` object for inline keyboards.
  */
-const sendMessage = async (token, chatId, text, parseMode = 'HTML', replyMarkup = null) => {
+export const sendMessage = async (token, chatId, text, parseMode = 'HTML', replyMarkup = null) => {
     const url        = `${TELEGRAM_API}${token}/sendMessage`;
     const controller = new AbortController();
     const timeout    = setTimeout(() => controller.abort(), 30000);
