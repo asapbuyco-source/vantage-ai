@@ -67,13 +67,48 @@ async function fetchBetfrenzy() {
       const out = [];
       for (const lg of j) for (const ev of lg.events || []) {
         const o = ev.odds || {};
+// betfrenzy duplicates handicap lines (1_2 = main AH, 1_5 = alternate with the SAME line).
+// The alternate (1_5) can carry a stale/wide price that produces fake arbs (e.g. 1_5 -0.25 @ 2.250
+// vs 1_2 -0.25 @ 1.875 on the same fixture). Prefer 1_2 when lines collide; only use 1_5 for
+// handicaps 1_2 doesn't cover.
+const ahSources = [o['1_2'], o['1_5']].filter(Boolean);
+const byHcp = new Map();
+for (const x of ahSources) {
+  const hcp = String(Math.abs(parseFloat(x.handicap)));
+  const existing = byHcp.get(hcp);
+  const isAlt = x === o['1_5'];
+  // Prefer 1_2 (main) over 1_5 (alternate) for the same line
+  if (!existing || (existing === o['1_5'] && !isAlt)) {
+    byHcp.set(hcp, x);
+  }
+}
+        const ah = [...byHcp.values()].map(x => ({ hcp: String(Math.abs(parseFloat(x.handicap))), home: parseFloat(x.home_od), away: parseFloat(x.away_od) }));
         if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
           h: parseFloat(o['1_1'].home_od), d: parseFloat(o['1_1'].draw_od), a: parseFloat(o['1_1'].away_od),
           dc: o['1_8'] ? { '1x': parseFloat(o['1_8'].home_od), 'x2': parseFloat(o['1_8'].draw_od), '12': parseFloat(o['1_8'].away_od) } : null,
-          ah: [o['1_2'], o['1_5']].filter(Boolean).map(x => ({ hcp: x.handicap, home: parseFloat(x.home_od), away: parseFloat(x.away_od) })),
-          ou: [o['1_3'], o['1_6'], o['1_7']].filter(Boolean).map(x => ({ hcp: x.handicap, over: parseFloat(x.over_od), under: parseFloat(x.under_od) })).filter(x => x.over && x.under && parseFloat(x.hcp) <= 3.5),
-          corners: o['1_4'] ? [{ hcp: o['1_4'].handicap, over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od) }] : [],
-          cards: o['1_7'] ? [{ hcp: o['1_7'].handicap, over: parseFloat(o['1_7'].over_od), under: parseFloat(o['1_7'].under_od) }] : [] });
+          ah: ah,
+          // O/U lines: normalize asian split handicaps ("2.0,2.5" → "2.25") and dedupe by line
+          ou: (() => {
+            const byLine = new Map();
+            for (const x of [o['1_3'], o['1_6'], o['1_7']].filter(Boolean)) {
+              const parts = String(x.handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
+              if (parts.length === 0) continue;
+              const line = parts.reduce((a, b) => a + b, 0) / parts.length; // mid of split
+              if (line > 5.5) continue;
+              const key = line.toFixed(2);
+              const existing = byLine.get(key);
+              if (!existing || Number(x.add_time || 0) > Number(existing.add_time || 0)) {
+                byLine.set(key, { hcp: line.toFixed(2), over: parseFloat(x.over_od), under: parseFloat(x.under_od) });
+              }
+            }
+            return [...byLine.values()];
+          })(),
+          corners: (() => {
+            if (!o['1_4']) return [];
+            const parts = String(o['1_4'].handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
+            const line = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : NaN;
+            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od) }];
+          })() });
       }
       if (out.length > 0) return out;
       await new Promise(r => setTimeout(r, 3000));
@@ -506,20 +541,6 @@ for (const [k, grp] of g) {
        { book: under.book, bet: `Under ${hcp} corners`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], inv, grp.matches[0].kickoff); }
   }
 
-  // ── Cards grouping (2-way over/under cards) — cross-book ──
-  const cd = new Map();
-  for (const ev of all) { for (const o of ev.cards || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}`; (cd.get(k) || cd.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link }); } }
-  for (const [k, grp] of cd) {
-    if (grp.matches.length < 2) continue;
-    const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link } : b, { book: '', odds: 0 });
-    const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link } : b, { book: '', odds: 0 });
-    if (!over.book || over.book === under.book) continue;
-    const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = k.split('|').pop(); cand(`CD|${k}`, `Cards Over/Under ${hcp}`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: over.book, bet: `Over ${hcp} cards`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} cards`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], inv, grp.matches[0].kickoff); }
-  }
-
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
   const dc = new Map();
   for (const ev of all) { if (ev.dc) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}`; (dc.get(k) || dc.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, dc: ev.dc, link: ev.link }); } }
@@ -576,7 +597,7 @@ for (const [k, grp] of g) {
       [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
        { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], inv, grp.matches[0].kickoff); }
   }
-  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${cd.size} Cards, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
+  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
   return found;
 }
 
