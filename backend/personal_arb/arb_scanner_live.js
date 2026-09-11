@@ -158,20 +158,36 @@ async function fetch1xbet() {
           h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
         if (ev.sport?.id === 1) {
           fb++;
+          // O/U groups: line comes from the feed's `parameter`, not hardcoded.
+          // (group 15 can be 3.5, group 17 can be 3.5, group 62 can be 0.5 — varies per match!)
           const ou = [];
-          for (const [gid, name] of [[17, '2.5'], [15, '1.5'], [62, '0.5']]) {
+          for (const [gid, overType, underType] of [[17, 9, 10], [15, 11, 12], [62, 13, 14]]) {
             const g = groups[gid] || [];
-            const over = cf(g, gid === 17 ? 9 : gid === 15 ? 11 : 13);
-            const under = cf(g, gid === 17 ? 10 : gid === 15 ? 12 : 14);
-            if (over && under) ou.push({ hcp: name, over: parseFloat(over), under: parseFloat(under) });
+            const over = cf(g, overType);
+            const under = cf(g, underType);
+            const overEvent = g.find(x => x[0]?.type === overType)?.[0];
+            if (over && under && overEvent?.parameter != null) {
+              ou.push({ hcp: String(overEvent.parameter), over: parseFloat(over), under: parseFloat(under) });
+            }
           }
           if (ou.length) evObj.ou = ou;
-          const g2 = groups[2] || [];
-          const dnbH = cf(g2, 7), dnbA = cf(g2, 8);
-          if (dnbH && dnbA) evObj.dnb = { home: parseFloat(dnbH), away: parseFloat(dnbA) };
-          const gah = groups[2854] || [];
-          const ahH = cf(gah, 3829), ahA = cf(gah, 3830);
-          if (ahH && ahA) evObj.ah = [{ hcp: '0.25', home: parseFloat(ahH), away: parseFloat(ahA) }];
+          // Handicap markets: group 2 and 2854 are handicap lines whose value comes
+          // from `parameter` (varies per match: 0, ±0.25, ±2.5, ±2.75...).
+          // hcp === 0 is effectively Draw-No-Bet; otherwise it's an Asian Handicap line.
+          const allAH = [];
+          for (const [gid, hType, aType] of [[2, 7, 8], [2854, 3829, 3830]]) {
+            const g = groups[gid] || [];
+            const hOdds = cf(g, hType), aOdds = cf(g, aType);
+            const hcpVal = g.find(x => x[0]?.type === hType)?.[0]?.parameter;
+            if (hOdds && aOdds && hcpVal != null) {
+              allAH.push({ hcp: String(hcpVal), home: parseFloat(hOdds), away: parseFloat(aOdds) });
+            }
+          }
+          // Split into DNB (hcp 0) and AH (any other line)
+          const dnbs = allAH.filter(x => parseFloat(x.hcp) === 0);
+          const ahs = allAH.filter(x => parseFloat(x.hcp) !== 0);
+          if (dnbs.length) evObj.dnb = { home: dnbs[0].home, away: dnbs[0].away, hcp: dnbs[0].hcp };
+          if (ahs.length) evObj.ah = ahs.map(x => ({ hcp: String(Math.abs(parseFloat(x.hcp))), home: x.home, away: x.away }));
           const g19 = groups[19] || [];
           const yes = cf(g19, 180), no = cf(g19, 181);
           if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
