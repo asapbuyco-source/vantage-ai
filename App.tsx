@@ -54,6 +54,13 @@ function AppContent() {
   // Enable Firestore offline persistence on mount
   useEffect(() => { enableFirestorePersistence(); }, []);
 
+  // /download — auto-redirect to the Play Store listing (works for any auth state)
+  useEffect(() => {
+    if (location.pathname === '/download' || location.pathname === '/dl') {
+      window.location.replace('https://play.google.com/store/apps/details?id=com.vantageai.app');
+    }
+  }, [location.pathname]);
+
   // Analytics: track page views on route change
   useEffect(() => {
     import('./services/analytics').then(({ trackPageView }) => {
