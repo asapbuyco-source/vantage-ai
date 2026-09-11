@@ -417,6 +417,30 @@ console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.le
   // Keep all events — kickoff is tagged per candidate so alerts show a countdown
   // (user decides; near-kickoff arbs are valid if placed fast)
   const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...sb];
+  return findCandidates(all);
+}
+
+// Fetch only the involved books SIMULTANEOUSLY (aligned snapshot)
+async function collectBooksParallel(books) {
+  const fns = [];
+  if (books.has('betfrenzy')) fns.push(fetchBetfrenzy().catch(() => []));
+  if (books.has('pmuc')) fns.push(fetchPmuc().catch(() => []));
+  if (books.has('premierbet')) fns.push(fetchPremierbet().catch(() => []));
+  if (books.has('1xbet')) fns.push(fetch1xbet().catch(() => []));
+  if (books.has('betpawa')) fns.push(fetchBetpawa().catch(() => []));
+  if (books.has('sportybet')) fns.push(fetchSportybet().catch(() => []));
+  const results = await Promise.all(fns);
+  return results.flat();
+}
+
+// Re-run candidate detection over an event set and return the one matching `c.key`
+function findCandidateIn(events, c) {
+  const found = findCandidates(events);
+  return found.find(x => x.key === c.key) || null;
+}
+
+// Grouping logic — pure function over events; reused by all verification passes
+function findCandidates(all) {
   const found = [];
   const cand = (key, kind, teams, legs, inv, kickoff) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff });
 
@@ -561,8 +585,28 @@ async function scan() {
     else { vanished.push(c); console.log(`[Verify] dropped repriced: ${c.kind} ${c.teams.join(' vs ')}`); }
   }
   console.log(`[Verify] confirmed ${confirmed.length}, vanished ${vanished.length} (stale/repriced dropped).`);
-  for (const c of confirmed) await report(c);
-  for (const c of vanished) console.log(`[Verify] dropped: ${c.kind} ${c.teams.join(' vs ')}`);
+  // THIRD PASS — same-instant confirmation. Pass 1/2 fetch books sequentially (~60s apart),
+  // so an "arb" can be built from odds that never coexisted. Re-fetch ONLY the involved
+  // books simultaneously and require the arb to hold on that aligned snapshot.
+  const aligned = [];
+  for (const c of confirmed) {
+    const books = new Set(c.legs.map(l => l.book));
+    const fresh = await collectBooksParallel(books);
+    const matchKey = c.key.split('|')[0] + '|' + c.key.split('|').slice(1, 3).join('|');
+    const c3 = findCandidateIn(fresh, c);
+    if (!c3) {
+      console.log(`[Verify] dropped (not found in aligned snapshot): ${c.kind} ${c.teams.join(' vs ')}`);
+      continue;
+    }
+    const o1 = c.legs.map(l => l.odds);
+    const o3 = c3.legs.map(l => l.odds);
+    const stillArb = o1.length === o3.length && o1.every((o, i) => Math.abs(o - o3[i]) / o < 0.03);
+    if (stillArb) aligned.push(c3);
+    else console.log(`[Verify] dropped (odds moved in aligned snapshot): ${c.kind} ${c.teams.join(' vs ')}`);
+  }
+  console.log(`[Verify] aligned-snapshot confirmed ${aligned.length}/${confirmed.length}.`);
+  for (const c of aligned) await report(c);
+  for (const c of confirmed) if (!aligned.includes(c)) console.log(`[Verify] dropped: ${c.kind} ${c.teams.join(' vs ')}`);
 }
 
 // ── Modes ──
