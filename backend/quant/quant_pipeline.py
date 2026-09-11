@@ -475,6 +475,11 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 best_bet = approved_bets[0]
                 category = grade_risk(best_bet)
                 value_rank = "high" if category == "safe" else "medium"
+                # AUDIT: never surface a negative-EV pick as a bet — analyze it,
+                # but rank it no_edge so users don't stake on losing math.
+                if best_bet.expected_value <= 0:
+                    category = "no_edge"
+                    value_rank = "none"
             elif all_value_bets:
                 # No approved bet, but markets exist — pick the best lean
                 all_value_bets.sort(key=lambda b: b.expected_value * 0.5 + b.model_prob * 0.5, reverse=True)

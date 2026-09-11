@@ -292,7 +292,7 @@ app.post('/api/gemini/generate', adminAuth, geminiLimiter, async (req, res) => {
 
 const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
 const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
+const AI_MODEL = 'google/gemma-4-31b-it:free';
 
 async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
     if (!AI_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
