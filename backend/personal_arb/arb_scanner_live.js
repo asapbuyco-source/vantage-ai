@@ -125,16 +125,22 @@ for (const x of ahSources) {
 async function fetchBetpawa() {
   // betpawa.cm — GeniusSports v4 backend. The site itself receives protobuf, but a raw
   // fetch with `Accept: application/json` gets plain JSON (no proxy needed — direct works).
-  // Market types (reverse-engineered from the frontend bundle): 3743 = 1X2 - FT,
-  // 5000 = Total Score O/U - FT (rows carry the line in price.handicap), 3795 = BTTS - FT,
-  // 4693 = Double Chance - FT. All full-match by market type name.
+  // Market types (reverse-engineered from the frontend bundle + brute-force probe):
+  //   3743 = 1X2 - FT, 5000 = Total Score O/U - FT (line in price.handicap),
+  //   3795 = BTTS - FT, 4693 = Double Chance - FT,
+  //   3774 = Asian Handicap - FT (rows: home '1' hcp -x / away '2' hcp +x),
+  //   4703 = Draw No Bet - FT.
+  // Only -FT types are used; 1H/2H variants (3747/3756 etc.) are other periods — skipped.
+  // AH safety: only rows where the HOME side carries the negative handicap are kept
+  // (home -hcp / away +hcp, the scanner's pairing convention). Mirrored rows (home
+  // receiving) would corrupt the AH grouping and are excluded.
   const events = [];
   try {
     // take is capped at 50 per query — 3 queries (different sorts) broaden the net to ~150 events
     const q = { queries: [
-      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { popularity: 'DESC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693'] } },
-      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'ASC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693'] } },
-      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'DESC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693'] } },
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { popularity: 'DESC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693', '3774', '4703'] } },
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'ASC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693', '3774', '4703'] } },
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'DESC' }, take: 50, view: { marketTypes: ['3743', '5000', '3795', '4693', '3774', '4703'] } },
     ], keyMap: {} };
     const r = await fetch('https://www.betpawa.cm/api/sportsbook/v4/events/lists/by-queries?q=' + encodeURIComponent(JSON.stringify(q)), { headers: {
       'x-pawa-brand': 'betpawa-cameroon', 'x-pawa-language': 'en', 'x-device-fingerprint': 'arb-scanner-1',
@@ -160,6 +166,8 @@ async function fetchBetpawa() {
       const dcM = mkt('4693');
       const bttsM = mkt('3795');
       const ouM = mkt('5000');
+      const ahM = mkt('3774');
+      const dnbM = mkt('4703');
       const ou = (ouM?.row || []).map(row => {
         const over = row.prices?.find(p => p.name === 'Over');
         const under = row.prices?.find(p => p.name === 'Under');
@@ -168,17 +176,29 @@ async function fetchBetpawa() {
         if (isNaN(line) || line > 5.5) return null;
         return { hcp: String(line), over: over.odds, under: under.odds };
       }).filter(Boolean);
+      const ah = (ahM?.row || []).map(row => {
+        const homeP = row.prices?.find(p => p.name === '1');
+        const awayP = row.prices?.find(p => p.name === '2');
+        if (!homeP || !awayP || homeP.handicap == null) return null;
+        // keep only home-negative rows (home -hcp / away +hcp)
+        if (!String(homeP.handicap).startsWith('-')) return null;
+        const hcp = Math.abs(parseFloat(homeP.handicap));
+        if (isNaN(hcp)) return null;
+        return { hcp: String(hcp), home: homeP.odds, away: awayP.odds };
+      }).filter(Boolean);
       events.push({ book: 'betpawa', home, away, league: ev.competition?.name,
         kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
         link: `https://www.betpawa.cm/events/${ev.id}`,
-        // market types 3743/5000/3795/4693 are all "FT" — full match by contract
-        period: 'FULL_MATCH', periodSource: 'endpoint_contract: marketTypes 3743/5000/3795/4693 (FT)',
+        // all six market types are "FT" — full match by contract; 1H/2H types are excluded
+        period: 'FULL_MATCH', periodSource: 'endpoint_contract: marketTypes 3743/5000/3795/4693/3774/4703 (FT)',
         h: o1, d: ox, a: o2,
         dc: dcM ? { '1x': px(dcM, '1X'), 'x2': px(dcM, 'X2'), '12': px(dcM, '12') } : null,
         btts: bttsM && px(bttsM, 'Yes') ? { yes: px(bttsM, 'Yes'), no: px(bttsM, 'No') } : null,
-        ou: ou });
+        ou: ou,
+        ah: ah,
+        dnb: dnbM && px(dnbM, '1') ? { home: px(dnbM, '1'), away: px(dnbM, '2') } : null });
     }
-    console.log(`[betpawa] ${events.length} events (1X2+DC+BTTS+O/U, direct JSON)`);
+    console.log(`[betpawa] ${events.length} events (1X2+DC+BTTS+O/U+AH+DNB, direct JSON)`);
   } catch (e) {
     console.log(`[betpawa] fetch fail: ${e.message.slice(0, 90)}`);
   }
