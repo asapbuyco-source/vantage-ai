@@ -8,46 +8,48 @@ import {
   PERIOD, periodLabel, periodShort, normalizePeriod,
   pairEligible, splitAsianLine, settleAsianHandicap, ahWorstCase,
   isQuarterLine, worstPayoutFor2Way,
+  SCOPE, scopeLabel, normalizeScope,
 } from '../arb_engine.mjs';
 
 const FULL = PERIOD.FULL_MATCH, H1 = PERIOD.FIRST_HALF, H2 = PERIOD.SECOND_HALF, UNK = PERIOD.UNKNOWN;
+const MATCH = SCOPE.MATCH, T1 = SCOPE.TEAM_1, T2 = SCOPE.TEAM_2, SUNK = SCOPE.UNKNOWN;
 
 // ── TEST 1 + 2: same-period pairs are eligible ──
 test('TEST 1: FIRST_HALF -0.25 + FIRST_HALF +0.25 => eligible', () => {
-  const r = pairEligible({ period: H1 }, { period: H1 });
+  const r = pairEligible({ period: H1, scope: MATCH }, { period: H1, scope: MATCH });
   assert.equal(r.ok, true);
   assert.equal(r.period, H1);
 });
 
 test('TEST 2: FULL_MATCH -0.25 + FULL_MATCH +0.25 => eligible', () => {
-  const r = pairEligible({ period: FULL }, { period: FULL });
+  const r = pairEligible({ period: FULL, scope: MATCH }, { period: FULL, scope: MATCH });
   assert.equal(r.ok, true);
   assert.equal(r.period, FULL);
 });
 
 // ── TEST 3 + 4: cross-period pairs MUST be rejected ──
 test('TEST 3: FIRST_HALF -0.25 + FULL_MATCH +0.25 => MUST REJECT', () => {
-  const r = pairEligible({ period: H1 }, { period: FULL });
+  const r = pairEligible({ period: H1, scope: MATCH }, { period: FULL, scope: MATCH });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'MARKET_PERIOD_MISMATCH');
   assert.equal(r.detail, 'FIRST_HALF vs FULL_MATCH');
 });
 
 test('TEST 4: FULL_MATCH -0.25 + SECOND_HALF +0.25 => MUST REJECT', () => {
-  const r = pairEligible({ period: FULL }, { period: H2 });
+  const r = pairEligible({ period: FULL, scope: MATCH }, { period: H2, scope: MATCH });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'MARKET_PERIOD_MISMATCH');
 });
 
 // ── TEST 5 + 6: UNKNOWN never matches anything ──
 test('TEST 5: UNKNOWN -0.25 + FULL_MATCH +0.25 => MUST REJECT', () => {
-  const r = pairEligible({ period: UNK }, { period: FULL });
+  const r = pairEligible({ period: UNK, scope: MATCH }, { period: FULL, scope: MATCH });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'MARKET_PERIOD_UNKNOWN');
 });
 
 test('TEST 6: FIRST_HALF -0.25 + UNKNOWN +0.25 => MUST REJECT', () => {
-  const r = pairEligible({ period: H1 }, { period: UNK });
+  const r = pairEligible({ period: H1, scope: MATCH }, { period: UNK, scope: MATCH });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'MARKET_PERIOD_UNKNOWN');
 });
@@ -57,7 +59,7 @@ test('TEST 7: same event different periods => matching keys differ, cannot pair'
   const keyA = `villarreal|real betis|la liga|0.25|${H1}`;
   const keyB = `villarreal|real betis|la liga|0.25|${FULL}`;
   assert.notEqual(keyA, keyB);
-  assert.equal(pairEligible({ period: H1 }, { period: FULL }).ok, false);
+  assert.equal(pairEligible({ period: H1, scope: MATCH }, { period: FULL, scope: MATCH }).ok, false);
 });
 
 // ── normalizePeriod: explicit labels only, never guesses ──
@@ -136,7 +138,7 @@ test('AH worst-case: 2.00 vs 2.274 (0.25 line) => worst-case ROI > 0 (real arb p
 
 // ── the SAME odds with mismatched periods must never be an arb ──
 test('AH worst-case: 2.00 (FIRST_HALF) vs 2.274 (FULL_MATCH) => pair rejected', () => {
-  const r = pairEligible({ period: H1 }, { period: FULL });
+  const r = pairEligible({ period: H1, scope: MATCH }, { period: FULL, scope: MATCH });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'MARKET_PERIOD_MISMATCH');
 });
@@ -159,6 +161,103 @@ test('periodLabel/periodShort formatting', () => {
   assert.equal(periodShort(FULL), 'FT');
   assert.equal(periodShort(H1), '1H');
   assert.equal(periodShort(UNK), '');
+});
+
+// ── SCOPE: team 1 / team 2 / whole match must never be mixed ──
+test('SCOPE TEST 1: TEAM_1 + TEAM_1 => eligible', () => {
+  const r = pairEligible({ period: FULL, scope: T1 }, { period: FULL, scope: T1 });
+  assert.equal(r.ok, true);
+  assert.equal(r.scope, T1);
+});
+
+test('SCOPE TEST 2: MATCH + MATCH => eligible', () => {
+  const r = pairEligible({ period: FULL, scope: MATCH }, { period: FULL, scope: MATCH });
+  assert.equal(r.ok, true);
+  assert.equal(r.scope, MATCH);
+});
+
+test('SCOPE TEST 3: TEAM_1 + MATCH => MUST REJECT (team total vs match total)', () => {
+  const r = pairEligible({ period: FULL, scope: T1 }, { period: FULL, scope: MATCH });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'MARKET_SCOPE_MISMATCH');
+  assert.equal(r.detail, 'TEAM_1 vs MATCH');
+});
+
+test('SCOPE TEST 4: TEAM_2 + MATCH => MUST REJECT', () => {
+  const r = pairEligible({ period: FULL, scope: T2 }, { period: FULL, scope: MATCH });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'MARKET_SCOPE_MISMATCH');
+});
+
+test('SCOPE TEST 5: TEAM_1 + TEAM_2 => MUST REJECT (different teams)', () => {
+  const r = pairEligible({ period: FULL, scope: T1 }, { period: FULL, scope: T2 });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'MARKET_SCOPE_MISMATCH');
+});
+
+test('SCOPE TEST 6: UNKNOWN scope + MATCH => MUST REJECT (never guesses)', () => {
+  const r = pairEligible({ period: FULL, scope: SUNK }, { period: FULL, scope: MATCH });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'MARKET_SCOPE_UNKNOWN');
+});
+
+test('SCOPE TEST 7: same scope + different period => still rejected by period first', () => {
+  const r = pairEligible({ period: H1, scope: MATCH }, { period: FULL, scope: MATCH });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'MARKET_PERIOD_MISMATCH');
+});
+
+// ── normalizeScope: each platform writes it differently ──
+test('normalizeScope: team totals in all platform spellings => TEAM_1/TEAM_2', () => {
+  assert.equal(normalizeScope('Total 1'), T1);
+  assert.equal(normalizeScope('Team 1 Total'), T1);
+  assert.equal(normalizeScope('Individual Total 1'), T1);
+  assert.equal(normalizeScope('Asian Team Total 1'), T1);
+  assert.equal(normalizeScope('Équipe 1'), T1);
+  assert.equal(normalizeScope('Total 2'), T2);
+  assert.equal(normalizeScope('Team 2 Total'), T2);
+  assert.equal(normalizeScope('Asian Team Total 2'), T2);
+  assert.equal(normalizeScope('Équipe 2'), T2);
+});
+
+test('normalizeScope: whole-match labels => MATCH', () => {
+  assert.equal(normalizeScope('Over/Under | Full Time'), MATCH);
+  assert.equal(normalizeScope('Total Score Over/Under - FT'), MATCH);
+  assert.equal(normalizeScope('Asian Handicap'), MATCH);
+  assert.equal(normalizeScope('Both Teams To Score'), MATCH);
+  assert.equal(normalizeScope('Double Chance'), MATCH);
+  assert.equal(normalizeScope('1X2 - FT'), MATCH);
+  assert.equal(normalizeScope('Draw No Bet'), MATCH);
+});
+
+test('normalizeScope: team-name labels classified via home/away context', () => {
+  assert.equal(normalizeScope('Over/Under | Deportivo Alaves | Full Time', { home: 'Deportivo Alaves', away: 'Valencia' }), T1);
+  assert.equal(normalizeScope('Over/Under | Valencia | Full Time', { home: 'Deportivo Alaves', away: 'Valencia' }), T2);
+  // without context, a bare team name is ambiguous => UNKNOWN (never guesses)
+  assert.equal(normalizeScope('Over/Under | Deportivo Alaves | Full Time'), SUNK);
+});
+
+test('normalizeScope: ambiguous/missing => UNKNOWN', () => {
+  assert.equal(normalizeScope(''), SUNK);
+  assert.equal(normalizeScope(null), SUNK);
+  assert.equal(normalizeScope('jackpot'), SUNK);
+});
+
+test('scopeLabel formatting', () => {
+  assert.equal(scopeLabel(MATCH), 'MATCH');
+  assert.equal(scopeLabel(T1), 'TEAM 1');
+  assert.equal(scopeLabel(T2), 'TEAM 2');
+  assert.equal(scopeLabel(SUNK), 'UNKNOWN');
+});
+
+// ── normalizePeriod: FT suffix + platform label variants ──
+test('normalizePeriod: "- FT" suffix and French full-time labels', () => {
+  assert.equal(normalizePeriod('1X2 - FT'), FULL);
+  assert.equal(normalizePeriod('Total Score Over/Under - FT'), FULL);
+  assert.equal(normalizePeriod('Asian Handicap - FT'), FULL);
+  assert.equal(normalizePeriod('Résultat du match'), FULL);
+  assert.equal(normalizePeriod('1X2 - 1H'), H1);
+  assert.equal(normalizePeriod('Asian Handicap - 2H'), H2);
 });
 
 // ── worst-case payout for 2-way markets (reported Guaranteed ROI basis) ──

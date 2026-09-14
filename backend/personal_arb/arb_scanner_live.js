@@ -9,7 +9,7 @@
  * Telegram alert on arb if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID set
  */
 import { calcArb } from './arb_calc.js';
-import { PERIOD, periodLabel, periodShort, normalizePeriod, pairEligible, ahWorstCase, worstPayoutFor2Way } from './arb_engine.mjs';
+import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way } from './arb_engine.mjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -82,29 +82,30 @@ async function fetchBetfrenzy() {
         const isFresh = (x) => x && (Date.now() - Number(x.add_time || 0) * 1000) < CORNERS_MAX_AGE_MS;
         // 1_2 is the only full-match AH line in the feed
         const ah = (o['1_2'] && o['1_2'].handicap != null)
-          ? [{ hcp: String(Math.abs(parseFloat(o['1_2'].handicap))), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od) }]
+          ? [{ hcp: String(Math.abs(parseFloat(o['1_2'].handicap))), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od), scope: 'MATCH' }]
           : [];
         if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
           // Period: only the verified full-match keys are used (1_1/1_2/1_3 + fresh 1_4).
           // 1H keys (1_5/1_6/1_7) and the mislabeled 1_8 are excluded at parse time.
-          period: 'FULL_MATCH', periodSource: 'verified key map: 1_1/1_2/1_3/1_4 (page-matched); 1_5/1_6/1_7 = 1H, 1_8 != DC',
+          period: 'FULL_MATCH', scope: 'MATCH',
+          periodSource: 'verified key map: 1_1/1_2/1_3/1_4 (page-matched); 1_5/1_6/1_7 = 1H, 1_8 != DC',
           h: parseFloat(o['1_1'].home_od), d: parseFloat(o['1_1'].draw_od), a: parseFloat(o['1_1'].away_od),
           dc: null, // no Double Chance in this feed (1_8 is not DC — verified against the page)
           ah: ah,
-          // O/U: only 1_3 (FT main line); normalize asian split handicaps ("2.5,3.0" → "2.75")
+          // O/U: only 1_3 (FT match total); normalize asian split handicaps ("2.5,3.0" → "2.75")
           ou: (() => {
             if (!o['1_3']) return [];
             const parts = String(o['1_3'].handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
             if (parts.length === 0) return [];
             const line = parts.reduce((a, b) => a + b, 0) / parts.length; // mid of split
             if (line > 5.5) return [];
-            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_3'].over_od), under: parseFloat(o['1_3'].under_od) }];
+            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_3'].over_od), under: parseFloat(o['1_3'].under_od), scope: 'MATCH' }];
           })(),
           corners: (() => {
             if (!o['1_4'] || !isFresh(o['1_4'])) return []; // stale corners lines are excluded
             const parts = String(o['1_4'].handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
             const line = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : NaN;
-            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od) }];
+            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od), scope: 'MATCH' }];
           })() });
       }
       if (out.length > 0) return out;
@@ -143,17 +144,32 @@ async function fetchBetpawa() {
     if (!r.ok) { console.log(`[betpawa] HTTP ${r.status}`); return []; }
     const j = await r.json();
     const seen = new Set();
+    // ── Runtime label verifier ──
+    // betpawa's own market names are the source of truth ("... - FT", "... - 1H").
+    // Every requested market is re-verified from its name: the period must normalize to
+    // FULL_MATCH and the scope must be MATCH — otherwise the market is SKIPPED (never guessed).
+    // If betpawa ever renames/reuses an ID, this rejects it instead of producing false arbs.
+    let rejectedLabels = 0;
     for (const resp of j.responses || []) for (const ev of resp.responses || []) {
       if (seen.has(ev.id)) continue;
       seen.add(ev.id);
-      const mkt = (id) => (ev.markets || []).find(x => x.marketType?.id === id);
+      const home = ev.participants?.find(p => p.position === 1)?.name;
+      const away = ev.participants?.find(p => p.position === 2)?.name;
+      // label verifier bound to THIS event (team names give scope context)
+      const verified = (m) => {
+        if (!m) return null; // market not present for this event — not a rejection
+        const name = m.marketType?.name || '';
+        const period = normalizePeriod(name);
+        const scope = normalizeScope(name, { home, away });
+        if (period !== 'FULL_MATCH' || scope !== 'MATCH') { rejectedLabels++; return null; }
+        return m;
+      };
+      const mkt = (id) => verified((ev.markets || []).find(x => x.marketType?.id === id));
       const prices = (m) => m?.row?.[0]?.prices || [];
       const px = (m, name) => prices(m).find(p => p.name === name)?.odds;
       const m3743 = mkt('3743');
       const o1 = px(m3743, '1'), ox = px(m3743, 'X'), o2 = px(m3743, '2');
       if (!o1 || !o2) continue; // 1X2 is the spine — skip events without it
-      const home = ev.participants?.find(p => p.position === 1)?.name;
-      const away = ev.participants?.find(p => p.position === 2)?.name;
       if (!home || !away) continue;
       const dcM = mkt('4693');
       const bttsM = mkt('3795');
@@ -166,7 +182,7 @@ async function fetchBetpawa() {
         if (!over || !under || over.handicap == null) return null;
         const line = parseFloat(over.handicap);
         if (isNaN(line) || line > 5.5) return null;
-        return { hcp: String(line), over: over.odds, under: under.odds };
+        return { hcp: String(line), over: over.odds, under: under.odds, scope: 'MATCH' };
       }).filter(Boolean);
       const ah = (ahM?.row || []).map(row => {
         const homeP = row.prices?.find(p => p.name === '1');
@@ -176,21 +192,22 @@ async function fetchBetpawa() {
         if (!String(homeP.handicap).startsWith('-')) return null;
         const hcp = Math.abs(parseFloat(homeP.handicap));
         if (isNaN(hcp)) return null;
-        return { hcp: String(hcp), home: homeP.odds, away: awayP.odds };
+        return { hcp: String(hcp), home: homeP.odds, away: awayP.odds, scope: 'MATCH' };
       }).filter(Boolean);
       events.push({ book: 'betpawa', home, away, league: ev.competition?.name,
         kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
         link: `https://www.betpawa.cm/events/${ev.id}`,
-        // all six market types are "FT" — full match by contract; 1H/2H types are excluded
-        period: 'FULL_MATCH', periodSource: 'endpoint_contract: marketTypes 3743/5000/3795/4693/3774/4703 (FT)',
+        // label-verified: all six market types are "... - FT" and whole-match (MATCH scope)
+        period: 'FULL_MATCH', scope: 'MATCH',
+        periodSource: 'runtime label verifier: marketType.name ends "- FT", scope MATCH',
         h: o1, d: ox, a: o2,
-        dc: dcM ? { '1x': px(dcM, '1X'), 'x2': px(dcM, 'X2'), '12': px(dcM, '12') } : null,
-        btts: bttsM && px(bttsM, 'Yes') ? { yes: px(bttsM, 'Yes'), no: px(bttsM, 'No') } : null,
+        dc: dcM ? { '1x': px(dcM, '1X'), 'x2': px(dcM, 'X2'), '12': px(dcM, '12'), scope: 'MATCH' } : null,
+        btts: bttsM && px(bttsM, 'Yes') ? { yes: px(bttsM, 'Yes'), no: px(bttsM, 'No'), scope: 'MATCH' } : null,
         ou: ou,
         ah: ah,
-        dnb: dnbM && px(dnbM, '1') ? { home: px(dnbM, '1'), away: px(dnbM, '2') } : null });
+        dnb: dnbM && px(dnbM, '1') ? { home: px(dnbM, '1'), away: px(dnbM, '2'), scope: 'MATCH' } : null });
     }
-    console.log(`[betpawa] ${events.length} events (1X2+DC+BTTS+O/U+AH+DNB, direct JSON)`);
+    console.log(`[betpawa] ${events.length} events (1X2+DC+BTTS+O/U+AH+DNB, label-verified${rejectedLabels ? `, ${rejectedLabels} labels rejected` : ''})`);
   } catch (e) {
     console.log(`[betpawa] fetch fail: ${e.message.slice(0, 90)}`);
   }
@@ -220,8 +237,8 @@ async function fetchPmuc() {
                 ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds,
                 o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
           if (o1) events.push({ book: 'pmuc', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2,
-            // 'Résultat du match' = full-match 1X2 by contract
-            period: 'FULL_MATCH', periodSource: 'endpoint_contract: Résultat du match (full match)' });
+            // 'Résultat du match' = full-match 1X2 by contract (whole match)
+            period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'endpoint_contract: Résultat du match (full match)' });
         }
       }
     }
@@ -269,26 +286,29 @@ async function fetch1xFamily(book, host) {
           // Period: games1x2 is the main (full-time) line by endpoint contract. If the feed ever
           // exposes a periodName (e.g. "1st Half"), it is normalized explicitly — never guessed.
           period: ev.periodName ? normalizePeriod(ev.periodName, { fullMatchContext: true }) : 'FULL_MATCH',
+          // Scope: 1X2 (group 1) is a whole-match market.
+          scope: 'MATCH',
           periodSource: ev.periodName ? `feed periodName="${ev.periodName}"` : 'endpoint_contract: games1x2 (main full-time line)',
           link: `https://${host}/en/line/${ev.sport?.name?.toLowerCase()}/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
           h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
         if (ev.sport?.id === 1) {
           fb++;
-          // O/U groups — MATCH TOTALS ONLY (verified against the site on 4 fixtures):
-          //   group 17 (types 9/10)  = "Total" (European match total, e.g. 2.5)
-          //   group 99 (types 3827/3828) = "Asian Total" (match total, quarter lines, e.g. 2.75)
-          //   group 15 (types 11/12) = "Total 1" (TEAM 1 total)  -> EXCLUDED
-          //   group 62 (types 13/14) = "Total 2" (TEAM 2 total)  -> EXCLUDED
-          // Pairing a team total with another book's match total is a false arb (e.g. team-1
-          // over 1.5 is a different probability than match over 1.5 — they don't hedge).
+          // ── O/U groups with EXPLICIT SCOPE (verified vs the site on 4 fixtures + Poisson math) ──
+          //   group 17 (types 9/10)      = "Total"       -> MATCH total  (e.g. 2.5)
+          //   group 99 (types 3827/3828) = "Asian Total" -> MATCH total  (quarter lines, e.g. 2.75)
+          //   group 15 (types 11/12)     = "Total 1"     -> TEAM 1 total (e.g. Villarreal over 1.5)
+          //   group 62 (types 13/14)     = "Total 2"     -> TEAM 2 total (e.g. Betis over 1.5)
+          // Scope is tagged per line, so team totals can only pair with other books' TEAM totals
+          // of the same team — never with match totals. (1xbet/betwinner/paripesa price the team
+          // lines independently, so same-team cross-brand team-total arbs are valid candidates.)
           const ou = [];
-          for (const [gid, overType, underType] of [[17, 9, 10], [99, 3827, 3828]]) {
+          for (const [gid, overType, underType, scope] of [[17, 9, 10, 'MATCH'], [99, 3827, 3828, 'MATCH'], [15, 11, 12, 'TEAM_1'], [62, 13, 14, 'TEAM_2']]) {
             const g = groups[gid] || [];
             const over = cf(g, overType);
             const under = cf(g, underType);
             const overEvent = g.find(x => x[0]?.type === overType)?.[0];
             if (over && under && overEvent?.parameter != null) {
-              ou.push({ hcp: String(overEvent.parameter), over: parseFloat(over), under: parseFloat(under) });
+              ou.push({ hcp: String(overEvent.parameter), over: parseFloat(over), under: parseFloat(under), scope });
             }
           }
           if (ou.length) evObj.ou = ou;
@@ -306,14 +326,19 @@ async function fetch1xFamily(book, host) {
               allAH.push({ hcp: String(hcpVal), home: parseFloat(hOdds), away: parseFloat(aOdds) });
             }
           }
-          // Split into DNB (hcp 0) and AH (any other line)
+          // Split into DNB (hcp 0) and AH (any other line) — all MATCH scope
           const dnbs = allAH.filter(x => parseFloat(x.hcp) === 0);
           const ahs = allAH.filter(x => parseFloat(x.hcp) !== 0);
-          if (dnbs.length) evObj.dnb = { home: dnbs[0].home, away: dnbs[0].away, hcp: dnbs[0].hcp };
-          if (ahs.length) evObj.ah = ahs.map(x => ({ hcp: String(Math.abs(parseFloat(x.hcp))), home: x.home, away: x.away }));
+          if (dnbs.length) evObj.dnb = { home: dnbs[0].home, away: dnbs[0].away, hcp: dnbs[0].hcp, scope: 'MATCH' };
+          if (ahs.length) evObj.ah = ahs.map(x => ({ hcp: String(Math.abs(parseFloat(x.hcp))), home: x.home, away: x.away, scope: 'MATCH' }));
+          // Double Chance — group 8 (types 4/5/6 = 1X/12/X2, verified by 1X2-implied probability
+          // math on 4 fixtures within book margin). MATCH scope, FT.
+          const g8 = groups[8] || [];
+          const dc1x = cf(g8, 4), dc12 = cf(g8, 5), dcx2 = cf(g8, 6);
+          if (dc1x && dcx2 && dc12) evObj.dc = { '1x': parseFloat(dc1x), '12': parseFloat(dc12), 'x2': parseFloat(dcx2), scope: 'MATCH' };
           const g19 = groups[19] || [];
           const yes = cf(g19, 180), no = cf(g19, 181);
-          if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no) };
+          if (yes && no) evObj.btts = { yes: parseFloat(yes), no: parseFloat(no), scope: 'MATCH' };
         } else {
           other++;
         }
@@ -354,16 +379,30 @@ try {
       const before = events.length;
       for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
         if (!ev.eventNames?.[0]) continue;
+        const home = ev.eventNames[0], away = ev.eventNames[1];
+        // Runtime label verifier (French): only accept market names that are unambiguously
+        // whole-match AND full-time. Any name containing half/team indicators is rejected.
+        const labelOk = (name) => {
+          if (!name) return false;
+          const period = normalizePeriod(name);
+          const scope = normalizeScope(name, { home, away });
+          // French full-match labels often omit "FT" ("Total de Buts") — accept only when the
+          // name carries NO half marker and NO team marker, i.e. period is FT or unknown-blank,
+          // scope is MATCH, and the label is not a team market.
+          if (period === 'FIRST_HALF' || period === 'SECOND_HALF') return false;
+          if (scope !== 'MATCH') return false;
+          return true;
+        };
         const o12 = (ev.markets || []).find(m => m.name === '1X2');
         const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
-        const evObj = { book: 'premierbet', home: ev.eventNames[0], away: ev.eventNames[1], league: `${sportName}:${comp.name}`, kickoff: ev.startTime,
-          // upcoming events endpoint = full-match markets by contract
-          period: 'FULL_MATCH', periodSource: 'endpoint_contract: /events/upcoming (full-match markets)',
+        const evObj = { book: 'premierbet', home, away, league: `${sportName}:${comp.name}`, kickoff: ev.startTime,
+          // upcoming events endpoint = full-match whole-match markets, label-verified
+          period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'runtime label verifier (no half/team markers)',
           link: `https://www.premierbet.com/cm/event/${ev.id}` };
         if (o12) { const O = o(o12); evObj.h = O['1']; evObj.d = O['X']; evObj.a = O['2']; }
         // O/U from Total de Buts (football only — basketball/tennis totals differ)
         if (sportName === 'football') {
-          const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts');
+          const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts' && labelOk(m.name));
           if (ouMkt) {
             const byHcp = {};
             for (const oc of ouMkt.outcomes || []) {
@@ -372,14 +411,14 @@ try {
               if (oc.name === 'Plus de') byHcp[oc.handicap].over = parseFloat(oc.value);
               if (oc.name === 'Moins de') byHcp[oc.handicap].under = parseFloat(oc.value);
             }
-            const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under }));
+            const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under, scope: 'MATCH' }));
             if (lines.length) evObj.ou = lines;
           }
         }
-        const dc = (ev.markets || []).find(m => m.name === 'Double Chance');
-        if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'] }; }
-        const btts = (ev.markets || []).find(m => m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent');
-        if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'] }; }
+        const dc = (ev.markets || []).find(m => m.name === 'Double Chance' && labelOk(m.name));
+        if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'], scope: 'MATCH' }; }
+        const btts = (ev.markets || []).find(m => (m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent') && labelOk(m.name));
+        if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'], scope: 'MATCH' }; }
         if (evObj.h) events.push(evObj);
       }
       console.log(`[premierbet ${sportName}] +${events.length - before} events via proxy`);
@@ -516,7 +555,8 @@ async function report(c) {
   const lines = [];
   lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
   lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
-  lines.push(`Market: ${c.kind}  |  Period: ${periodLabel(c.period || PERIOD.UNKNOWN)}`);
+  const scopeStr = c.scope && c.scope !== 'MATCH' ? `  |  Scope: ${scopeLabel(c.scope)}` : '';
+  lines.push(`Market: ${c.kind}  |  Period: ${periodLabel(c.period || PERIOD.UNKNOWN)}${scopeStr}`);
   lines.push(`Guaranteed ROI: ${pct.toFixed(2)}%`);
   lines.push(`Prices checked at ${new Date().toISOString().slice(11, 19)} UTC — verify on site NOW`);
   // Kickoff countdown — user decides if they have time to place both legs
@@ -626,18 +666,18 @@ function findCandidates(all) {
   const found = [];
   // pct is ALWAYS worst-case-based: pct = (worst/100 - 1) * 100. For binary markets
   // worst = 100/inv (exact); for quarter-line markets worst = 50 + 50/inv or the AH sim.
-  const cand = (key, kind, teams, legs, inv, kickoff, period, worst) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst });
+  const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope });
   const invDisplay = (worst) => 2 - worst / 100;
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
   // different competitions (Champions League vs Youth League) never merge
   const g = new Map();
-  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || 'MATCH'}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
-    const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away, period: m.period } : b, { book: '', odds: 0 });
-    const d = grp.matches.reduce((b, m) => (m.d || 0) > b.odds ? { book: m.book, odds: m.d, link: m.link, home: m.home, away: m.away, period: m.period } : b, { book: '', odds: 0 });
-    const a = grp.matches.reduce((b, m) => m.a > b.odds ? { book: m.book, odds: m.a, link: m.link, home: m.home, away: m.away, period: m.period } : b, { book: '', odds: 0 });
+    const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const d = grp.matches.reduce((b, m) => (m.d || 0) > b.odds ? { book: m.book, odds: m.d, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const a = grp.matches.reduce((b, m) => m.a > b.odds ? { book: m.book, odds: m.a, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     const srcs = new Set([h.book, d.book, a.book].filter(Boolean));
     if (srcs.size < 2) continue; // needs >=2 distinct books across the 3 legs
     const pair = pairEligible(h, d);
@@ -646,49 +686,49 @@ for (const [k, grp] of g) {
     if (inv < 1) { const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); const worst = 100 / inv; cand(`1X2|${k}`, '1X2 — Match Winner', [h.home || grp.matches[0].home, h.away || grp.matches[0].away],
       [{ book: h.book, bet: (h.home || grp.matches[0].home) + ' to win (1)', odds: h.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: h.link },
        { book: d.book, bet: 'Draw (X)', odds: d.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: d.link },
-       { book: a.book, bet: (a.away || grp.matches[0].away) + ' to win (2)', odds: a.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout, link: a.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: a.book, bet: (a.away || grp.matches[0].away) + ' to win (2)', odds: a.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout, link: a.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── O/U grouping (asian lines) — best over & best under must be DIFFERENT books ──
   const ou = new Map();
-  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
   for (const [k, grp] of ou) {
     if (grp.matches.length < 2) continue;
-    const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue; // same book both sides = voided, not arb
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`OU|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
   const cr = new Map();
-  for (const ev of all) { for (const o of ev.corners || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (cr.get(k) || cr.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  for (const ev of all) { for (const o of ev.corners || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (cr.get(k) || cr.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
   for (const [k, grp] of cr) {
     if (grp.matches.length < 2) continue;
-    const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const under = grp.matches.reduce((b, m) => m.under > b.odds ? { book: m.book, odds: m.under, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     if (!over.book || over.book === under.book) continue;
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`CR|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); cand(`CR|${k}`, `Corners Over/Under ${hcp}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} corners`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} corners`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: under.book, bet: `Under ${hcp} corners`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
   const dc = new Map();
-  for (const ev of all) { if (ev.dc) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (dc.get(k) || dc.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, dc: ev.dc, link: ev.link, period: ev.period }); } }
+  for (const ev of all) { if (ev.dc) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.dc.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (dc.get(k) || dc.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, dc: ev.dc, link: ev.link, period: ev.period, scope: ev.dc.scope || ev.scope }); } }
   for (const [k, grp] of dc) {
     if (grp.matches.length < 2) continue;
-    const b1x = grp.matches.reduce((b, m) => m.dc['1x'] > b.odds ? { book: m.book, odds: m.dc['1x'], link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const bx2 = grp.matches.reduce((b, m) => m.dc['x2'] > b.odds ? { book: m.book, odds: m.dc['x2'], link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const b12 = grp.matches.reduce((b, m) => m.dc['12'] > b.odds ? { book: m.book, odds: m.dc['12'], link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const b1x = grp.matches.reduce((b, m) => m.dc['1x'] > b.odds ? { book: m.book, odds: m.dc['1x'], link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bx2 = grp.matches.reduce((b, m) => m.dc['x2'] > b.odds ? { book: m.book, odds: m.dc['x2'], link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const b12 = grp.matches.reduce((b, m) => m.dc['12'] > b.odds ? { book: m.book, odds: m.dc['12'], link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     const srcs = new Set([b1x.book, bx2.book, b12.book].filter(Boolean));
     if (srcs.size < 2) continue;
     const pair = pairEligible(b1x, bx2);
@@ -697,7 +737,7 @@ for (const [k, grp] of g) {
     if (inv < 1) { const r = calcArb([{ book: b1x.book, odds: b1x.odds }, { book: bx2.book, odds: bx2.odds }, { book: b12.book, odds: b12.odds }]); const worst = 100 / inv; cand(`DC|${k}`, 'Double Chance', [k.split('|')[0], k.split('|')[1]],
       [{ book: b1x.book, bet: k.split('|')[0] + ' or Draw (1X)', odds: b1x.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: b1x.link },
        { book: bx2.book, bet: k.split('|')[1] + ' or Draw (X2)', odds: bx2.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bx2.link },
-       { book: b12.book, bet: 'No Draw (12)', odds: b12.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout, link: b12.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: b12.book, bet: 'No Draw (12)', odds: b12.odds, stake: r.stakes[2].stake, payout: r.stakes[2].payout, link: b12.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── AH pairing (home -hcp vs away +hcp) — best sides must be DIFFERENT books ──
@@ -706,11 +746,11 @@ for (const [k, grp] of g) {
 // (see ahWorstCase in arb_engine.mjs): we enumerate every settlement breakpoint and require
 // the WORST-CASE combined return to exceed the total stake by at least MIN_GUARANTEED_ROI.
   const ah = new Map();
-  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
   for (const [k, grp] of ah) {
     if (grp.matches.length < 2) continue;
-    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`AH|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
@@ -729,37 +769,37 @@ for (const [k, grp] of g) {
     }
     cand(`AH|${k}`, `Asian Handicap ${hcp}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: bHome.book, bet: k.split('|')[0] + ' -' + hcp, odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
-       { book: bAway.book, bet: k.split('|')[1] + ' +' + hcp, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(wc.worstReturn), grp.matches[0].kickoff, pair.period, wc.worstReturn);
+       { book: bAway.book, bet: k.split('|')[1] + ' +' + hcp, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(wc.worstReturn), grp.matches[0].kickoff, pair.period, wc.worstReturn, pair.scope);
   }
 // ── BTTS grouping (2-way yes/no) — best sides must be DIFFERENT books ──
   const bts = new Map();
-  for (const ev of all) { if (ev.btts) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (bts.get(k) || bts.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, yes: ev.btts.yes, no: ev.btts.no, link: ev.link, period: ev.period }); } }
+  for (const ev of all) { if (ev.btts) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.btts.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (bts.get(k) || bts.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, yes: ev.btts.yes, no: ev.btts.no, link: ev.link, period: ev.period, scope: ev.btts.scope || ev.scope }); } }
   for (const [k, grp] of bts) {
     if (grp.matches.length < 2) continue;
-    const bYes = grp.matches.reduce((b, m) => m.yes > b.odds ? { book: m.book, odds: m.yes, link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const bNo = grp.matches.reduce((b, m) => m.no > b.odds ? { book: m.book, odds: m.no, link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const bYes = grp.matches.reduce((b, m) => m.yes > b.odds ? { book: m.book, odds: m.yes, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bNo = grp.matches.reduce((b, m) => m.no > b.odds ? { book: m.book, odds: m.no, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     if (!bYes.book || bYes.book === bNo.book) continue;
     const pair = pairEligible(bYes, bNo);
     if (!pair.ok) { rejectLog(`BTTS|${k}`, bYes, bNo, pair.reason, pair.detail); continue; }
     const inv = 1/bYes.odds + 1/bNo.odds;
     if (inv < 1) { const r = calcArb([{ book: bYes.book, odds: bYes.odds }, { book: bNo.book, odds: bNo.odds }]); const worst = 100 / inv; cand(`BTTS|${k}`, 'Both Teams To Score', [k.split('|')[0], k.split('|')[1]],
       [{ book: bYes.book, bet: 'Both teams score (Yes)', odds: bYes.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bYes.link },
-       { book: bNo.book, bet: 'Not both score (No)', odds: bNo.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bNo.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: bNo.book, bet: 'Not both score (No)', odds: bNo.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bNo.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 // ── DNB grouping (2-way home/away) — best sides must be DIFFERENT books ──
   const dnb = new Map();
-  for (const ev of all) { if (ev.dnb) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${dayOf(ev.kickoff)}`; (dnb.get(k) || dnb.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: ev.dnb.home, away: ev.dnb.away, link: ev.link, period: ev.period }); } }
+  for (const ev of all) { if (ev.dnb) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.dnb.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (dnb.get(k) || dnb.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: ev.dnb.home, away: ev.dnb.away, link: ev.link, period: ev.period, scope: ev.dnb.scope || ev.scope }); } }
   for (const [k, grp] of dnb) {
     if (grp.matches.length < 2) continue;
-    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period } : b, { book: '', odds: 0 });
-    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period } : b, { book: '', odds: 0 });
+    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`DNB|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
     const inv = 1/bHome.odds + 1/bAway.odds;
     if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const worst = 100 / inv; cand(`DNB|${k}`, 'Draw No Bet', [k.split('|')[0], k.split('|')[1]],
       [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
-       { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst); }
+       { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
   console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
   return found;
