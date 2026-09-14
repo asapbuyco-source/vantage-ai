@@ -123,9 +123,50 @@ for (const x of ahSources) {
 }
 
 async function fetchBetpawa() {
-  // DISABLED: betpawa's v4 events API is protobuf (GENIUSSPORTS), combo-cards has no odds.
-  // Would need the .proto schema to decode. Skipped — other 4 books cover the market.
-  return [];
+  // betpawa.cm — GeniusSports v4 backend. The site itself receives protobuf, but a raw
+  // fetch with `Accept: application/json` gets plain JSON (no proxy needed — direct works).
+  // Market types: 3743 = "1X2 - FT" (full match). 1X2 only for now; O/U/AH/BTTS/DC IDs
+  // still need reverse-engineering from the frontend's market-type map.
+  const events = [];
+  try {
+    // take is capped at 50 per query — 3 queries (different sorts) broaden the net to ~150 events
+    const q = { queries: [
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { popularity: 'DESC' }, take: 50, view: { marketTypes: ['3743'] } },
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'ASC' }, take: 50, view: { marketTypes: ['3743'] } },
+      { query: { eventType: 'UPCOMING', categories: ['2'] }, sort: { startTime: 'DESC' }, take: 50, view: { marketTypes: ['3743'] } },
+    ], keyMap: {} };
+    const r = await fetch('https://www.betpawa.cm/api/sportsbook/v4/events/lists/by-queries?q=' + encodeURIComponent(JSON.stringify(q)), { headers: {
+      'x-pawa-brand': 'betpawa-cameroon', 'x-pawa-language': 'en', 'x-device-fingerprint': 'arb-scanner-1',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+      'Accept': 'application/json', 'Accept-Encoding': 'identity',
+      'Origin': 'https://www.betpawa.cm', 'Referer': 'https://www.betpawa.cm/',
+    } });
+    if (!r.ok) { console.log(`[betpawa] HTTP ${r.status}`); return []; }
+    const j = await r.json();
+    const seen = new Set();
+    for (const resp of j.responses || []) for (const ev of resp.responses || []) {
+      if (seen.has(ev.id)) continue;
+      seen.add(ev.id);
+      const m = (ev.markets || []).find(x => x.marketType?.id === '3743');
+      if (!m) continue;
+      const p = m.row?.[0]?.prices || [];
+      const o1 = p.find(x => x.name === '1')?.odds, ox = p.find(x => x.name === 'X')?.odds, o2 = p.find(x => x.name === '2')?.odds;
+      if (!o1 || !o2) continue;
+      const home = ev.participants?.find(p => p.position === 1)?.name;
+      const away = ev.participants?.find(p => p.position === 2)?.name;
+      if (!home || !away) continue;
+      events.push({ book: 'betpawa', home, away, league: ev.competition?.name,
+        kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
+        link: `https://www.betpawa.cm/events/${ev.id}`,
+        // marketType 3743 is "1X2 - FT" — full match by contract
+        period: 'FULL_MATCH', periodSource: 'endpoint_contract: marketType 3743 (1X2 - FT)',
+        h: o1, d: ox, a: o2 });
+    }
+    console.log(`[betpawa] ${events.length} events (1X2 FT, direct JSON)`);
+  } catch (e) {
+    console.log(`[betpawa] fetch fail: ${e.message.slice(0, 90)}`);
+  }
+  return events;
 }
 
 async function fetchPmuc() {
@@ -472,7 +513,7 @@ const bookDown = new Set();
 const bookDownSince = {};
 async function alertBookFailure(counts) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
-  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10 };
+  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, betpawa: 20 };
   for (const [book, count] of Object.entries(counts)) {
     const min = MIN_EVENTS[book];
     if (min === undefined) continue;
