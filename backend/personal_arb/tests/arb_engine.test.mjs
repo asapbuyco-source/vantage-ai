@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   PERIOD, periodLabel, periodShort, normalizePeriod,
   pairEligible, splitAsianLine, settleAsianHandicap, ahWorstCase,
+  isQuarterLine, worstPayoutFor2Way,
 } from '../arb_engine.mjs';
 
 const FULL = PERIOD.FULL_MATCH, H1 = PERIOD.FIRST_HALF, H2 = PERIOD.SECOND_HALF, UNK = PERIOD.UNKNOWN;
@@ -158,4 +159,37 @@ test('periodLabel/periodShort formatting', () => {
   assert.equal(periodShort(FULL), 'FT');
   assert.equal(periodShort(H1), '1H');
   assert.equal(periodShort(UNK), '');
+});
+
+// ── worst-case payout for 2-way markets (reported Guaranteed ROI basis) ──
+test('isQuarterLine detection', () => {
+  assert.equal(isQuarterLine('2.25'), true);
+  assert.equal(isQuarterLine('2.75'), true);
+  assert.equal(isQuarterLine('0.25'), true);
+  assert.equal(isQuarterLine('2.5'), false);
+  assert.equal(isQuarterLine('2'), false);
+  assert.equal(isQuarterLine('0'), false);
+  assert.equal(isQuarterLine('10.25'), true);
+});
+
+test('worstPayoutFor2Way: binary/half lines => exact 100/inv', () => {
+  const inv = 1 / 2.0 + 1 / 2.1; // 0.9762
+  assert.equal(worstPayoutFor2Way('2.5', inv), 100 / inv);
+  assert.equal(worstPayoutFor2Way('1', inv), 100 / inv);
+  assert.equal(worstPayoutFor2Way('0', inv), 100 / inv);
+});
+
+test('worstPayoutFor2Way: quarter lines => honest 50 + 50/inv (below naive)', () => {
+  const inv = 1 / 2.0 + 1 / 2.1; // 0.9762
+  const naive = 100 / inv;
+  const worst = worstPayoutFor2Way('2.25', inv);
+  assert.equal(worst, 50 + 50 / inv);
+  assert.ok(worst < naive, 'worst must be below the naive payout');
+  assert.ok(worst > 100, 'but still profitable when inv < 1');
+});
+
+test('worstPayoutFor2Way: quarter line with inv >= 1 is never profitable', () => {
+  const inv = 1 / 2.0 + 1 / 2.0; // exactly 1 → no arb
+  const worst = worstPayoutFor2Way('2.25', inv);
+  assert.equal(worst, 100); // break-even at best, never positive
 });

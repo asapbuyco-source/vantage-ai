@@ -134,3 +134,33 @@ export function ahWorstCase(legA, legB, stakeA, stakeB) {
   }
   return { worstReturn: worst, bestReturn: best };
 }
+
+/**
+ * isQuarterLine — a line is split-stake when its fraction is .25 or .75
+ * (e.g. 2.25, 2.75, 10.25). Integer/half lines settle as a single stake.
+ */
+export function isQuarterLine(line) {
+  const v = Math.abs(parseFloat(line));
+  const rem = v - Math.floor(v);
+  return rem === 0.25 || rem === 0.75;
+}
+
+/**
+ * worstPayoutFor2Way — worst-case combined return (in 100-stake units) for a
+ * complementary 2-way pair (over/under or AH home/away on the SAME line).
+ *
+ * Binary/half lines (0, 0.5, 1, ...): every outcome settles fully →
+ * worst = 100/inv (exact guaranteed payout).
+ *
+ * Quarter lines (0.25, 0.75, ...): the boundary outcome (exactly on the line)
+ * splits stakes — each side gets half refund / half settled. For a complementary
+ * pair the worst case is always 50 + 50/inv (derivation: half the stake on each
+ * leg returns, the other half settles at full odds) → this is the HONEST
+ * guaranteed figure, below the naive 100/inv.
+ *
+ * Returns the worst-case payout for a 100 XAF total stake.
+ */
+export function worstPayoutFor2Way(line, inv) {
+  if (!isQuarterLine(line)) return 100 / inv;
+  return 50 + 50 / inv;
+}
