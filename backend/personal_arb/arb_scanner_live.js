@@ -68,48 +68,40 @@ async function fetchBetfrenzy() {
       const out = [];
       for (const lg of j) for (const ev of lg.events || []) {
         const o = ev.odds || {};
-// betfrenzy duplicates handicap lines (1_2 = main AH, 1_5 = alternate with the SAME line).
-// The alternate (1_5) can carry a stale/wide price that produces fake arbs (e.g. 1_5 -0.25 @ 2.250
-// vs 1_2 -0.25 @ 1.875 on the same fixture). Prefer 1_2 when lines collide; only use 1_5 for
-// handicaps 1_2 doesn't cover.
-const ahSources = [o['1_2'], o['1_5']].filter(Boolean);
-const byHcp = new Map();
-for (const x of ahSources) {
-  const hcp = String(Math.abs(parseFloat(x.handicap)));
-  const existing = byHcp.get(hcp);
-  const isAlt = x === o['1_5'];
-  // Prefer 1_2 (main) over 1_5 (alternate) for the same line
-  if (!existing || (existing === o['1_5'] && !isAlt)) {
-    byHcp.set(hcp, x);
-  }
-}
-        const ah = [...byHcp.values()].map(x => ({ hcp: String(Math.abs(parseFloat(x.handicap))), home: parseFloat(x.home_od), away: parseFloat(x.away_od) }));
+        // ── VERIFIED feed key mapping (checked against the event page on multiple fixtures) ──
+        //   1_1 = 1X2 FT              -> keep
+        //   1_2 = Asian Handicap FT   -> keep (page "Asian Handicap" matched exactly: -0.5 1.98/1.88)
+        //   1_3 = O/U FT main line    -> keep (balanced line 2.75-3.25 @ ~1.9/1.95 — cannot be a half)
+        //   1_4 = Total Corners FT    -> keep ONLY when fresh (feed line lags the page: 8.0 vs 8)
+        //   1_5 = Asian Handicap 1ST HALF -> EXCLUDED (page "Asian Handicap -0.25 (1st Half)" matched
+        //         exactly: 2.02/1.77 — pairing it with another book's FT line is the 1H-vs-FT false arb)
+        //   1_6 = O/U 1ST HALF        -> EXCLUDED (page "(1st Half)" matched exactly: 1.90/1.90)
+        //   1_7 = Corners O/U 1ST HALF-> EXCLUDED (page "4.5 Corners (1st Half)" matched exactly)
+        //   1_8 = NOT Double Chance   -> EXCLUDED (3-way 2.50/2.40/3.75; page DC is 1.28/1.80/1.25)
+        const CORNERS_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+        const isFresh = (x) => x && (Date.now() - Number(x.add_time || 0) * 1000) < CORNERS_MAX_AGE_MS;
+        // 1_2 is the only full-match AH line in the feed
+        const ah = (o['1_2'] && o['1_2'].handicap != null)
+          ? [{ hcp: String(Math.abs(parseFloat(o['1_2'].handicap))), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od) }]
+          : [];
         if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
-          // Period: this endpoint (matchs?EventStatus=PRE) is the pre-match FULL-TIME line by contract —
-          // no period field exists in the feed, and the odds below are the full-match prices.
-          // Documented endpoint contract, not a guess: any half-time market lives on the event page only.
-          period: 'FULL_MATCH', periodSource: 'endpoint_contract: matchs?EventStatus=PRE (pre-match full-time line)',
+          // Period: only the verified full-match keys are used (1_1/1_2/1_3 + fresh 1_4).
+          // 1H keys (1_5/1_6/1_7) and the mislabeled 1_8 are excluded at parse time.
+          period: 'FULL_MATCH', periodSource: 'verified key map: 1_1/1_2/1_3/1_4 (page-matched); 1_5/1_6/1_7 = 1H, 1_8 != DC',
           h: parseFloat(o['1_1'].home_od), d: parseFloat(o['1_1'].draw_od), a: parseFloat(o['1_1'].away_od),
-          dc: o['1_8'] ? { '1x': parseFloat(o['1_8'].home_od), 'x2': parseFloat(o['1_8'].draw_od), '12': parseFloat(o['1_8'].away_od) } : null,
+          dc: null, // no Double Chance in this feed (1_8 is not DC — verified against the page)
           ah: ah,
-          // O/U lines: normalize asian split handicaps ("2.0,2.5" → "2.25") and dedupe by line
+          // O/U: only 1_3 (FT main line); normalize asian split handicaps ("2.5,3.0" → "2.75")
           ou: (() => {
-            const byLine = new Map();
-            for (const x of [o['1_3'], o['1_6'], o['1_7']].filter(Boolean)) {
-              const parts = String(x.handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
-              if (parts.length === 0) continue;
-              const line = parts.reduce((a, b) => a + b, 0) / parts.length; // mid of split
-              if (line > 5.5) continue;
-              const key = line.toFixed(2);
-              const existing = byLine.get(key);
-              if (!existing || Number(x.add_time || 0) > Number(existing.add_time || 0)) {
-                byLine.set(key, { hcp: line.toFixed(2), over: parseFloat(x.over_od), under: parseFloat(x.under_od) });
-              }
-            }
-            return [...byLine.values()];
+            if (!o['1_3']) return [];
+            const parts = String(o['1_3'].handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
+            if (parts.length === 0) return [];
+            const line = parts.reduce((a, b) => a + b, 0) / parts.length; // mid of split
+            if (line > 5.5) return [];
+            return [{ hcp: line.toFixed(2), over: parseFloat(o['1_3'].over_od), under: parseFloat(o['1_3'].under_od) }];
           })(),
           corners: (() => {
-            if (!o['1_4']) return [];
+            if (!o['1_4'] || !isFresh(o['1_4'])) return []; // stale corners lines are excluded
             const parts = String(o['1_4'].handicap).split(',').map(parseFloat).filter(v => !isNaN(v));
             const line = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : NaN;
             return [{ hcp: line.toFixed(2), over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od) }];
