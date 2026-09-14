@@ -212,7 +212,7 @@ async function fetchPmuc() {
   try {
     const proxyUrl = new URL(ARB_PROXY);
     const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
-    const r = await fetch('https://hg-event-api-prod.sporty-tech.net/api/events/sports/popular?take=10&entryPointId=101&betTypeId=10001&l=fr', { headers: {
+    const r = await fetch('https://hg-event-api-prod.sporty-tech.net/api/events/sports/popular?take=50&entryPointId=101&betTypeId=10001&l=fr', { headers: {
       'Proxy-Authorization': auth,
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
       'Origin': 'https://www.pmuc.cm',
