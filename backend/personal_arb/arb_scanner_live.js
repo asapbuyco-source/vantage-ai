@@ -245,9 +245,10 @@ async function fetchSportybet() {
   return [];
 }
 
-async function fetch1xbet() {
-  // 1xbet via raw fetch through the residential proxy (ARB_PROXY) — no browser needed.
-  // Chromium can't auth HTTP proxies reliably, but Node fetch + Proxy-Authorization works.
+// 1xbet-family books share the same platform API (main-line-feed). betwinner.cm and
+// paripesa.cm are the same software family with their OWN brand odds — each brand is a
+// separate arb source. Raw fetch through the residential proxy; direct works too.
+async function fetch1xFamily(book, host) {
   const events = [];
   try {
     const proxyUrl = new URL(ARB_PROXY);
@@ -255,12 +256,12 @@ async function fetch1xbet() {
     const headers = {
       'Proxy-Authorization': auth,
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-      'Referer': 'https://1xbet.cm/en/line',
+      'Referer': `https://${host}/en/line`,
       'Accept': 'application/json',
       'Accept-Encoding': 'identity',
     };
-    const r = await fetch('https://1xbet.cm/service-api/main-line-feed/v3/games1x2?cfView=3&count=40&fcountry=84&gr=654&grMode=4&lng=en&ref=55', { headers });
-    if (!r.ok) { console.log(`[1xbet] HTTP ${r.status}`); return []; }
+    const r = await fetch(`https://${host}/service-api/main-line-feed/v3/games1x2?cfView=3&count=40&fcountry=84&gr=654&grMode=4&lng=en&ref=55`, { headers });
+    if (!r.ok) { console.log(`[${book}] HTTP ${r.status}`); return []; }
     const buf = Buffer.from(await r.arrayBuffer());
     const j = JSON.parse(buf.toString('utf8'));
     const seen = new Set();
@@ -272,12 +273,12 @@ async function fetch1xbet() {
       const g1 = groups[1] || [];
       if (cf(g1, 1) && cf(g1, 3)) {
         parsed++;
-        const evObj = { book: '1xbet', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name, kickoff: ev.startTs ? ev.startTs * 1000 : null,
+        const evObj = { book, home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name, kickoff: ev.startTs ? ev.startTs * 1000 : null,
           // Period: games1x2 is the main (full-time) line by endpoint contract. If the feed ever
           // exposes a periodName (e.g. "1st Half"), it is normalized explicitly — never guessed.
           period: ev.periodName ? normalizePeriod(ev.periodName, { fullMatchContext: true }) : 'FULL_MATCH',
           periodSource: ev.periodName ? `feed periodName="${ev.periodName}"` : 'endpoint_contract: games1x2 (main full-time line)',
-          link: `https://1xbet.cm/en/line/${ev.sport?.name?.toLowerCase()}/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+          link: `https://${host}/en/line/${ev.sport?.name?.toLowerCase()}/${ev.liga?.id}-${ev.liga?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/${ev.id}-${ev.opponent1?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${ev.opponent2?.fullName?.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
           h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
         if (ev.sport?.id === 1) {
           fb++;
@@ -321,12 +322,16 @@ async function fetch1xbet() {
         if (!seen.has(key)) { seen.add(key); events.push(evObj); }
       }
     }
-    console.log(`[1xbet] football ${fb}, other sports ${other}, parsed ${parsed}, unique ${events.length}`);
+    console.log(`[${book}] football ${fb}, other sports ${other}, parsed ${parsed}, unique ${events.length}`);
   } catch (e) {
-    console.log(`[1xbet] fetch fail: ${e.message.slice(0, 90)}`);
+    console.log(`[${book}] fetch fail: ${e.message.slice(0, 90)}`);
   }
   return events;
 }
+
+const fetch1xbet = () => fetch1xFamily('1xbet', '1xbet.cm');
+const fetchBetwinner = () => fetch1xFamily('betwinner', 'betwinner.cm');
+const fetchParipesa = () => fetch1xFamily('paripesa', 'paripesa.cm');
 
 async function fetchPremierbet() {
   // PremierBet via raw fetch through the residential proxy (ARB_PROXY) — no browser/session.
@@ -401,12 +406,12 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
   const file = path.join(SHOT_DIR, `${book}_${Date.now()}.png`);
   let ctx;
   try {
-    // 1xbet runs headed (needs display); others headless
-    const headed = book === '1xbet';
+    // 1xbet-family runs headed (needs display); others headless
+    const headed = ['1xbet', 'betwinner', 'paripesa'].includes(book);
     ctx = await launchBook(book, { headless: !headed, viewport: { width: 1400, height: 1000 } });
     const page = await ctx.newPage();
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(book === '1xbet' ? 16000 : 9000); // let markets render
+    await page.waitForTimeout(['1xbet', 'betwinner', 'paripesa'].includes(book) ? 16000 : 9000); // let markets render
     // Highlight the odds button: find element whose text matches the odds, outline + scroll to it.
     // CRITICAL: skip elements inside half-time / special-period markets — the scanner only ever
     // reports FULL-MATCH arbs, so highlighting a "1st Half" button would be a false visual.
@@ -506,7 +511,8 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
 async function report(c) {
   const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
-  const has1xbet = c.legs.some(l => l.book === '1xbet');
+  // 1xbet-family feeds (1xbet/betwinner/paripesa) lag their live pages — flag them
+  const hasFeedLag = c.legs.some(l => ['1xbet', 'betwinner', 'paripesa'].includes(l.book));
   const tag = periodShort(c.period) ? ` (${periodShort(c.period)})` : '';
   const lines = [];
   lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
@@ -523,14 +529,14 @@ async function report(c) {
   }
   lines.push('─'.repeat(32));
   c.legs.forEach((s, i) => {
-    const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
+    const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betwinner' ? 'BetWinner' : s.book === 'paripesa' ? 'PariPesa' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
     lines.push(`${i + 1}) ON ${cap.toUpperCase()} → bet: ${s.bet}${tag}`);
     lines.push(`    Odds ${s.odds} | Stake ${s.stake} XAF → wins ${s.payout} XAF`);
     if (s.link) lines.push(`    Link: ${s.link}`);
   });
   lines.push('─'.repeat(32));
   lines.push(`Total stake 100 XAF → worst case pays ${c.worst?.toFixed(2) ?? c.legs[0]?.payout} XAF (guaranteed regardless of result)`);
-  if (has1xbet) lines.push('⚠️ 1XBET odds come from their feed, NOT the live page. Confirm the price on 1xbet BEFORE betting — if it moved, the arb is gone.');
+  if (hasFeedLag) lines.push('⚠️ 1XBET-FAMILY odds come from their feed, NOT the live page. Confirm the price on the site BEFORE betting — if it moved, the arb is gone.');
   if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
   const full = lines.join('\n');
   console.log(full);
@@ -549,7 +555,7 @@ const bookDown = new Set();
 const bookDownSince = {};
 async function alertBookFailure(counts) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
-  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, betpawa: 20 };
+  const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, betpawa: 20, betwinner: 10, paripesa: 10 };
   for (const [book, count] of Object.entries(counts)) {
     const min = MIN_EVENTS[book];
     if (min === undefined) continue;
@@ -576,12 +582,14 @@ async function collectCandidates() {
   const pm = await fetchPmuc().catch(() => []);
   const pb = await fetchPremierbet().catch(() => []);
   const xb = await fetch1xbet().catch(() => []);
+  const bw = await fetchBetwinner().catch(() => []);
+  const pp = await fetchParipesa().catch(() => []);
   const sb = await fetchSportybet().catch(() => []);
-console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, sportybet ${sb.length}`);
-  await alertBookFailure({ betfrenzy: bf.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length });
+console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, betwinner ${bw.length}, paripesa ${pp.length}, sportybet ${sb.length}`);
+  await alertBookFailure({ betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
   // Keep all events — kickoff is tagged per candidate so alerts show a countdown
   // (user decides; near-kickoff arbs are valid if placed fast)
-  const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...sb];
+  const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...bw, ...pp, ...sb];
   return findCandidates(all);
 }
 
@@ -589,10 +597,12 @@ console.log(`[Arb] betfrenzy ${bf.length}, pmuc ${pm.length}, premierbet ${pb.le
 async function collectBooksParallel(books) {
   const fns = [];
   if (books.has('betfrenzy')) fns.push(fetchBetfrenzy().catch(() => []));
+  if (books.has('betpawa')) fns.push(fetchBetpawa().catch(() => []));
   if (books.has('pmuc')) fns.push(fetchPmuc().catch(() => []));
   if (books.has('premierbet')) fns.push(fetchPremierbet().catch(() => []));
   if (books.has('1xbet')) fns.push(fetch1xbet().catch(() => []));
-  if (books.has('betpawa')) fns.push(fetchBetpawa().catch(() => []));
+  if (books.has('betwinner')) fns.push(fetchBetwinner().catch(() => []));
+  if (books.has('paripesa')) fns.push(fetchParipesa().catch(() => []));
   if (books.has('sportybet')) fns.push(fetchSportybet().catch(() => []));
   const results = await Promise.all(fns);
   return results.flat();
