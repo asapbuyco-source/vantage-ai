@@ -274,10 +274,15 @@ async function fetch1xFamily(book, host) {
           h: parseFloat(cf(g1, 1)), d: cf(g1, 2) ? parseFloat(cf(g1, 2)) : null, a: parseFloat(cf(g1, 3)) };
         if (ev.sport?.id === 1) {
           fb++;
-          // O/U groups: line comes from the feed's `parameter`, not hardcoded.
-          // (group 15 can be 3.5, group 17 can be 3.5, group 62 can be 0.5 — varies per match!)
+          // O/U groups — MATCH TOTALS ONLY (verified against the site on 4 fixtures):
+          //   group 17 (types 9/10)  = "Total" (European match total, e.g. 2.5)
+          //   group 99 (types 3827/3828) = "Asian Total" (match total, quarter lines, e.g. 2.75)
+          //   group 15 (types 11/12) = "Total 1" (TEAM 1 total)  -> EXCLUDED
+          //   group 62 (types 13/14) = "Total 2" (TEAM 2 total)  -> EXCLUDED
+          // Pairing a team total with another book's match total is a false arb (e.g. team-1
+          // over 1.5 is a different probability than match over 1.5 — they don't hedge).
           const ou = [];
-          for (const [gid, overType, underType] of [[17, 9, 10], [15, 11, 12], [62, 13, 14]]) {
+          for (const [gid, overType, underType] of [[17, 9, 10], [99, 3827, 3828]]) {
             const g = groups[gid] || [];
             const over = cf(g, overType);
             const under = cf(g, underType);
@@ -287,11 +292,13 @@ async function fetch1xFamily(book, host) {
             }
           }
           if (ou.length) evObj.ou = ou;
-          // Handicap markets: group 2 and 2854 are handicap lines whose value comes
-          // from `parameter` (varies per match: 0, ±0.25, ±2.5, ±2.75...).
-          // hcp === 0 is effectively Draw-No-Bet; otherwise it's an Asian Handicap line.
+          // Handicap markets: group 2854 (types 3829/3830) is the full-match Asian Handicap
+          // line; its `parameter` varies per match (0, ±0.25, ±2.5, ±2.75...).
+          // Group 2 (types 7/8) has NO parameter and inconsistent home/away assignment across
+          // events (verified) — it is NOT a safe AH/DNB source and is excluded.
+          // hcp === 0 within group 2854 is effectively Draw-No-Bet; otherwise it's AH.
           const allAH = [];
-          for (const [gid, hType, aType] of [[2, 7, 8], [2854, 3829, 3830]]) {
+          for (const [gid, hType, aType] of [[2854, 3829, 3830]]) {
             const g = groups[gid] || [];
             const hOdds = cf(g, hType), aOdds = cf(g, aType);
             const hcpVal = g.find(x => x[0]?.type === hType)?.[0]?.parameter;
