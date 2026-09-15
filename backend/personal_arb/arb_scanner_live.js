@@ -90,7 +90,7 @@ async function fetchBetfrenzy() {
         const ah = (o['1_2'] && o['1_2'].handicap != null)
           ? [{ hcp: String(Math.abs(parseFloat(o['1_2'].handicap))), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od), scope: 'MATCH' }]
           : [];
-        if (o['1_1']) out.push({ book: 'betfrenzy', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
+        if (o['1_1']) out.push({ book: 'betfrenzy', sport: 'football', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
           // Period: only the verified full-match keys are used (1_1/1_2/1_3 + fresh 1_4).
           // 1H keys (1_5/1_6/1_7) and the mislabeled 1_8 are excluded at parse time.
           period: 'FULL_MATCH', scope: 'MATCH',
@@ -200,7 +200,7 @@ async function fetchBetpawa() {
         if (isNaN(hcp)) return null;
         return { hcp: String(hcp), home: homeP.odds, away: awayP.odds, scope: 'MATCH' };
       }).filter(Boolean);
-      events.push({ book: 'betpawa', home, away, league: ev.competition?.name,
+      events.push({ book: 'betpawa', sport: 'football', home, away, league: ev.competition?.name,
         kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
         link: `https://www.betpawa.cm/events/${ev.id}`,
         // label-verified: all six market types are "... - FT" and whole-match (MATCH scope)
@@ -242,7 +242,7 @@ async function fetchPmuc() {
           const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds,
                 ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds,
                 o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
-          if (o1) events.push({ book: 'pmuc', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2,
+          if (o1) events.push({ book: 'pmuc', sport: 'football', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2,
             // 'Résultat du match' = full-match 1X2 by contract (whole match)
             period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'endpoint_contract: Résultat du match (full match)' });
         }
@@ -288,7 +288,7 @@ async function fetch1xFamily(book, host) {
       const g1 = groups[1] || [];
       if (cf(g1, 1) && cf(g1, 3)) {
         parsed++;
-        const evObj = { book, home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name, kickoff: ev.startTs ? ev.startTs * 1000 : null,
+        const evObj = { book, sport: ev.sport?.name || 'other', home: ev.opponent1?.fullName, away: ev.opponent2?.fullName, league: ev.liga?.name, kickoff: ev.startTs ? ev.startTs * 1000 : null,
           // Period: games1x2 is the main (full-time) line by endpoint contract. If the feed ever
           // exposes a periodName (e.g. "1st Half"), it is normalized explicitly — never guessed.
           period: ev.periodName ? normalizePeriod(ev.periodName, { fullMatchContext: true }) : 'FULL_MATCH',
@@ -401,7 +401,7 @@ try {
         };
         const o12 = (ev.markets || []).find(m => m.name === '1X2');
         const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
-        const evObj = { book: 'premierbet', home, away, league: `${sportName}:${comp.name}`, kickoff: ev.startTime,
+        const evObj = { book: 'premierbet', sport: sportName, home, away, league: `${sportName}:${comp.name}`, kickoff: ev.startTime,
           // upcoming events endpoint = full-match whole-match markets, label-verified
           period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'runtime label verifier (no half/team markers)',
           link: `https://www.premierbet.com/cm/event/${ev.id}` };
@@ -773,9 +773,11 @@ function findCandidates(all) {
   const invDisplay = (worst) => 2 - worst / 100;
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
-  // different competitions (Champions League vs Youth League) never merge
+  // different competitions (Champions League vs Youth League) never merge.
+  // sport is part of the identity so team names can never collide across sports
+  // (e.g. baseball vs basketball clubs with the same name).
   const g = new Map();
-  for (const ev of all) { if (ev.h) { const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || 'MATCH'}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  for (const ev of all) { if (ev.h) { const k = `${(ev.sport || 'football').toLowerCase()}|${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || 'MATCH'}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
     const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
