@@ -435,34 +435,100 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
-// WhatsApp via CallMeBot (personal notification relay — no business account needed).
-// One-time setup (done by you, from your own WhatsApp):
-//   1) Save +34 644 51 95 23 as a contact
-//   2) Send it: "I allow callmebot to send me messages"
-//   3) You receive an API key in reply
-//   4) Set CALLMEBOT_PHONE=+237XXXXXXXXX (your WhatsApp number, with country code)
-//      and CALLMEBOT_APIKEY=<the key> in .env.local (and in Railway env for the server)
-// Without both env vars this is a no-op, so it is safe to deploy before setup.
-const WHATSAPP_MAX_CHARS = 1000; // CallMeBot rejects/truncates longer payloads
+// ── WhatsApp Cloud API (Meta official) ──
+// Env vars (Railway + .env.local):
+//   WHATSAPP_TOKEN            access token — temporary (24h, for tests) or permanent system-user token
+//   WHATSAPP_PHONE_NUMBER_ID  from Meta app → WhatsApp → API Setup (numeric ID, not the phone number)
+//   WHATSAPP_TO               your WhatsApp number, digits only with country code (e.g. 2376XXXXXXXX)
+//   WHATSAPP_TEMPLATE         optional approved Utility template name — REQUIRED for alerts sent
+//                             outside the 24h customer-service window (business-initiated)
+//   WHATSAPP_TEMPLATE_LANG    template language code (default en_US)
+// Free-form text only delivers within 24h of your last message to the business number; outside
+// that window the API returns error 131047 and we fall back to the approved template.
+const WA_GRAPH = 'https://graph.facebook.com/v21.0';
 async function sendWhatsApp(text) {
-  const phone = process.env.CALLMEBOT_PHONE, apikey = process.env.CALLMEBOT_APIKEY;
-  if (!phone || !apikey) return;
+  const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
+  if (!token || !phoneId || !to) return 'skipped';
   try {
-    let body = String(text);
-    if (body.length > WHATSAPP_MAX_CHARS - 10) body = body.slice(0, WHATSAPP_MAX_CHARS - 10) + '…';
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(body)}&apikey=${encodeURIComponent(apikey)}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    const t = (await r.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 140);
-    if (!r.ok || /error|invalid|not allowed|limit/i.test(t)) console.log(`[WhatsApp] ${r.status}: ${t}`);
-    else console.log('[WhatsApp] sent');
+    const r = await fetch(`${WA_GRAPH}/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: String(text).slice(0, 4000), preview_url: false } }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { console.log('[WhatsApp] sent'); return 'sent'; }
+    const code = j?.error?.code;
+    const sub = j?.error?.error_subcode;
+    if (code === 131047 || sub === 131047) { console.log('[WhatsApp] 24h window closed — needs template'); return 'window_closed'; }
+    console.log(`[WhatsApp] HTTP ${r.status}: ${JSON.stringify(j?.error || j).slice(0, 180)}`);
+    return 'error';
   } catch (e) {
     console.log(`[WhatsApp] fail: ${e.message.slice(0, 80)}`);
+    return 'error';
   }
 }
 
+// Utility template for business-initiated alerts (outside the 24h window).
+// Create this template in Meta's dashboard (WhatsApp Manager → Message templates):
+//   Category: Utility | Name: arb_alert | Language: English (US)
+//   Body:
+//     🎯 ARBITRAGE ALERT
+//     {{1}}
+//     Market: {{2}}
+//     Guaranteed ROI: {{3}}
+//     {{4}}
+//     {{5}}
+//     Worst case: {{6}} XAF per 100 staked
+//     Links: {{7}}
+//     Verify prices on both sites before betting.
+async function sendWhatsAppTemplate(params) {
+  const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
+  const name = process.env.WHATSAPP_TEMPLATE;
+  if (!token || !phoneId || !to || !name) return false;
+  const lang = process.env.WHATSAPP_TEMPLATE_LANG || 'en_US';
+  // template parameters cannot contain newlines/tabs or long runs of spaces
+  const clean = (s) => String(s).replace(/[\n\t]+/g, ' ').replace(/\s{3,}/g, '  ').slice(0, 300);
+  try {
+    const r = await fetch(`${WA_GRAPH}/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp', to, type: 'template',
+        template: { name, language: { code: lang }, components: [{ type: 'body', parameters: params.map(p => ({ type: 'text', text: clean(p) })) }] },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.log(`[WhatsApp] template HTTP ${r.status}: ${JSON.stringify(j?.error || j).slice(0, 180)}`); return false; }
+    console.log('[WhatsApp] template sent');
+    return true;
+  } catch (e) {
+    console.log(`[WhatsApp] template fail: ${e.message.slice(0, 80)}`);
+    return false;
+  }
+}
+
+function buildArbTemplateParams(c) {
+  const legs = c.legs;
+  const links = legs.map(l => l.link).filter(Boolean).join(' | ');
+  const scopeStr = c.scope && c.scope !== 'MATCH' ? ` · ${scopeLabel(c.scope)}` : '';
+  return [
+    `${c.teams[0]} vs ${c.teams[1]}`,
+    `${c.kind} · ${periodLabel(c.period || 'UNKNOWN')}${scopeStr}`,
+    `${c.pct.toFixed(2)}%`,
+    `${legs[0]?.book?.toUpperCase()}: ${legs[0]?.bet} @ ${legs[0]?.odds} — stake ${legs[0]?.stake} XAF`,
+    `${legs[1]?.book?.toUpperCase()}: ${legs[1]?.bet} @ ${legs[1]?.odds} — stake ${legs[1]?.stake} XAF`,
+    `${(c.worst ?? 0).toFixed(2)}`,
+    links,
+  ];
+}
+
 // Send to every configured channel (Telegram + WhatsApp). Missing config = skipped.
+// Returns the WhatsApp delivery state so callers can fall back to a template when needed.
 async function notify(text) {
-  await Promise.allSettled([sendTelegram(text), sendWhatsApp(text)]);
+  const [, wa] = await Promise.allSettled([sendTelegram(text), sendWhatsApp(text)]);
+  return wa.status === 'fulfilled' ? wa.value : 'error';
 }
 
 // Screenshot a book's match page and send it to Telegram — so you SEE the exact bet
@@ -609,7 +675,9 @@ async function report(c) {
   if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
   const full = lines.join('\n');
   console.log(full);
-  await notify(full);
+  const waState = await notify(full);
+  // Outside the 24h WhatsApp service window free-form fails — fall back to the approved template
+  if (waState === 'window_closed' && process.env.WHATSAPP_TEMPLATE) await sendWhatsAppTemplate(buildArbTemplateParams(c));
   // Screenshot each book's match page — only for Asian Handicap (the trickiest to identify:
   // handicap sign ± matters). Auto-click the odds button so the bet slip shows the selection.
   if (c.kind.startsWith('Asian Handicap')) {
