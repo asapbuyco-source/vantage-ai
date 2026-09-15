@@ -41,7 +41,13 @@ const MAX_PLAUSIBLE_ARB = 15;
 const args = process.argv.slice(2);
 const warm = args.includes('--warm');
 const once = args.includes('--once');
+const diag = args.includes('--diag');
 const loopMin = parseInt(args.find(a => a.startsWith('--loop='))?.split('=')[1] || '3', 10);
+
+// Diagnostic collection for --diag: near-miss arbs (naive inv < 1.01) with their
+// honest worst-case ROI, so we can see how much real margin is out there even when
+// it doesn't clear the report floor.
+let diagRows = [];
 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/fc$|cf$|sc$|ac$/g, '');
 // Canonical league token — strips generic words so books that name the same
@@ -797,6 +803,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`OU|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
+    if (diag && inv < 1.02) { const hcpd = grp.matches[0].hcp; const worstD = worstPayoutFor2Way(hcpd, inv); diagRows.push({ m: 'OU', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpd, scope: pair.scope, naive: (1 - inv) * 100, worst: (worstD / 100 - 1) * 100, overFloor: worstD / 100 - 1 > MIN_GUARANTEED_ROI, legs: `${over.book} ${over.odds} | ${under.book} ${under.odds}` }); }
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
        { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
@@ -852,6 +859,15 @@ for (const [k, grp] of g) {
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`AH|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
     const inv = 1/bHome.odds + 1/bAway.odds;
+    // diag captures near-misses too (inv < 1.02) — stakes computed manually so it works above inv=1
+    if (diag && inv < 1.02) {
+      const hcpx = parseFloat(grp.matches[0].hcp);
+      const sA = 100 * (1 / bHome.odds) / inv, sB = 100 * (1 / bAway.odds) / inv;
+      const wcx = ahWorstCase({ handicap: -hcpx, odds: bHome.odds }, { handicap: +hcpx, odds: bAway.odds }, sA, sB);
+      diagRows.push({ m: 'AH', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpx, scope: pair.scope,
+        naive: (1 - inv) * 100, worst: (wcx.worstReturn / 100 - 1) * 100, overFloor: wcx.worstReturn / 100 - 1 > MIN_GUARANTEED_ROI,
+        legs: `${bHome.book} ${bHome.odds} | ${bAway.book} ${bAway.odds}` });
+    }
     if (inv >= 1) continue; // naive pre-filter
     const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]);
     const hcp = parseFloat(grp.matches[0].hcp); // positive magnitude
@@ -982,6 +998,19 @@ if (warm) {
   console.log('[Warm] done. Run without --warm now.');
 } else if (once) {
   await scan();
+} else if (diag) {
+  // One-off diagnostics: fetch everything and show the near-miss arbs with their
+  // honest worst-case ROI — answers "how much real margin is out there right now?"
+  console.log('[Diag] fetching all books...');
+  await collectCandidates();
+  const rows = diagRows.sort((a, b) => b.naive - a.naive);
+  console.log(`\n[Diag] ${rows.length} naive arbs found (incl. below-floor). Top by naive margin:\n`);
+  console.log('MARKET  TEAMS                LINE   SCOPE   NAIVE%   WORST%   FLOOR?   LEGS');
+  for (const r of rows.slice(0, 25)) {
+    console.log(`${r.m.padEnd(6)} ${r.teams.padEnd(20)} ${String(r.line).padEnd(5)} ${String(r.scope || '').padEnd(6)} ${r.naive.toFixed(2).padStart(6)}%  ${r.worst.toFixed(2).padStart(6)}%  ${r.overFloor ? 'YES' : 'no '}  ${r.legs}`);
+  }
+  const over = rows.filter(r => r.overFloor);
+  console.log(`\n[Diag] would-report above floor: ${over.length}/${rows.length} | best worst-case: ${over.length ? over.sort((a,b) => b.worst - a.worst)[0].worst.toFixed(2) + '%' : 'n/a'}`);
 } else {
   console.log(`[Arb] Loop mode: scanning every ${loopMin} min. Ctrl+C to stop.`);
   for (;;) { await scan(); await new Promise(r => setTimeout(r, loopMin * 60000)); }
