@@ -435,6 +435,36 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
+// WhatsApp via CallMeBot (personal notification relay — no business account needed).
+// One-time setup (done by you, from your own WhatsApp):
+//   1) Save +34 644 51 95 23 as a contact
+//   2) Send it: "I allow callmebot to send me messages"
+//   3) You receive an API key in reply
+//   4) Set CALLMEBOT_PHONE=+237XXXXXXXXX (your WhatsApp number, with country code)
+//      and CALLMEBOT_APIKEY=<the key> in .env.local (and in Railway env for the server)
+// Without both env vars this is a no-op, so it is safe to deploy before setup.
+const WHATSAPP_MAX_CHARS = 1000; // CallMeBot rejects/truncates longer payloads
+async function sendWhatsApp(text) {
+  const phone = process.env.CALLMEBOT_PHONE, apikey = process.env.CALLMEBOT_APIKEY;
+  if (!phone || !apikey) return;
+  try {
+    let body = String(text);
+    if (body.length > WHATSAPP_MAX_CHARS - 10) body = body.slice(0, WHATSAPP_MAX_CHARS - 10) + '…';
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&text=${encodeURIComponent(body)}&apikey=${encodeURIComponent(apikey)}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    const t = (await r.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 140);
+    if (!r.ok || /error|invalid|not allowed|limit/i.test(t)) console.log(`[WhatsApp] ${r.status}: ${t}`);
+    else console.log('[WhatsApp] sent');
+  } catch (e) {
+    console.log(`[WhatsApp] fail: ${e.message.slice(0, 80)}`);
+  }
+}
+
+// Send to every configured channel (Telegram + WhatsApp). Missing config = skipped.
+async function notify(text) {
+  await Promise.allSettled([sendTelegram(text), sendWhatsApp(text)]);
+}
+
 // Screenshot a book's match page and send it to Telegram — so you SEE the exact bet
 async function sendBookScreenshot(book, link, caption, oddsValue) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
@@ -579,7 +609,7 @@ async function report(c) {
   if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
   const full = lines.join('\n');
   console.log(full);
-  await sendTelegram(full);
+  await notify(full);
   // Screenshot each book's match page — only for Asian Handicap (the trickiest to identify:
   // handicap sign ± matters). Auto-click the odds button so the bet slip shows the selection.
   if (c.kind.startsWith('Asian Handicap')) {
@@ -593,7 +623,6 @@ async function report(c) {
 const bookDown = new Set();
 const bookDownSince = {};
 async function alertBookFailure(counts) {
-  const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
   const MIN_EVENTS = { betfrenzy: 100, pmuc: 3, premierbet: 3, '1xbet': 10, betpawa: 20, betwinner: 10, paripesa: 10 };
   for (const [book, count] of Object.entries(counts)) {
     const min = MIN_EVENTS[book];
@@ -604,12 +633,12 @@ async function alertBookFailure(counts) {
       bookDownSince[book] = new Date().toISOString().slice(11, 19);
       const msg = `⚠️ ${book.toUpperCase()} is DOWN (${count} events) since ${bookDownSince[book]} UTC — check session/proxy. Recovery will be notified.`;
       console.log('[Alert]', msg);
-      if (token && chat) await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text: msg }) });
+      await notify(msg);
     } else if (!isDown && bookDown.has(book)) {
       bookDown.delete(book);
       const msg = `✅ ${book.toUpperCase()} is BACK (${count} events)`;
       console.log('[Alert]', msg);
-      if (token && chat) await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text: msg }) });
+      await notify(msg);
     }
   }
 }
