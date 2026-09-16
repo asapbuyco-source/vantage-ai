@@ -9,7 +9,7 @@
  * Telegram alert on arb if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID set
  */
 import { calcArb } from './arb_calc.js';
-import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel } from './arb_engine.mjs';
+import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, asianSplitDisplay } from './arb_engine.mjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -819,9 +819,9 @@ for (const [k, grp] of g) {
     if (!pair.ok) { rejectLog(`OU|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
     if (diag && inv < 1.02) { const hcpd = grp.matches[0].hcp; const worstD = worstPayoutFor2Way(hcpd, inv); diagRows.push({ m: 'OU', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpd, scope: pair.scope, naive: (1 - inv) * 100, worst: (worstD / 100 - 1) * 100, overFloor: worstD / 100 - 1 > MIN_GUARANTEED_ROI, legs: `${over.book} ${over.odds} | ${under.book} ${under.odds}` }); }
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); cand(`OU|${k}`, `Over/Under ${hcp} Goals`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: over.book, bet: `Over ${hcp} goals`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} goals`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`OU|${k}`, `Over/Under ${hcp} Goals${asian}`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: over.book, bet: `Over ${hcp} goals${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
+       { book: under.book, bet: `Under ${hcp} goals${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
@@ -835,9 +835,9 @@ for (const [k, grp] of g) {
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`CR|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); cand(`CR|${k}`, `Corners Over/Under ${hcp}`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: over.book, bet: `Over ${hcp} corners`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} corners`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`CR|${k}`, `Corners Over/Under ${hcp}${asian}`, [k.split('|')[0], k.split('|')[1]],
+      [{ book: over.book, bet: `Over ${hcp} corners${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
+       { book: under.book, bet: `Under ${hcp} corners${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──

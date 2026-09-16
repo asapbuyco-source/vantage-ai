@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   PERIOD, periodLabel, periodShort, normalizePeriod,
   pairEligible, splitAsianLine, settleAsianHandicap, ahWorstCase,
-  isQuarterLine, worstPayoutFor2Way,
+  isQuarterLine, worstPayoutFor2Way, asianSplitDisplay,
   SCOPE, scopeLabel, normalizeScope,
   ahSignedPair, ahLegLabel,
 } from '../arb_engine.mjs';
@@ -331,4 +331,11 @@ test('worstPayoutFor2Way: quarter line with inv >= 1 is never profitable', () =>
   const inv = 1 / 2.0 + 1 / 2.0; // exactly 1 → no arb
   const worst = worstPayoutFor2Way('2.25', inv);
   assert.equal(worst, 100); // break-even at best, never positive
+});
+
+test('asianSplitDisplay: quarter lines shown as the split the books display', () => {
+  assert.equal(asianSplitDisplay('2.75'), '2.5,3.0');
+  assert.equal(asianSplitDisplay('2.25'), '2.0,2.5');
+  assert.equal(asianSplitDisplay('1.75'), '1.5,2.0');
+  assert.equal(asianSplitDisplay('10.25'), '10.0,10.5');
 });

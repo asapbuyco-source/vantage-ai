@@ -212,6 +212,18 @@ export function isQuarterLine(line) {
 }
 
 /**
+ * asianSplitDisplay — how a quarter (asian) line appears on bookmaker pages:
+ * 2.75 -> "2.5,3.0", 2.25 -> "2.0,2.5", 1.75 -> "1.5,2.0".
+ * Helps the user find the right row (books display the split, not "2.75").
+ */
+export function asianSplitDisplay(line) {
+  const v = Math.abs(parseFloat(line));
+  const lower = v - 0.25;
+  const upper = v + 0.25;
+  return `${lower.toFixed(1)},${upper.toFixed(1)}`;
+}
+
+/**
  * ahSignedPair — signed handicaps for the settlement simulator, canonical home-first.
  * dir 'G' = home GIVES the handicap (market: home -mag / away +mag).
  * dir 'R' = home RECEIVES the handicap (market: home +mag / away -mag).
