@@ -222,7 +222,7 @@ async function fetchBetpawa() {
       }).filter(Boolean);
       events.push({ book: 'betpawa', sport: 'football', home, away, league: ev.competition?.name,
         kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
-        link: `https://www.betpawa.cm/events/${ev.id}`,
+        link: `https://www.betpawa.cm/event/${ev.id}`,
         // label-verified: all six market types are "... - FT" and whole-match (MATCH scope)
         period: 'FULL_MATCH', scope: 'MATCH',
         periodSource: 'runtime label verifier: marketType.name ends "- FT", scope MATCH',
@@ -727,8 +727,12 @@ async function report(c) {
   // the highlighted odds button (asian-line rows are the hardest to find). Auto-click
   // the odds button so the bet slip shows the selection. Screenshot is best-effort:
   // failures are logged, never block the alert.
+  // 1xbet-family books (1xbet/betwinner/paripesa) refuse the direct screenshot browser
+  // on the server (their WAF blocks the Railway IP) — skipped; their links in the
+  // alert still open the right page for manual checks.
+  const SCREENSHOT_SKIP = new Set(['1xbet', 'betwinner', 'paripesa']);
   for (const s of c.legs) {
-    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
+    if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
   }
 }
 
