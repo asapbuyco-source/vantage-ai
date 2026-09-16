@@ -28,10 +28,21 @@ const MIN_GUARANTEED_ROI = 0.003; // 0.3% worst-case after split-stake settlemen
 // Applies to all browser sessions so bookmaker bot checks see a residential IP.
 const ARB_PROXY = process.env.ARB_PROXY || '';
 
-// Wrapper that injects the proxy into every Playwright launch
+// Wrapper that injects the proxy into every Playwright launch.
+// Screenshot browsers connect DIRECTLY by default: Chromium cannot reliably use the
+// authenticated HTTP proxy (times out), while direct works for betfrenzy/betpawa and
+// most networks. Set SCREENSHOT_PROXY=1 to force the proxy when the direct network is
+// blocked for a book (e.g. running the scanner from a blocked ISP).
 async function launchBook(profileName, opts = {}) {
   const launchOpts = { ...opts };
-  if (ARB_PROXY) launchOpts.proxy = { server: ARB_PROXY };
+  if (ARB_PROXY && process.env.SCREENSHOT_PROXY === '1') {
+    const u = new URL(ARB_PROXY);
+    launchOpts.proxy = {
+      server: `${u.protocol}//${u.host}`,
+      username: decodeURIComponent(u.username),
+      password: decodeURIComponent(u.password),
+    };
+  }
   return chromium.launchPersistentContext(prof(profileName), launchOpts);
 }
 const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
@@ -571,6 +582,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
     if (oddsValue) {
       const found = await page.evaluate((odds) => {
         const target = String(odds);
+        const want = parseFloat(target);
         // An element belongs to a half-time/special market if a nearby market-title ancestor
         // mentions a period (1st/2nd half, 1H/2H, minutes). Scanner arbs are always FULL MATCH.
         const isHalfPeriod = (el) => {
@@ -582,6 +594,15 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
           }
           return false;
         };
+        // Books ROUND displayed odds (feed 2.025 shows as "2.02"), so match numerically
+        // within a small tolerance instead of string equality.
+        const matchOdds = (el) => {
+          const t = (el.textContent || '').trim();
+          if (!t || t.length > 8) return false;
+          const v = parseFloat(t.replace(',', '.'));
+          if (isNaN(v)) return false;
+          return Math.abs(v - want) < 0.015;
+        };
         const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
         let hit = null;
         for (const el of els) {
@@ -589,10 +610,8 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
           if (t === target && !isHalfPeriod(el)) { hit = el; break; }
         }
         if (!hit) {
-          // fuzzy: element whose text STARTS with the odds (book adds suffixes)
           for (const el of els) {
-            const t = (el.textContent || '').trim();
-            if (t.startsWith(target) && t.length <= target.length + 6 && !isHalfPeriod(el)) { hit = el; break; }
+            if (matchOdds(el) && !isHalfPeriod(el)) { hit = el; break; }
           }
         }
         if (!hit) return { ok: false };
@@ -609,6 +628,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
         try {
           const clicked = await page.evaluate((odds) => {
             const target = String(odds);
+            const want = parseFloat(target);
             const isHalfPeriod = (el) => {
               let n = el, depth = 0;
               while (n && depth < 7) {
@@ -618,6 +638,13 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
               }
               return false;
             };
+            const matchOdds = (el) => {
+              const t = (el.textContent || '').trim();
+              if (!t || t.length > 8) return false;
+              const v = parseFloat(t.replace(',', '.'));
+              if (isNaN(v)) return false;
+              return Math.abs(v - want) < 0.015;
+            };
             const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
             let hit = null;
             for (const el of els) {
@@ -625,8 +652,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
               if (t === target && !isHalfPeriod(el)) { hit = el; break; }
             }
             if (!hit) for (const el of els) {
-              const t = (el.textContent || '').trim();
-              if (t.startsWith(target) && t.length <= target.length + 6 && !isHalfPeriod(el)) { hit = el; break; }
+              if (matchOdds(el) && !isHalfPeriod(el)) { hit = el; break; }
             }
             if (!hit) return false;
             // click the odds element, or its closest clickable ancestor
@@ -697,12 +723,12 @@ async function report(c) {
   const waState = await notify(full);
   // Outside the 24h WhatsApp service window free-form fails — fall back to the approved template
   if (waState === 'window_closed' && process.env.WHATSAPP_TEMPLATE) await sendWhatsAppTemplate(buildArbTemplateParams(c));
-  // Screenshot each book's match page — only for Asian Handicap (the trickiest to identify:
-  // handicap sign ± matters). Auto-click the odds button so the bet slip shows the selection.
-  if (c.kind.startsWith('Asian Handicap')) {
-    for (const s of c.legs) {
-      if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
-    }
+  // Screenshot each book's match page for EVERY arb — so you SEE the exact bet and
+  // the highlighted odds button (asian-line rows are the hardest to find). Auto-click
+  // the odds button so the bet slip shows the selection. Screenshot is best-effort:
+  // failures are logged, never block the alert.
+  for (const s of c.legs) {
+    if (s.link) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
   }
 }
 
