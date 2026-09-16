@@ -212,6 +212,33 @@ export function isQuarterLine(line) {
 }
 
 /**
+ * ahSignedPair — signed handicaps for the settlement simulator, canonical home-first.
+ * dir 'G' = home GIVES the handicap (market: home -mag / away +mag).
+ * dir 'R' = home RECEIVES the handicap (market: home +mag / away -mag).
+ * These are the ONLY two valid complementary AH structures; pairing across
+ * directions is NEVER an arb (worst case: both legs lose together on the draw).
+ */
+export function ahSignedPair(hcp, dir) {
+  const mag = Math.abs(parseFloat(hcp));
+  return dir === 'R' ? [mag, -mag] : [-mag, mag];
+}
+
+/**
+ * ahLegLabel — the ACTUAL button text for a leg on its book, respecting the book's
+ * line direction. dir 'G': home leg = "Home -mag", away leg = "Away +mag".
+ * dir 'R': home leg = "Home +mag", away leg = "Away -mag".
+ * This is the label the user must find on the bookmaker page — never inverted.
+ */
+export function ahLegLabel(home, away, hcp, dir, side) {
+  const mag = Math.abs(parseFloat(hcp));
+  // dir 'G' (home gives): home button = "Home -mag", away button = "Away +mag"
+  // dir 'R' (home receives): home button = "Home +mag", away button = "Away -mag"
+  const sign = (dir === 'R') === (side === 'away') ? '-' : '+';
+  const team = side === 'home' ? home : away;
+  return `${team} ${sign}${mag}`;
+}
+
+/**
  * worstPayoutFor2Way — worst-case combined return (in 100-stake units) for a
  * complementary 2-way pair (over/under or AH home/away on the SAME line).
  *

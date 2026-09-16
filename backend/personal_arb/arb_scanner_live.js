@@ -9,7 +9,7 @@
  * Telegram alert on arb if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID set
  */
 import { calcArb } from './arb_calc.js';
-import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way } from './arb_engine.mjs';
+import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel } from './arb_engine.mjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -86,9 +86,17 @@ async function fetchBetfrenzy() {
         //   1_8 = NOT Double Chance   -> EXCLUDED (3-way 2.50/2.40/3.75; page DC is 1.28/1.80/1.25)
         const CORNERS_MAX_AGE_MS = 3 * 60 * 60 * 1000;
         const isFresh = (x) => x && (Date.now() - Number(x.add_time || 0) * 1000) < CORNERS_MAX_AGE_MS;
-        // 1_2 is the only full-match AH line in the feed
+        // 1_2 is the only full-match AH line in the feed.
+        // CRITICAL: the handicap is SIGNED from the HOME team's perspective
+        // (e.g. "0.25" = home +0.25 = home RECEIVES, away -0.25). Stripping the sign
+        // would invert the legs (the Anderlecht-Lyon false arb). dir preserves it:
+        // 'G' = home gives (home -hcp / away +hcp), 'R' = home receives.
         const ah = (o['1_2'] && o['1_2'].handicap != null)
-          ? [{ hcp: String(Math.abs(parseFloat(o['1_2'].handicap))), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od), scope: 'MATCH' }]
+          ? (() => {
+              const h = parseFloat(o['1_2'].handicap);
+              return [{ hcp: String(Math.abs(h)), home: parseFloat(o['1_2'].home_od), away: parseFloat(o['1_2'].away_od),
+                dir: h < 0 ? 'G' : 'R', scope: 'MATCH' }];
+            })()
           : [];
         if (o['1_1']) out.push({ book: 'betfrenzy', sport: 'football', home: ev.home?.name, away: ev.away?.name, league: ev.league?.name, kickoff: ev.time ? ev.time * 1000 : null, link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
           // Period: only the verified full-match keys are used (1_1/1_2/1_3 + fresh 1_4).
@@ -194,11 +202,12 @@ async function fetchBetpawa() {
         const homeP = row.prices?.find(p => p.name === '1');
         const awayP = row.prices?.find(p => p.name === '2');
         if (!homeP || !awayP || homeP.handicap == null) return null;
-        // keep only home-negative rows (home -hcp / away +hcp)
-        if (!String(homeP.handicap).startsWith('-')) return null;
-        const hcp = Math.abs(parseFloat(homeP.handicap));
-        if (isNaN(hcp)) return null;
-        return { hcp: String(hcp), home: homeP.odds, away: awayP.odds, scope: 'MATCH' };
+        const h = parseFloat(homeP.handicap);
+        if (isNaN(h)) return null;
+        const mag = Math.abs(h);
+        if (mag > 5) return null; // sanity
+        // dir preserves whether the home team gives (-) or receives (+) the line
+        return { hcp: String(mag), home: homeP.odds, away: awayP.odds, dir: h < 0 ? 'G' : 'R', scope: 'MATCH' };
       }).filter(Boolean);
       events.push({ book: 'betpawa', sport: 'football', home, away, league: ev.competition?.name,
         kickoff: ev.startTime ? new Date(ev.startTime).getTime() : null,
@@ -332,11 +341,15 @@ async function fetch1xFamily(book, host) {
               allAH.push({ hcp: String(hcpVal), home: parseFloat(hOdds), away: parseFloat(aOdds) });
             }
           }
-          // Split into DNB (hcp 0) and AH (any other line) — all MATCH scope
+          // Split into DNB (hcp 0) and AH (any other line) — all MATCH scope.
+          // AH direction: the home leg's parameter is SIGNED from home's perspective
+          // (type 3829 param can be -0.25 = home gives, or +0.25 = home receives).
+          // dir preserves it — cross-direction AH pairing is never an arb.
           const dnbs = allAH.filter(x => parseFloat(x.hcp) === 0);
           const ahs = allAH.filter(x => parseFloat(x.hcp) !== 0);
           if (dnbs.length) evObj.dnb = { home: dnbs[0].home, away: dnbs[0].away, hcp: dnbs[0].hcp, scope: 'MATCH' };
-          if (ahs.length) evObj.ah = ahs.map(x => ({ hcp: String(Math.abs(parseFloat(x.hcp))), home: x.home, away: x.away, scope: 'MATCH' }));
+          if (ahs.length) evObj.ah = ahs.map(x => ({ hcp: String(Math.abs(parseFloat(x.hcp))), home: x.home, away: x.away,
+            dir: parseFloat(x.hcp) < 0 ? 'G' : 'R', scope: 'MATCH' }));
           // Double Chance — group 8 (types 4/5/6 = 1X/12/X2, verified by 1X2-implied probability
           // math on 4 fixtures within book margin). MATCH scope, FT.
           const g8 = groups[8] || [];
@@ -852,11 +865,11 @@ for (const [k, grp] of g) {
 // (see ahWorstCase in arb_engine.mjs): we enumerate every settlement breakpoint and require
 // the WORST-CASE combined return to exceed the total stake by at least MIN_GUARANTEED_ROI.
   const ah = new Map();
-  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${o.dir || 'G'}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, dir: o.dir || 'G', kickoff: ev.kickoff }); } }
   for (const [k, grp] of ah) {
     if (grp.matches.length < 2) continue;
-    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
-    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period, scope: m.scope, dir: m.dir } : b, { book: '', odds: 0 });
+    const bAway = grp.matches.reduce((b, m) => m.away > b.odds ? { book: m.book, odds: m.away, link: m.link, period: m.period, scope: m.scope, dir: m.dir } : b, { book: '', odds: 0 });
     if (!bHome.book || bHome.book === bAway.book) continue;
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`AH|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
@@ -865,26 +878,35 @@ for (const [k, grp] of g) {
     if (diag && inv < 1.02) {
       const hcpx = parseFloat(grp.matches[0].hcp);
       const sA = 100 * (1 / bHome.odds) / inv, sB = 100 * (1 / bAway.odds) / inv;
-      const wcx = ahWorstCase({ handicap: -hcpx, odds: bHome.odds }, { handicap: +hcpx, odds: bAway.odds }, sA, sB);
-      diagRows.push({ m: 'AH', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpx, scope: pair.scope,
+      const signed = ahSignedPair(hcpx, grp.matches[0].dir);
+      const wcx = ahWorstCase({ handicap: signed[0], odds: bHome.odds }, { handicap: signed[1], odds: bAway.odds }, sA, sB);
+      diagRows.push({ m: 'AH', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpx, scope: pair.scope, dir: grp.matches[0].dir,
         naive: (1 - inv) * 100, worst: (wcx.worstReturn / 100 - 1) * 100, overFloor: wcx.worstReturn / 100 - 1 > MIN_GUARANTEED_ROI,
         legs: `${bHome.book} ${bHome.odds} | ${bAway.book} ${bAway.odds}` });
     }
     if (inv >= 1) continue; // naive pre-filter
     const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]);
     const hcp = parseFloat(grp.matches[0].hcp); // positive magnitude
-    // Outcome-based validation: worst-case return across every settlement scenario
+    const dir = grp.matches[0].dir; // 'G' (home gives) or 'R' (home receives) — same for all matches in the group
+    // Outcome-based validation: worst-case return across every settlement scenario,
+    // using the ACTUAL signed handicaps for this direction.
+    const signed = ahSignedPair(hcp, dir);
     const wc = ahWorstCase(
-      { handicap: -hcp, odds: bHome.odds }, { handicap: +hcp, odds: bAway.odds },
+      { handicap: signed[0], odds: bHome.odds }, { handicap: signed[1], odds: bAway.odds },
       parseFloat(r.stakes[0].stake), parseFloat(r.stakes[1].stake));
     const worstRoi = wc.worstReturn / 100 - 1;
     if (worstRoi <= MIN_GUARANTEED_ROI) {
       rejectLog(`AH|${k}`, bHome, bAway, 'AH_WORST_CASE_BELOW_FLOOR', `naive ${(1 - inv).toFixed(4)} worst ${worstRoi.toFixed(4)} floor ${MIN_GUARANTEED_ROI}`);
       continue;
     }
-    cand(`AH|${k}`, `Asian Handicap ${hcp}`, [k.split('|')[0], k.split('|')[1]],
-      [{ book: bHome.book, bet: k.split('|')[0] + ' -' + hcp, odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
-       { book: bAway.book, bet: k.split('|')[1] + ' +' + hcp, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(wc.worstReturn), grp.matches[0].kickoff, pair.period, wc.worstReturn, pair.scope);
+    // The reported leg labels are the ACTUAL buttons on each book (direction-aware),
+    // so the user clicks exactly the displayed team + handicap.
+    const homeName = k.split('|')[0], awayName = k.split('|')[1];
+    const homeLabel = ahLegLabel(homeName, awayName, hcp, dir, 'home');
+    const awayLabel = ahLegLabel(homeName, awayName, hcp, dir, 'away');
+    cand(`AH|${k}`, `Asian Handicap ${hcp}`, [homeName, awayName],
+      [{ book: bHome.book, bet: homeLabel, odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
+       { book: bAway.book, bet: awayLabel, odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(wc.worstReturn), grp.matches[0].kickoff, pair.period, wc.worstReturn, pair.scope);
   }
 // ── BTTS grouping (2-way yes/no) — best sides must be DIFFERENT books ──
   const bts = new Map();

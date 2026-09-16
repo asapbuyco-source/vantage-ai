@@ -9,6 +9,7 @@ import {
   pairEligible, splitAsianLine, settleAsianHandicap, ahWorstCase,
   isQuarterLine, worstPayoutFor2Way,
   SCOPE, scopeLabel, normalizeScope,
+  ahSignedPair, ahLegLabel,
 } from '../arb_engine.mjs';
 
 const FULL = PERIOD.FULL_MATCH, H1 = PERIOD.FIRST_HALF, H2 = PERIOD.SECOND_HALF, UNK = PERIOD.UNKNOWN;
@@ -258,6 +259,45 @@ test('normalizePeriod: "- FT" suffix and French full-time labels', () => {
   assert.equal(normalizePeriod('Résultat du match'), FULL);
   assert.equal(normalizePeriod('1X2 - 1H'), H1);
   assert.equal(normalizePeriod('Asian Handicap - 2H'), H2);
+});
+
+// ── AH direction: the Anderlecht-Lyon sign-inversion regression ──
+test('ahSignedPair: direction-aware signed handicaps for the settlement sim', () => {
+  // 'G' = home gives: market is (home -mag, away +mag)
+  assert.deepEqual(ahSignedPair('0.25', 'G'), [-0.25, 0.25]);
+  assert.deepEqual(ahSignedPair('0.25', 'R'), [0.25, -0.25]); // home receives
+  assert.deepEqual(ahSignedPair('1.75', 'R'), [1.75, -1.75]);
+  assert.deepEqual(ahSignedPair('1', 'G'), [-1, 1]);
+});
+
+test('ahLegLabel: real button text per direction (never inverted)', () => {
+  // home gives: home button = "Anderlecht -0.25", away = "Lyon +0.25"
+  assert.equal(ahLegLabel('Anderlecht', 'Lyon', '0.25', 'G', 'home'), 'Anderlecht -0.25');
+  assert.equal(ahLegLabel('Anderlecht', 'Lyon', '0.25', 'G', 'away'), 'Lyon +0.25');
+  // home receives (the Anderlecht-Lyon case): home = "Anderlecht +0.25", away = "Lyon -0.25"
+  assert.equal(ahLegLabel('Anderlecht', 'Lyon', '0.25', 'R', 'home'), 'Anderlecht +0.25');
+  assert.equal(ahLegLabel('Anderlecht', 'Lyon', '0.25', 'R', 'away'), 'Lyon -0.25');
+});
+
+test('AH direction: cross-direction pairing is never an arb (both legs lose on draw)', () => {
+  // Book A (home gives): Anderlecht -0.25 @ 2.569 / Lyon +0.25 @ 1.6
+  // Book B (home receives): Anderlecht +0.25 @ 1.825 / Lyon -0.25 @ 2.025
+  // Pairing A.away (Lyon +0.25) with B.home (Anderlecht +0.25) — same side, both lose when Lyon wins
+  const inv = 1 / 1.6 + 1 / 1.825;
+  const sA = 100 * (1 / 1.6) / inv, sB = 100 * (1 / 1.825) / inv;
+  // same-direction sim (would be the wrong structure): A.home(-0.25) vs B.away(-0.25) both refund on draw
+  const wrongPair = ahWorstCase({ handicap: -0.25, odds: 2.569 }, { handicap: -0.25, odds: 2.025 }, sA, sB);
+  // on a draw BOTH legs refund half => return 50 => massive loss, NOT a hedge
+  assert.ok(wrongPair.worstReturn < 60, `worst return ${wrongPair.worstReturn} — cross-direction cannot be an arb`);
+});
+
+test('ahSignedPair + sim: the real Anderlecht-Lyon structure (same book, dir R) settles correctly', () => {
+  // betfrenzy dir R: home_od = Anderlecht +0.25 @ 1.825, away_od = Lyon -0.25 @ 2.025
+  // draw: home +0.25 => half refund (50) + half win (50*1.825 = 91.25) = 141.25
+  const s = settleAsianHandicap({ margin: 0, handicap: 0.25, odds: 1.825, stake: 100 }); // home leg, draw
+  assert.equal(s, 50 + 50 * 1.825);
+  const s2 = settleAsianHandicap({ margin: 0, handicap: -0.25, odds: 2.025, stake: 100 }); // away leg, draw
+  assert.equal(s2, 50); // half refund, half lose
 });
 
 // ── worst-case payout for 2-way markets (reported Guaranteed ROI basis) ──
