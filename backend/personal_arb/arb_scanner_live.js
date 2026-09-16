@@ -561,8 +561,10 @@ async function notify(text) {
   return wa.status === 'fulfilled' ? wa.value : 'error';
 }
 
-// Screenshot a book's match page and send it to Telegram — so you SEE the exact bet
-async function sendBookScreenshot(book, link, caption, oddsValue) {
+// Screenshot a book's match page and send it to Telegram — so you SEE the exact bet.
+// `hint.text` = the market line/section label as displayed on that page (e.g. "2.5,3.0"
+// for an asian total, "-0.25" for AH) — the picker requires it near the odds button.
+async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chat || !link) return;
   const SHOT_DIR = path.join(__dirname, '../../arb_screenshots');
@@ -580,94 +582,105 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
     // CRITICAL: skip elements inside half-time / special-period markets — the scanner only ever
     // reports FULL-MATCH arbs, so highlighting a "1st Half" button would be a false visual.
     if (oddsValue) {
-      const found = await page.evaluate((odds) => {
-        const target = String(odds);
-        const want = parseFloat(target);
-        // An element belongs to a half-time/special market if a nearby market-title ancestor
-        // mentions a period (1st/2nd half, 1H/2H, minutes). Scanner arbs are always FULL MATCH.
-        const isHalfPeriod = (el) => {
-          let n = el, depth = 0;
-          while (n && depth < 7) {
-            const t = (n.textContent || '').trim();
-            if (t && t.length < 80 && /(handicap|over|under|total|but|score)/i.test(t) && /(1st|2nd|first|second|1h|2h|half|period|minute)/i.test(t)) return true;
-            n = n.parentElement; depth++;
-          }
-          return false;
+      // Section-first picker: find the market SECTION by its title (with the line closest
+      // to ours — page lines can drift), then the odds button within it by closest value.
+      // Row-label matching proved unreliable: betfrenzy never renders the feed's split
+      // labels ("2.5,3.0"), and the first odds match on the page can be a completely
+      // different market (Anytime Goalscorer 2.05). Markets also render late, so the
+      // whole pick is retried until sections appear (up to ~30s).
+      const pickAndClick = () => page.evaluate(({ odds, hint }) => {
+        const want = parseFloat(String(odds));
+        const market = hint?.market || '';
+        const wantLine = hint?.line != null ? parseFloat(hint.line) : null;
+        const target = hint?.target || ''; // 'goals' | 'corners'
+        const index = hint?.index; // button position within the section (0-based)
+        const titleRe = market === 'ah' ? /asian\s*handicap/i
+          : market === 'dc' ? /double\s*chance/i
+          : market === 'btts' ? /both\s*teams/i
+          : market === 'dnb' ? /draw\s*no\s*bet/i
+          : market === '1x2' ? /full\s*time\s*(?:result|1x2)?/i
+          : /over\s*\/?\s*under/i;
+        const lineOf = (t) => {
+          if (market === 'ah') { const m = t.match(/handicap\s*([+-]?\d+(?:[.,]\d+)?)/i); return m ? parseFloat(m[1].replace(',', '.')) : null; }
+          const m = t.match(/under\s*(\d+(?:[.,]\d+)?)/i) || t.match(/(\d+(?:[.,]\d+)?)\s*(?:goals?|corners)?/i);
+          return m ? parseFloat(m[1].replace(',', '.')) : null;
         };
-        // Books ROUND displayed odds (feed 2.025 shows as "2.02"), so match numerically
-        // within a small tolerance instead of string equality.
-        const matchOdds = (el) => {
-          const t = (el.textContent || '').trim();
-          if (!t || t.length > 8) return false;
-          const v = parseFloat(t.replace(',', '.'));
-          if (isNaN(v)) return false;
-          return Math.abs(v - want) < 0.015;
-        };
-        const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
-        let hit = null;
-        for (const el of els) {
-          const t = (el.textContent || '').trim();
-          if (t === target && !isHalfPeriod(el)) { hit = el; break; }
-        }
-        if (!hit) {
-          for (const el of els) {
-            if (matchOdds(el) && !isHalfPeriod(el)) { hit = el; break; }
-          }
-        }
-        if (!hit) return { ok: false };
-        hit.scrollIntoView({ block: 'center', inline: 'center' });
-        hit.style.outline = '4px solid #ff2d2d';
-        hit.style.outlineOffset = '2px';
-        hit.style.boxShadow = '0 0 0 6px rgba(255,45,45,0.4)';
-        return { ok: true, el: hit };
-      }, oddsValue);
-      console.log(`[Shot] ${book} highlighted odds ${oddsValue}: ${found.ok ? 'YES' : 'no exact match (plain shot)'}`);
-      await page.waitForTimeout(1500);
-      // Auto-CLICK the odds button (adds to bet slip — does NOT place the bet), then re-screenshot
-      if (found.ok) {
-        try {
-          const clicked = await page.evaluate((odds) => {
-            const target = String(odds);
-            const want = parseFloat(target);
-            const isHalfPeriod = (el) => {
-              let n = el, depth = 0;
-              while (n && depth < 7) {
-                const t = (n.textContent || '').trim();
-                if (t && t.length < 80 && /(handicap|over|under|total|but|score)/i.test(t) && /(1st|2nd|first|second|1h|2h|half|period|minute)/i.test(t)) return true;
-                n = n.parentElement; depth++;
-              }
-              return false;
-            };
-            const matchOdds = (el) => {
-              const t = (el.textContent || '').trim();
+        const isHalf = (t) => /(1st|2nd|first|second)\s*half|half\s*time|\b1h\b|\b2h\b|minutes?/i.test(t.slice(0, 60));
+        const oddsButtons = (el) => {
+          const all = Array.from(el.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'))
+            .filter(b => {
+              const t = (b.textContent || '').trim();
               if (!t || t.length > 8) return false;
               const v = parseFloat(t.replace(',', '.'));
-              if (isNaN(v)) return false;
-              return Math.abs(v - want) < 0.015;
-            };
-            const els = Array.from(document.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'));
-            let hit = null;
-            for (const el of els) {
-              const t = (el.textContent || '').trim();
-              if (t === target && !isHalfPeriod(el)) { hit = el; break; }
-            }
-            if (!hit) for (const el of els) {
-              if (matchOdds(el) && !isHalfPeriod(el)) { hit = el; break; }
-            }
-            if (!hit) return false;
-            // click the odds element, or its closest clickable ancestor
-            let targetEl = hit;
-            const ce = hit.closest('a, button, [class*="odd"], [class*="bet"], [class*="selection"], [class*="outcome"], [role="button"]');
-            if (ce) targetEl = ce;
-            targetEl.click();
-            return true;
-          }, oddsValue);
-          console.log(`[Shot] ${book} auto-clicked odds: ${clicked ? 'YES (bet slip updated)' : 'no'}`);
-          await page.waitForTimeout(3000);
-        } catch (e) {
-          console.log(`[Shot] ${book} click failed: ${e.message.slice(0, 60)}`);
+              return !isNaN(v) && v >= 1.01 && v <= 100;
+            });
+          // keep only leaf-most nodes: drop wrappers whose descendants also carry odds text
+          return all.filter(b => !Array.from(b.querySelectorAll('*')).some(c => {
+            const ct = (c.textContent || '').trim();
+            if (!ct || ct.length > 8) return false;
+            const cv = parseFloat(ct.replace(',', '.'));
+            return !isNaN(cv) && cv >= 1.01 && cv <= 100;
+          }));
+        };
+        // 1) find section containers: title at the head, NOT a half/special market, and
+        // containing at least 2 odds buttons (a real market section, not a label grid)
+        const sections = [];
+        for (const el of document.querySelectorAll('div,section,article,li')) {
+          const t = (el.textContent || '').trim();
+          if (!t || t.length > 600) continue;
+          const head = t.slice(0, 60);
+          if (!titleRe.test(head)) continue;
+          if (market === 'ou' && target === 'corners' && !/corner/i.test(head)) continue;
+          if (market === 'ou' && target === 'goals' && /corner/i.test(head)) continue;
+          // 1X2: only the plain "Full Time" section — not "Full Time & 2 Up", "& both teams", etc.
+          if (market === '1x2' && /&|\bup\b|both/i.test(head)) continue;
+          if (isHalf(t)) continue;
+          const btns = oddsButtons(el);
+          if (btns.length < 2) continue;
+          sections.push({ el, t, line: lineOf(head), len: t.length, btns });
         }
+        // 2) pick the section: closest line to ours (missing line = poor match), then the
+        // tightest container so we don't grab a page-wide wrapper
+        let best = null, bestD = Infinity, bestLen = Infinity;
+        for (const s of sections) {
+          const d = (wantLine != null) ? (s.line != null ? Math.abs(s.line - wantLine) : 999) : 0;
+          if (d < bestD || (d === bestD && s.len < bestLen)) { bestD = d; bestLen = s.len; best = s; }
+        }
+        if (!best) return { ok: false, where: 'section not found' };
+        // 3) odds button within the section: closest value to ours (robust to Over/Under
+        // DOM order and line drift); fall back to position index, else show the section
+        let hit = null, bd = Infinity;
+        for (const b of best.btns) {
+          const v = parseFloat((b.textContent || '').trim().replace(',', '.'));
+          const d = Math.abs(v - want);
+          if (d < bd) { bd = d; hit = b; }
+        }
+        if (bd > 0.3) hit = null;
+        if (!hit && typeof index === 'number' && best.btns[index]) hit = best.btns[index];
+        if (hit) {
+          hit.scrollIntoView({ block: 'center', inline: 'center' });
+          hit.style.outline = '4px solid #ff2d2d';
+          hit.style.outlineOffset = '2px';
+          hit.style.boxShadow = '0 0 0 6px rgba(255,45,45,0.4)';
+          let targetEl = hit;
+          const ce = hit.closest('a, button, [class*="odd"], [class*="bet"], [class*="selection"], [class*="outcome"], [role="button"]');
+          if (ce) targetEl = ce;
+          try { targetEl.click(); } catch {}
+          return { ok: true, clicked: true, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
+        }
+        // no odds button matched — at least show the right section
+        best.el.scrollIntoView({ block: 'center' });
+        return { ok: true, clicked: false, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
+      }, { odds: oddsValue, hint: hint || {} });
+      let res = { ok: false, where: 'not evaluated' };
+      for (let attempt = 0; attempt < 7; attempt++) {
+        res = await pickAndClick();
+        if (res.ok) break;
+        console.log(`[Shot] ${book} markets not ready yet (attempt ${attempt + 1}/7) — waiting 4s...`);
+        await page.waitForTimeout(4000);
       }
+      console.log(`[Shot] ${book} odds ${oddsValue} -> ${res.clicked ? 'highlighted + clicked' : res.ok ? 'section shown (odds not found in section)' : 'no match'}: ${res.where || ''}`);
+      await page.waitForTimeout(3500);
     }
     await page.screenshot({ path: file, fullPage: false });
     await ctx.close();
@@ -685,6 +698,36 @@ async function sendBookScreenshot(book, link, caption, oddsValue) {
   } finally {
     if (ctx) await ctx.close().catch(() => {});
   }
+}
+
+// Build the section hint for a leg: which market section to open and which button
+// position within it. The picker finds the section by title (with the line closest to
+// ours — page lines drift) and picks the button by index (over=0/under=1,
+// home=0/draw=1/away=2, 1X=0/X2=1/12=2, yes=0/no=1).
+function screenshotHintForLeg(leg, c) {
+  const b = leg.bet || '';
+  const home = c.teams[0], away = c.teams[1];
+  const lineFromBet = () => {
+    const asian = b.match(/\(Asian ([^)]+)\)/);
+    if (asian) { const parts = asian[1].split(',').map(parseFloat).filter(v => !isNaN(v)); return parts.length ? parts.reduce((a, x) => a + x, 0) / parts.length : null; }
+    const m = b.match(/(\d+(?:\.\d+)?)\s*(?:goals|corners)/i);
+    return m ? parseFloat(m[1]) : null;
+  };
+  if (/^Over/i.test(b)) return { market: 'ou', target: /corner/i.test(b) ? 'corners' : 'goals', line: lineFromBet(), index: 0 };
+  if (/^Under/i.test(b)) return { market: 'ou', target: /corner/i.test(b) ? 'corners' : 'goals', line: lineFromBet(), index: 1 };
+  // AH legs end with a signed line ("Anderlecht -0.25", "Lyon +0.25")
+  const ah = b.match(/([+-]\d+(?:\.\d+)?)\s*$/);
+  if (ah) return { market: 'ah', line: parseFloat(ah[1]), index: b.startsWith(home) ? 0 : 1 };
+  if (/draw no bet|draw refunds/i.test(b)) return { market: 'dnb', index: b.startsWith(home) ? 0 : 1 };
+  if (/or Draw|No Draw/i.test(b)) {
+    const idx = /\(1X\)/.test(b) ? 0 : /\(X2\)/.test(b) ? 1 : 2;
+    return { market: 'dc', index: idx };
+  }
+  if (/both/i.test(b)) return { market: 'btts', index: /\(Yes\)/i.test(b) ? 0 : 1 };
+  if (/to win \(1\)/i.test(b)) return { market: '1x2', index: 0 };
+  if (/Draw \(X\)/i.test(b)) return { market: '1x2', index: 1 };
+  if (/to win \(2\)/i.test(b)) return { market: '1x2', index: 2 };
+  return { market: '', index: 0 };
 }
 
 async function report(c) {
@@ -732,7 +775,7 @@ async function report(c) {
   // alert still open the right page for manual checks.
   const SCREENSHOT_SKIP = new Set(['1xbet', 'betwinner', 'paripesa']);
   for (const s of c.legs) {
-    if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds);
+    if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds, screenshotHintForLeg(s));
   }
 }
 
