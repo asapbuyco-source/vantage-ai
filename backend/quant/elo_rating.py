@@ -20,86 +20,114 @@ DRAW_PROB_BASE = 0.26    # Base draw probability correction
 # ── League-specific K-factor (MODEL-03) ───────────────────────────────────────
 # Higher K = results in this competition teach the model more per match.
 # Elite continental competitions carry more information value.
+# NOTE: league IDs are API-Football space (the pipeline's fixture source).
 LEAGUE_K_FACTOR: dict[int, float] = {
     2:   30.0,  # UEFA Champions League — highest information
-    5:   28.0,  # UEFA Europa League
-    7:   25.0,  # UEFA Conference League
-    8:   22.0,  # English Premier League
-    564: 22.0,  # La Liga
-    82:  22.0,  # Bundesliga
-    384: 22.0,  # Serie A
-    301: 20.0,  # Ligue 1
-    72:  19.0,  # Eredivisie
+    3:   28.0,  # UEFA Europa League
+    848: 25.0,  # UEFA Conference League
+    39:  22.0,  # English Premier League
+    140: 22.0,  # La Liga
+    78:  22.0,  # Bundesliga
+    135: 22.0,  # Serie A
+    61:  20.0,  # Ligue 1
+    88:  19.0,  # Eredivisie
     # All other leagues use the default K_FACTOR (20.0)
 }
 
-# ── Derby / Rivalry pairs (BUG-01) ────────────────────────────────────────────
-# Frozensets of Sportmonks team IDs. Used by quant_pipeline to set is_derby=True
+# ── Derby / Rivalry pairs ─────────────────────────────────────────────────────
+# Checked by BOTH API-Football team IDs (primary fixture source) and normalized
+# team NAMES (robust to any ID system). Used by quant_pipeline to set is_derby=True
 # for the Dixon-Coles rho computation, boosting 0-0 and 1-1 scoreline probability.
 DERBY_PAIRS: set[frozenset] = {
-    frozenset({214, 593}),    # El Clásico — Real Madrid vs Barcelona
-    frozenset({9, 29}),       # Man City vs Man United
-    frozenset({5, 7}),        # Arsenal vs Chelsea
-    frozenset({9, 7}),        # Liverpool vs Chelsea
-    frozenset({5, 9}),        # Arsenal vs Liverpool
-    frozenset({8, 6}),        # Bayern Munich vs Borussia Dortmund (Der Klassiker)
-    frozenset({3, 1}),        # Inter vs Juventus (Derby d'Italia)
-    frozenset({384, 610}),    # Roma vs Lazio (Derby della Capitale)
-    frozenset({631, 29}),     # Man City vs Man United
-    frozenset({3468, 3479}),  # Wydad vs Al Ahly (African Super Derby)
-    frozenset({232, 1064}),   # PSG vs Lyon (Le Classique)
-    frozenset({45, 29}),      # Tottenham vs Man United
-    frozenset({45, 5}),       # Tottenham vs Arsenal (North London Derby)
+    frozenset({541, 529}),    # El Clásico — Real Madrid vs Barcelona
+    frozenset({50, 33}),      # Man City vs Man United
+    frozenset({42, 49}),      # Arsenal vs Chelsea
+    frozenset({40, 49}),      # Liverpool vs Chelsea
+    frozenset({42, 40}),      # Arsenal vs Liverpool
+    frozenset({157, 165}),    # Bayern Munich vs Borussia Dortmund (Der Klassiker)
+    frozenset({505, 496}),    # Inter vs Juventus (Derby d'Italia)
+    frozenset({497, 487}),    # Roma vs Lazio (Derby della Capitale)
+    frozenset({47, 33}),      # Tottenham vs Man United
+    frozenset({47, 42}),      # Tottenham vs Arsenal (North London Derby)
+    frozenset({85, 80}),      # PSG vs Lyon (Le Classique)
+}
+
+# Same derbies by normalized club names — independent of any ID numbering system.
+DERBY_NAME_PAIRS: set[frozenset] = {
+    frozenset({"real madrid", "barcelona"}),
+    frozenset({"manchester city", "manchester united"}),
+    frozenset({"arsenal", "chelsea"}),
+    frozenset({"liverpool", "chelsea"}),
+    frozenset({"arsenal", "liverpool"}),
+    frozenset({"bayern", "borussia dortmund"}),
+    frozenset({"inter", "juventus"}),
+    frozenset({"roma", "lazio"}),
+    frozenset({"tottenham", "manchester united"}),
+    frozenset({"tottenham", "arsenal"}),
+    frozenset({"paris saint germain", "lyon"}),
+    frozenset({"psg", "lyon"}),
+    frozenset({"wydad", "al ahly"}),
 }
 
 
-def is_derby_match(home_team_id: int, away_team_id: int) -> bool:
-    """Return True if this fixture is a known rivalry/derby match."""
-    return frozenset({home_team_id, away_team_id}) in DERBY_PAIRS
+def _norm_name(name: str) -> str:
+    return (name or "").strip().lower().replace("fc", "").replace("cf", "").replace("ac", "").replace("sc", "").strip()
+
+
+def is_derby_match(home_team_id: int, away_team_id: int, home_team_name: str = "", away_team_name: str = "") -> bool:
+    """Return True if this fixture is a known rivalry/derby match.
+    Checks API-Football ID pairs first, then normalized team-name pairs (robust
+    to any ID system, including the Sportmonks tables no longer in use)."""
+    if frozenset({home_team_id, away_team_id}) in DERBY_PAIRS:
+        return True
+    if home_team_name and away_team_name:
+        hn, an = _norm_name(home_team_name), _norm_name(away_team_name)
+        if frozenset({hn, an}) in DERBY_NAME_PAIRS:
+            return True
+    return False
 
 # League-specific home advantage (Elo points). Falls back to HOME_ADVANTAGE.
+# NOTE: league IDs are API-Football space (the pipeline's fixture source).
 LEAGUE_HOME_ADV: dict[int, float] = {
-    8: 45,     # EPL (post-COVID decline)
-    564: 55,   # La Liga
-    82: 50,    # Bundesliga
-    384: 55,   # Serie A
-    301: 50,   # Ligue 1
-    2: 30,     # UCL (neutral-ish venues)
-    5: 35,     # Europa League
-    176: 75,   # Turkish Süper Lig (intense home crowds)
-    253: 65,   # Brasileirão
-    600: 50,   # MLS
-    570: 70,   # Saudi Pro League
+    39: 45,     # EPL (post-COVID decline)
+    140: 55,    # La Liga
+    78: 50,     # Bundesliga
+    135: 55,    # Serie A
+    61: 50,     # Ligue 1
+    2: 30,      # UCL (neutral-ish venues)
+    3: 35,      # Europa League
+    203: 75,    # Turkish Süper Lig (intense home crowds)
+    71: 65,     # Brasileirão
+    253: 50,    # MLS
+    307: 70,    # Saudi Pro League
 }
 
 # ── Fix #6: Pre-seed Elo ratings for top clubs ────────────────────────────────
-# Sportmonks team IDs → approximate Elo (based on 2024/25 perf + UEFA coefficient)
-# Prevents cold-start. Real graded Firestore values will override these seeds.
+# API-Football team IDs (verified against v3 API, league rosters 2025) → approximate
+# Elo (based on 2024/25 perf + UEFA coefficient). Prevents cold-start.
+# Real graded Firestore values will override these seeds.
 PRE_SEED_ELO: dict[int, float] = {
-    214: 1870,  # Real Madrid
-    631: 1855,  # Manchester City
-    8:   1830,  # Bayern Munich
-    5:   1820,  # Arsenal
-    9:   1815,  # Liverpool
-    593: 1810,  # Barcelona
-    232: 1805,  # PSG
-    82:  1800,  # Atletico Madrid
-    7:   1790,  # Chelsea
-    2:   1785,  # Bayer Leverkusen
-    3:   1780,  # Inter Milan
-    6:   1775,  # Borussia Dortmund
-    1:   1770,  # Juventus
-    10:  1765,  # Napoli
-    52:  1760,  # Aston Villa
-    29:  1755,  # Manchester United
-    45:  1750,  # Tottenham
-    251: 1740,  # Porto
-    267: 1730,  # Benfica
-    62:  1720,  # Celtic
-    72:  1715,  # Ajax
-    3468: 1620, # Wydad
-    3479: 1610, # Al Ahly
-    3481: 1605, # Esperance
+    541: 1870,  # Real Madrid
+    50:  1855,  # Manchester City
+    157: 1830,  # Bayern Munich
+    42:  1820,  # Arsenal
+    40:  1815,  # Liverpool
+    529: 1810,  # Barcelona
+    85:  1805,  # PSG
+    530: 1800,  # Atletico Madrid
+    49:  1790,  # Chelsea
+    168: 1785,  # Bayer Leverkusen
+    505: 1780,  # Inter Milan
+    165: 1775,  # Borussia Dortmund
+    496: 1770,  # Juventus
+    492: 1765,  # Napoli
+    66:  1760,  # Aston Villa
+    33:  1755,  # Manchester United
+    47:  1750,  # Tottenham
+    212: 1740,  # Porto
+    211: 1730,  # Benfica
+    247: 1720,  # Celtic
+    194: 1715,  # Ajax
 }
 
 # ── In-memory cache (populated from Firestore at startup) ─────────────────────

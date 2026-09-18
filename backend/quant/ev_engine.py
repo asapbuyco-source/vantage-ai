@@ -90,9 +90,12 @@ def calibrate_market_probability(
     key = _market_to_key(market)
     factor = get_dynamic_calibration_factor(key, 0.97, league_id, month)
     calibrated = max(0.01, min(0.99, raw_prob * factor))
-    # Empirical underconfidence correction (Big-5 backtest, n=1282)
+    # Empirical underconfidence correction (Big-5 backtest, n=1282).
+    # The boost is CLAMPED to the raw model probability so it can never reverse
+    # the calibration discount (fixes the audit finding: 0.65 → 0.55 → 0.72
+    # ended up ABOVE the raw model output).
     from calibration_registry import apply_empirical_boost
-    calibrated = apply_empirical_boost(calibrated)
+    calibrated = apply_empirical_boost(calibrated, cap=raw_prob)
     tier = get_calibration_tier(key)
     return calibrated, factor, tier
 
@@ -396,6 +399,12 @@ def evaluate_all_markets(
         # away_win 0.27, draw 0.41) already severely discount these; only genuinely strong
         # signals will survive both calibration and this elevated threshold.
         HISTORICALLY_WEAK = {"Home Win", "Away Win", "Draw", "Double Chance (X2)"}
+        # AUDIT: Home Win/Away Win have a 21%/14% hit rate and -43% ROI — the model cannot
+        # predict winners. Fully DISABLE these markets rather than letting a 10% EV floor
+        # occasionally leak a bad pick. Draw is kept (reasonably calibrated, 0.90 factor).
+        DISABLED_WIN_MARKETS = {"Home Win", "Away Win"}
+        if market in DISABLED_WIN_MARKETS:
+            continue
         if market in HISTORICALLY_WEAK:
             if ev < MIN_EV * 2.0:  # 2x EV threshold for weak markets
                 continue

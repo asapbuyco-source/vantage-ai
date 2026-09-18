@@ -59,6 +59,10 @@ def kelly_stake(
         return 0.0
 
     frac_kelly = full_kelly * fraction
+    # Enforce the minimum stake floor: bets below 0.5% of bankroll are too small
+    # to recommend (sub-minimum wagers, rounding noise). 0.0 = don't recommend.
+    if frac_kelly < MIN_STAKE_PCT:
+        return 0.0
     return round(min(max_stake_pct, frac_kelly), 4)
 
 
