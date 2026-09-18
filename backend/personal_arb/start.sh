@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Railway start wrapper — explicit Xvfb (xvfb-run can hang in containers) + diagnostics
-set -x
+# Railway start wrapper — explicit Xvfb (xvfb-run can hang in containers) + diagnostics.
+# No `set -x`: production shell tracing can echo env/args (ARB_PROXY carries credentials).
+set -e
 echo "=== [start] node version: $(node --version)"
 echo "=== [start] cwd: $(pwd)"
 echo "=== [start] playwright: $(node -e "console.log(require.resolve('playwright'))" 2>&1 || echo MISSING)"

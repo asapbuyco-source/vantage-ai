@@ -817,6 +817,9 @@ async function collectCandidates() {
     fetchParipesa().catch(() => []),
     fetchSportybet().catch(() => []),
   ]);
+  Object.assign(lastCounts, { betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
+  lastScanAt = new Date().toISOString();
+  lastScanOk = (bf.length + bp.length + pm.length + pb.length + xb.length + bw.length + pp.length) > 0;
 console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, betwinner ${bw.length}, paripesa ${pp.length}, sportybet ${sb.length}`);
   await alertBookFailure({ betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
   // Keep all events — kickoff is tagged per candidate so alerts show a countdown
@@ -1080,7 +1083,37 @@ async function scan() {
   for (const c of confirmed) if (!aligned.some(x => x.key === c.key)) console.log(`[Verify] dropped: ${c.kind} ${c.teams.join(' vs ')}`);
 }
 
-// ── Modes ──
+// Live status (for the /health endpoint + Railway healthcheck): the most recent
+// book counts and the last completed scan, so "running" means books are returning data.
+const lastCounts = {};
+let lastScanAt = null;
+let lastScanOk = false;
+
+// Minimal HTTP status server — Railway's healthcheckPath can point at /health
+// (e.g. "https://" + host + "/health"). No secrets are ever exposed: only counts,
+// scan time and candidate totals. Port from PORT env (Railway provides it).
+import http from 'http';
+function startHealthServer() {
+  const port = parseInt(process.env.PORT || '8080', 10);
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        status: lastScanOk ? 'ok' : 'starting',
+        lastScanAt,
+        books: lastCounts,
+        proxyConfigured: !!process.env.ARB_PROXY,
+      }));
+    } else {
+      res.statusCode = 404;
+      res.end('not found');
+    }
+  });
+  server.listen(port, () => console.log(`[Health] status server on :${port}`));
+}
+
+// Modes
+startHealthServer();
 if (warm) {
   // pmuc/premierbet share one profile; 1xbet uses its own (separate session)
   const ctx = await launchBook('warm', { headless: false, viewport: { width: 1280, height: 800 } });

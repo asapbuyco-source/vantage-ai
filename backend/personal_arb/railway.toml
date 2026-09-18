@@ -4,7 +4,9 @@ builder = "DOCKERFILE"
 [deploy]
 startCommand = "/bin/bash start.sh"
 restartPolicyType = "ON_FAILURE"
-healthcheckPath = ""
+# /health serves JSON status: book counts + last scan time (Railway needs a path,
+# no scheme/host — just the route).
+healthcheckPath = "/health"
 healthcheckTimeout = 100
 
 [env]
