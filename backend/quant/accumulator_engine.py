@@ -27,51 +27,59 @@ TIER_CONFIG = {
         "icon": "🛡️",
         "max_legs": 3,
         "min_legs": 2,
-        "min_prob": 0.55,  # Relaxed from 0.60
-        "min_combined_odds": 1.50, # Relaxed from 2.00
-        "sort_key": "prob",   # sort by probability
+        "min_prob": 0.70,          # Safety-first: 3x70% legs ≈ 34% combined hit rate
+        "min_combined_prob": 0.40, # gate on the honest post-correlation probability
+        "min_combined_odds": 1.50,
+        "sort_key": "prob",        # sort by probability
+        "score_prob_weight": 0.70, # optimizer: 70% probability / 30% EV
         "count": 1,
         "risk_level": "moderate",
-        "risk_warning": "Multi-leg — higher variance than single bets. Stake conservatively.",
+        "risk_warning": "High-probability legs (70%+ each). Still multi-leg — variance compounds, stake within limits.",
     },
     "alpha_edge": {
         "label": "The Alpha Edge",
-        "description": "Highest expected value — where the model found market mispricing",
+        "description": "EV edge with a safety floor — model mispricing, never sub-60% legs",
         "icon": "⚡",
         "max_legs": 3,
         "min_legs": 2,
-        "min_prob": 0.50,
-        "min_combined_odds": 2.00, # Relaxed from 2.50
-        "sort_key": "ev",     # sort by expected value
+        "min_prob": 0.60,
+        "min_combined_prob": 0.25,
+        "min_combined_odds": 2.00,
+        "sort_key": "ev",          # sort by expected value
+        "score_prob_weight": 0.40,
         "count": 1,
         "risk_level": "high",
-        "risk_warning": "EV-optimized — combines uncorrelated edges but variance compounds.",
+        "risk_warning": "EV-optimized within safe legs (60%+ each). Variance compounds — stake conservatively.",
     },
     "syndicate": {
         "label": "The Syndicate",
-        "description": "Balanced combo — value meets volume",
+        "description": "Balanced combo — probability and value, both floored",
         "icon": "🎯",
         "max_legs": 4,
-        "min_legs": 2, # Relaxed from 3
-        "min_prob": 0.50,
-        "min_combined_odds": 3.00, # Relaxed from 4.00
-        "sort_key": "composite",  # sort by EV*0.5 + prob*0.5
+        "min_legs": 2,
+        "min_prob": 0.60,
+        "min_combined_prob": 0.25,
+        "min_combined_odds": 3.00,
+        "sort_key": "composite",   # sort by EV*0.5 + prob*0.5
+        "score_prob_weight": 0.50,
         "count": 1,
-        "risk_level": "very_high",
-        "risk_warning": "High-risk — for entertainment only. Do NOT stake from core bankroll.",
+        "risk_level": "high",
+        "risk_warning": "Balanced 60%+ legs. Higher variance than singles — entertainment stakes only.",
     },
     "variance_play": {
         "label": "The Variance Play",
-        "description": "High-yield moonshot — big odds, calculated risk",
+        "description": "Higher-yield play — but still floored at 55% per leg",
         "icon": "🚀",
         "max_legs": 5,
-        "min_legs": 3, # Relaxed from 4
-        "min_prob": 0.50,  # Relaxed from 0.58
-        "min_combined_odds": 5.00, # Relaxed from 8.00
+        "min_legs": 3,
+        "min_prob": 0.55,
+        "min_combined_prob": 0.15,
+        "min_combined_odds": 5.00,
         "sort_key": "ev",
+        "score_prob_weight": 0.30,
         "count": 1,
-        "risk_level": "extreme",
-        "risk_warning": "Extreme variance — 5-leg accumulator. Bankroll suicide without a separate dedicated fund.",
+        "risk_level": "very_high",
+        "risk_warning": "High-variance 5-leg play. Never stake from core bankroll.",
     },
     "safe_stack": {
         "label": "The Safe Stack",
@@ -79,12 +87,14 @@ TIER_CONFIG = {
         "icon": "🔒",
         "max_legs": 5,
         "min_legs": 3,
-        "min_prob": 0.85,     # Only 85%+ probability bets
+        "min_prob": 0.85,          # Only 85%+ probability bets
+        "min_combined_prob": 0.50,
         "min_combined_odds": 2.00,
-        "sort_key": "prob",   # sort by probability
+        "sort_key": "prob",        # sort by probability
+        "score_prob_weight": 0.80,
         "count": 1,
         "risk_level": "low",
-        "risk_warning": "High hit rate per leg — variance compounds across legs but each leg is individually strong.",
+        "risk_warning": "Highest hit rate per leg — variance compounds across legs but each leg is individually strong.",
     },
 }
 
@@ -256,7 +266,10 @@ def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None)
         # double-count them here. score_combo is used for branch-and-bound ranking
         # only; final probability is computed by the dataclass.
         ev = (total_prob * total_odds) - 1.0
-        return total_prob * 0.5 + max(0, ev) * 0.5
+        # Safety bias: safe tiers weight probability more heavily than EV so the
+        # optimizer prefers high-hit-rate combos.
+        w = config.get("score_prob_weight", 0.5)
+        return total_prob * w + max(0, ev) * (1.0 - w)
 
     def valid(combo: list, new_bet: dict) -> bool:
         if new_bet["fixture_id"] in {b["fixture_id"] for b in combo}:
@@ -328,6 +341,13 @@ def generate_accumulators(value_bets: list[dict], high_prob_pool: list[dict] = N
                     tier_icon=config["icon"],
                     legs=[AccumulatorLeg(**l) for l in legs],
                 )
+
+                # Safety gate: the honest post-correlation combined probability must
+                # clear the tier floor — no lottery-ticket accumulators.
+                min_combined = config.get("min_combined_prob", 0.0)
+                if acca.combined_prob < min_combined:
+                    print(f"[Acca] {tier_key} skipped: combined prob {acca.combined_prob:.1%} < {min_combined:.0%}")
+                    continue
 
                 if acca.combined_odds >= config["min_combined_odds"]:
                     results[tier_key].append(accumulator_to_dict(acca))
