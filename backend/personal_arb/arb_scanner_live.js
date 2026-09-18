@@ -692,7 +692,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           const d = Math.abs(v - want);
           if (d < bd) { bd = d; hit = b; }
         }
-        if (bd > 0.3) hit = null;
+        if (bd > 0.5) hit = null; // line may have drifted up to a half-step; beyond that only show the section
         if (!hit && typeof index === 'number' && best.btns[index]) hit = best.btns[index];
         if (hit) {
           hit.scrollIntoView({ block: 'center', inline: 'center' });
@@ -705,8 +705,11 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           try { targetEl.click(); } catch {}
           return { ok: true, clicked: true, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
         }
-        // no odds button matched — at least show the right section
+        // no odds button matched — at least show the right section, and DRAW an orange
+        // outline around the whole section so the user still sees exactly where it is
         best.el.scrollIntoView({ block: 'center' });
+        best.el.style.outline = '4px solid #ff9900';
+        best.el.style.outlineOffset = '2px';
         return { ok: true, clicked: false, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
       }, { odds: oddsValue, hint: hint || {} });
       let res = { ok: false, where: 'not evaluated' };
