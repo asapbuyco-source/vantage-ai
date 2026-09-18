@@ -499,6 +499,46 @@ async function sendWhatsApp(text) {
   }
 }
 
+// Send a PNG screenshot to WhatsApp too (screenshots previously went to Telegram
+// only — a WhatsApp-centric user never saw them).
+async function sendWhatsAppPhoto(pngBuffer, caption) {
+  const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
+  if (!token || !phoneId || !to) return false;
+  try {
+    // 1) upload the media and get a media ID
+    const form = new FormData();
+    form.append('messaging_product', 'whatsapp');
+    form.append('type', 'image/png');
+    form.append('file', new Blob([pngBuffer], { type: 'image/png' }), 'shot.png');
+    const up = await fetch(`${WA_GRAPH}/${phoneId}/media`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: form,
+      signal: AbortSignal.timeout(30000),
+    });
+    const upj = await up.json().catch(() => ({}));
+    if (!up.ok || !upj.id) { console.log(`[WhatsApp] photo upload failed: ${JSON.stringify(upj).slice(0, 120)}`); return false; }
+    // 2) send the image message
+    const r = await fetch(`${WA_GRAPH}/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp', to, type: 'image',
+        image: { id: upj.id },
+        caption: String(caption).slice(0, 1000),
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { console.log(`[WhatsApp] photo send failed: ${JSON.stringify(j?.error || j).slice(0, 140)}`); return false; }
+    console.log('[WhatsApp] photo sent');
+    return true;
+  } catch (e) {
+    console.log(`[WhatsApp] photo fail: ${e.message.slice(0, 80)}`);
+    return false;
+  }
+}
+
 // Utility template for business-initiated alerts (outside the 24h window).
 // Create this template in Meta's dashboard (WhatsApp Manager → Message templates):
 //   Category: Utility | Name: arb_alert | Language: English (US)
@@ -685,14 +725,17 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
     await page.screenshot({ path: file, fullPage: false });
     await ctx.close();
     ctx = null;
-    // Send as photo
+    const png = fs.readFileSync(file);
+    // Send as photo to Telegram
     const form = new FormData();
     form.append('chat_id', chat);
     form.append('caption', caption);
-    form.append('photo', new Blob([fs.readFileSync(file)], { type: 'image/png' }), `${book}.png`);
+    form.append('photo', new Blob([png], { type: 'image/png' }), `${book}.png`);
     const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
     const j = await r.json().catch(() => ({}));
     console.log(`[Shot] ${book} → ${j.ok ? 'sent' : j.description || 'failed'}`);
+    // And to WhatsApp (screenshots used to go to Telegram only)
+    await sendWhatsAppPhoto(png, caption);
   } catch (e) {
     console.log(`[Shot] ${book} screenshot failed: ${e.message.slice(0, 80)}`);
   } finally {
@@ -704,6 +747,41 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
 // position within it. The picker finds the section by title (with the line closest to
 // ours — page lines drift) and picks the button by index (over=0/under=1,
 // home=0/draw=1/away=2, 1X=0/X2=1/12=2, yes=0/no=1).
+function howToFindLeg(leg, c) {
+  const b = leg.bet || '';
+  const kind = c.kind;
+  const cap = (book) => book === '1xbet' ? '1xbet' : book === 'betwinner' ? 'BetWinner' : book === 'paripesa' ? 'PariPesa' : book === 'betfrenzy' ? 'BetFrenzy' : book === 'premierbet' ? 'PremierBet' : book === 'pmuc' ? 'PMUC' : book === 'betpawa' ? 'BetPawa' : book;
+  const head = cap(leg.book);
+  // Per-book section names as displayed on the site
+  const sectionFor = () => {
+    const asian = b.match(/\(Asian ([^)]+)\)/);
+    const market = kind.toLowerCase();
+    if (asian) {
+      const row = asian[1]; // e.g. "3.0,3.5"
+      if (leg.book === 'betfrenzy') return `Goals tab → Over/Under, row ${row}`;
+      return `Asian Total section, row ${row}`;
+    }
+    if (/over\/under/.test(market) || /^over/i.test(b) || /^under/i.test(b)) {
+      const m = b.match(/(\d+(?:\.\d+)?)\s*(?:goals|corners)/i);
+      return m ? `Over/Under section, row ${m[1]}` : 'Over/Under section';
+    }
+    if (/asian handicap/.test(market)) {
+      const m = b.match(/([+-]\d+(?:\.\d+)?)/);
+      const row = m ? m[1] : '';
+      const isHomeSide = b.startsWith(c.teams[0]);
+      if (leg.book === 'betfrenzy') return `Asian Handicap section, ${row} (${isHomeSide ? 'home' : 'away'} button)`;
+      return `Asian Handicap section, button "${isHomeSide ? '1' : '2'}(${row})"`;
+    }
+    if (/double chance/.test(market)) return 'Double Chance section';
+    if (/both teams/.test(market)) return 'Both Teams to Score section';
+    if (/draw no bet/.test(market)) return 'Draw No Bet section';
+    if (/1x2/.test(market)) return 'Full Time section';
+    return '';
+  };
+  const section = sectionFor();
+  return section ? `📍 ${head}: ${section}` : '';
+}
+
 function screenshotHintForLeg(leg, c) {
   const b = leg.bet || '';
   const home = c.teams[0], away = c.teams[1];
@@ -755,6 +833,9 @@ async function report(c) {
     const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betwinner' ? 'BetWinner' : s.book === 'paripesa' ? 'PariPesa' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
     lines.push(`${i + 1}) ON ${cap.toUpperCase()} → bet: ${s.bet}${tag}`);
     lines.push(`    Odds ${s.odds} | Stake ${s.stake} XAF → wins ${s.payout} XAF`);
+    // Guaranteed "how to find it" — works even if the screenshot fails
+    const find = howToFindLeg(s, c);
+    if (find) lines.push(`    ${find}`);
     if (s.link) lines.push(`    Link: ${s.link}`);
   });
   lines.push('─'.repeat(32));
