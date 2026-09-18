@@ -805,14 +805,18 @@ async function alertBookFailure(counts) {
 
 async function collectCandidates() {
   console.log(`[Arb] Fetch ${new Date().toISOString()}`);
-  const bf = await fetchBetfrenzy().catch(() => []);
-  const bp = await fetchBetpawa().catch(() => []);
-  const pm = await fetchPmuc().catch(() => []);
-  const pb = await fetchPremierbet().catch(() => []);
-  const xb = await fetch1xbet().catch(() => []);
-  const bw = await fetchBetwinner().catch(() => []);
-  const pp = await fetchParipesa().catch(() => []);
-  const sb = await fetchSportybet().catch(() => []);
+  // Fetch all books IN PARALLEL so the discovery pass is one aligned snapshot (the old
+  // sequential loop mixed odds that never coexisted; the aligned pass-3 still confirms).
+  const [bf, bp, pm, pb, xb, bw, pp, sb] = await Promise.all([
+    fetchBetfrenzy().catch(() => []),
+    fetchBetpawa().catch(() => []),
+    fetchPmuc().catch(() => []),
+    fetchPremierbet().catch(() => []),
+    fetch1xbet().catch(() => []),
+    fetchBetwinner().catch(() => []),
+    fetchParipesa().catch(() => []),
+    fetchSportybet().catch(() => []),
+  ]);
 console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, betwinner ${bw.length}, paripesa ${pp.length}, sportybet ${sb.length}`);
   await alertBookFailure({ betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
   // Keep all events — kickoff is tagged per candidate so alerts show a countdown

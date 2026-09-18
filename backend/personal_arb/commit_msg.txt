@@ -1,0 +1,15 @@
+audit fixes (per external audit): parallel pass-1, retire legacy writers, toml fix
+
+- collectCandidates now fetches all 7 books in PARALLEL - discovery pass is a single
+  aligned snapshot instead of mixing sequential snapshots (audit finding 3)
+- quantService.runArbScanner is a hard no-op: RETIRED (legacy Firestore writer has no
+  period/scope gate, no aligned verification - would publish false positives if
+  re-enabled). scheduler task already disabled.
+- legacy scrapers flagged RETIRED: api_football_arb_scraper.py, arb_calculator.py,
+  betpawa_scraper.py, xbet_scraper.py (audit finding 2)
+- railway.toml no longer defaults ARB_PROXY to empty - the blank default silently
+  disabled 5 of 7 books when dashboard vars were absent; now documented as required
+  (finding 4)
+
+NOT done (per user): Firestore wiring - scanner stays private, Telegram/WhatsApp only.
+Live verified: 7/7 books, parallel fetch, tests pass.

@@ -10,5 +10,7 @@ healthcheckTimeout = 100
 [env]
 TELEGRAM_BOT_TOKEN = ""
 TELEGRAM_CHAT_ID = ""
-# Residential proxy (optional but recommended for 1xbet): http://user:pass@host:port
-ARB_PROXY = ""
+# ARB_PROXY is REQUIRED for pmuc/premierbet/1xbet/betwinner/paripesa (cloud IPs are
+# blocked). Do NOT default it to "" here — set it in the Railway dashboard variables
+# (http://user:pass@host:port). A blank default silently disables 5 of 7 books.
+# ARB_PROXY = ""
