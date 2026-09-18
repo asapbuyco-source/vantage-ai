@@ -71,11 +71,20 @@ EMPIRICAL_BOOSTS = (
     (0.60, 0.70, 1.15),
 )
 
-def apply_empirical_boost(p: float) -> float:
-    """Nudge model probabilities toward observed frequencies."""
+def apply_empirical_boost(p: float, cap: float | None = None) -> float:
+    """Nudge model probabilities toward observed frequencies.
+
+    `cap` (optional) = the RAW model probability. The boost is clamped so the
+    final value never EXCEEDS the raw model output — otherwise the empirical
+    correction (which exists to fix underconfidence) would reverse the
+    calibration discount and push probabilities above the model's own estimate.
+    """
     for lo, hi, f in EMPIRICAL_BOOSTS:
         if lo <= p < hi:
-            return min(0.95, p * f)
+            boosted = min(0.95, p * f)
+            if cap is not None:
+                boosted = min(boosted, cap)
+            return boosted
     return p
 
 # ── Workstream 6: Dynamic Calibration ────────────────────────────────────────
@@ -96,33 +105,33 @@ def get_season_phase_multiplier(month: int) -> float:
 # The fixed over25 × 0.82 works for EPL average (2.7 GPG) but is wrong for Serie A (2.4 GPG) or Bundesliga (3.1 GPG).
 # Tuple format: (league_id, over25_adj, btts_adj) relative to base calibration
 LEAGUE_GOALS_MODIFIER = {
-    # ── Elite (very well calibrated) ─────────────────────────────────
+    # ── Elite (very well calibrated) — API-Football league IDs ──────────
     39:   (1.00, 1.00),   # EPL — baseline (~2.8 GPG)
     140:  (0.96, 0.97),   # La Liga — lower scoring (~2.5 GPG)
     78:   (1.06, 1.04),   # Bundesliga — higher scoring (~3.1 GPG)
     135:  (0.95, 0.96),   # Serie A — defensive (~2.6 GPG)
     61:   (1.02, 1.01),   # Ligue 1 — near baseline (~2.7 GPG)
     # ── High-scoring leagues ─────────────────────────────────────────
-    72:   (1.06, 1.04),   # Eredivisie (~3.2 GPG)
+    88:   (1.06, 1.04),   # Eredivisie (~3.2 GPG)
     169:  (1.07, 1.05),   # Chinese Super League (~3.3 GPG)
     98:   (1.04, 1.02),   # J1 League (~2.8 GPG, high variance)
     # ── Low/medium-scoring second-tier ───────────────────────────────
-    395:  (0.92, 0.94),   # Serie B Italy (~2.2 GPG)
-    302:  (0.94, 0.95),   # Ligue 2 (~2.3 GPG)
-    567:  (0.90, 0.90),   # Segunda Division (~2.1 GPG)
-    85:   (0.96, 0.97),   # 2. Bundesliga (~2.6 GPG)
+    136:  (0.92, 0.94),   # Serie B Italy (~2.2 GPG)
+    62:   (0.94, 0.95),   # Ligue 2 (~2.3 GPG)
+    141:  (0.90, 0.90),   # Segunda Division (~2.1 GPG)
+    81:   (0.96, 0.97),   # 2. Bundesliga (~2.6 GPG)
     # ── Defensive / low-scoring leagues ──────────────────────────────
-    254:  (0.85, 0.86),   # Brasileirao Serie B (~2.0 GPG) — very defensive
-    10:   (0.95, 0.96),   # England League 1 (~2.4 GPG)
-    12:   (0.94, 0.95),   # England League 2 (~2.3 GPG)
-    14:   (0.96, 0.97),   # National League (~2.5 GPG)
-    51:   (0.93, 0.94),   # Liga Portugal 2 (~2.2 GPG)
-    401:  (0.94, 0.95),   # PSL South Africa (~2.3 GPG)
-    255:  (0.96, 0.97),   # USL Championship (~2.6 GPG)
+    72:   (0.85, 0.86),   # Brasileirao Serie B (~2.0 GPG) — very defensive
+    119:  (0.95, 0.96),   # England League 1 (~2.4 GPG)
+    120:  (0.94, 0.95),   # England League 2 (~2.3 GPG)
+    121:  (0.96, 0.97),   # England National League (~2.5 GPG)
+    1447: (0.93, 0.94),   # Liga Portugal 2 (~2.2 GPG)
+    1062: (0.94, 0.95),   # PSL South Africa (~2.3 GPG)
+    2532: (0.96, 0.97),   # USL Championship (~2.6 GPG)
     # ── South American (home-heavy, high variance) ──────────────────
     71:   (0.98, 0.97),   # Brasileirao Serie A — fewer goals than European peers
-    325:  (0.96, 0.95),   # Argentine Primera — physical, low scoring
-    266:  (0.97, 0.96),   # Chile Primera
+    128:  (0.96, 0.95),   # Argentine Primera — physical, low scoring
+    265:  (0.97, 0.96),   # Chile Primera
     281:  (0.96, 0.95),   # Peru Liga 1
 }
 
@@ -234,7 +243,7 @@ def _normalize_market_key(market: str) -> str:
     return m
 
 
-def update_calibration_from_results(graded_predictions: list[dict]) -> dict:
+def update_calibration_from_results(graded_predictions: list[dict], db=None) -> dict:
     """
     Update calibration statistics from graded predictions.
 
@@ -245,6 +254,9 @@ def update_calibration_from_results(graded_predictions: list[dict]) -> dict:
     Args:
         graded_predictions: List of prediction dicts with 'status' ('won'/'lost'/'void')
                           and market info
+        db: optional Firestore client. When provided, updated factors are PERSISTED
+            so they survive process restarts (previously they only lived in memory
+            and every restart reverted to the hardcoded seeds).
 
     Returns:
         Summary dict of what was updated
@@ -307,8 +319,63 @@ def update_calibration_from_results(graded_predictions: list[dict]) -> dict:
                     }
                     print(f"[Calibration] 📊 {key}: {old_factor:.3f} -> {new_factor:.3f} (n={n}, predicted={avg_predicted:.3f}, actual={avg_actual:.3f})")
 
+    if db is not None and updates:
+        try:
+            save_calibration_to_firestore(db)
+        except Exception as e:
+            print(f"[Calibration] Firestore persist failed (non-fatal): {e}", file=sys.stderr)
+
     return {
         "status": "success",
         "markets_updated": len(updates),
         "details": updates,
     }
+
+
+# ── Firestore persistence (BUG: factors were only in-memory, lost on restart) ──
+_CALIBRATION_DOC = "calibration_registry"
+
+
+def save_calibration_to_firestore(db) -> None:
+    """Write the current MARKET_FACTORS table to Firestore so auto-updated
+    calibration factors survive process restarts."""
+    db.collection("system_config").document(_CALIBRATION_DOC).set({
+        "version": CALIBRATION_VERSION,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "market_factors": {
+            k: {"avg_predicted": v[0], "avg_actual": v[1], "discount_factor": v[2],
+                "sample_size": v[3], "last_updated": v[4]}
+            for k, v in MARKET_FACTORS.items()
+        },
+    })
+
+
+def load_calibration_from_firestore(db) -> bool:
+    """Load persisted MARKET_FACTORS into the in-memory registry at startup.
+    Returns True if a saved table was applied. Unknown/old versions fall back
+    to the hardcoded seeds (the source of truth)."""
+    try:
+        doc = db.collection("system_config").document(_CALIBRATION_DOC).get()
+        if not doc.exists:
+            return False
+        data = doc.to_dict() or {}
+        factors = data.get("market_factors") or {}
+        if not factors:
+            return False
+        applied = 0
+        for key, entry in factors.items():
+            if key in MARKET_FACTORS and isinstance(entry, dict):
+                MARKET_FACTORS[key] = (
+                    float(entry.get("avg_predicted", 0)),
+                    float(entry.get("avg_actual", 0)),
+                    float(entry.get("discount_factor", 0.95)),
+                    int(entry.get("sample_size", 0)),
+                    str(entry.get("last_updated", "")),
+                )
+                applied += 1
+        if applied:
+            print(f"[Calibration] Loaded {applied} persisted factors (version {data.get('version', '?')})")
+        return applied > 0
+    except Exception as e:
+        print(f"[Calibration] Firestore load failed (non-fatal): {e}", file=sys.stderr)
+        return False

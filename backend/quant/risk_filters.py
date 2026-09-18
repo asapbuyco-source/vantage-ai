@@ -90,7 +90,7 @@ def apply_filters(bet: ValueBet, league_tier: int = 1) -> FilterResult:
     # No real football match should have ≥88% model confidence for BTTS No or Under 3.5.
     # If we see this, it means xG data is unreliable (e.g., form fetch returned 0 goals).
     m = bet.market.lower()
-    is_defensive = "btts no" in m or "under 3.5" in m or "under 2.5" in m
+    is_defensive = "btts no" in m or "under 1.5" in m or "under 2.5" in m or "under 3.5" in m
     if is_defensive and bet.model_prob >= 0.88:
         return FilterResult(False, f"Defensive market probability suspiciously high ({bet.model_prob:.1%}) — likely data quality issue, skipping.")
 
@@ -191,9 +191,18 @@ def grade_risk(bet: ValueBet) -> str:
       risky → below these thresholds
     """
     m = bet.market.lower()
+    # First-half markets ("Home Win FH", "Over 1.5 FH Goals") have much higher
+    # variance than full-match markets — they must use stricter thresholds,
+    # not the full-match result-market ones.
+    is_fh = "fh" in m or "1h" in m or "first half" in m or "1st half" in m
     is_result = any(k in m for k in ["home win", "away win", "draw", "double chance", "draw no bet"])
-    
-    if is_result:
+
+    if is_fh:
+        if bet.model_prob >= 0.60 and bet.expected_value >= 0.08:
+            return "safe"
+        if bet.model_prob >= 0.50 and bet.expected_value >= 0.06:
+            return "value"
+    elif is_result:
         if bet.model_prob >= 0.55 and bet.expected_value >= 0.06:
             return "safe"
         if bet.model_prob >= 0.45 and bet.expected_value >= 0.05:

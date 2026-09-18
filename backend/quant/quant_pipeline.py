@@ -435,7 +435,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             # ── Dynamic Dixon-Coles rho (BUG-01 fixed) ─────────────────────
             # BUG-01: was `str(id) in str(id)` which was always True for any ID
             # containing a digit that appeared in another. Now uses frozenset lookup.
-            is_derby = is_derby_match(match.home_team_id, match.away_team_id)
+            is_derby = is_derby_match(match.home_team_id, match.away_team_id, match.home_team, match.away_team)
             rho = compute_dynamic_rho(mu_home, mu_away, match.league_tier, is_derby)
 
             # Combine models (Poisson + Elo + Form + H2H)
@@ -630,6 +630,23 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             else:
                 kelly = 0.0
 
+            # ── Kelly per market: the full list of passing bets also gets a
+            # stake recommendation (audit finding: only best_bet was stored). ──
+            value_bets = []
+            if approved_bets:
+                for vb in approved_bets[:10]:
+                    vb_kelly = kelly_stake_pct(vb.model_prob, vb.odds, vb.market, vb.calibration_tier)
+                    if vb_kelly > 0:
+                        value_bets.append({
+                            "market": vb.market,
+                            "probability": round(vb.model_prob, 4),
+                            "odds": vb.odds,
+                            "expected_value": round(vb.expected_value, 4),
+                            "kelly_stake_pct": round(vb_kelly * staleness_mult, 2),
+                            "calibration_tier": vb.calibration_tier,
+                            "grade": grade_risk(vb),
+                        })
+
             # ── Build prediction dict with RICH match stats ─────────────────
             pred = {
                 "fixture_id": match.fixture_id,
@@ -664,6 +681,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "market_implied_prob": best_bet.market_prob if best_bet else 0,
                 "inefficiency": best_bet.inefficiency if best_bet else 0,
                 "kelly_stake": kelly,
+                "value_bets": value_bets,
                 "raw_probability": round(best_bet.raw_model_prob, 4) if best_bet else 0,
                 "calibrated_probability": round(best_bet.model_prob, 4) if best_bet else 0,
                 "calibration_factor": best_bet.calibration_factor if best_bet else 1.0,
