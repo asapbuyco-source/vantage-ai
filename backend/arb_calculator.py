@@ -1,3 +1,5 @@
+# RETIRED (2026-09): legacy arb Firestore writer - superseded by backend/personal_arb/arb_scanner_live.js (period/scope gated, aligned verification, Telegram/WhatsApp only). Do NOT re-enable; the private scanner is the only source of arb signals.
+# This file is inert: quantService.runArbScanner is now a hard no-op and the scheduler task is disabled.
 import sys
 import os
 import time

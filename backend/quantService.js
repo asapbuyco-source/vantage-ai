@@ -864,25 +864,12 @@ export const runLineupSyncer = async (dateStr = null) => {
     }
 };
 
+// RETIRED (2026-09): the legacy Firestore arb writer (api_football_arb_scraper.py) has no
+// period/scope gate, no aligned re-fetch and weaker event matching than the private Node
+// scanner (backend/personal_arb/arb_scanner_live.js), which reports via Telegram/WhatsApp
+// only. This function is kept as a hard no-op so it can never publish false positives to
+// Firestore; remove entirely if the legacy scrapers are deleted.
 export const runArbScanner = async () => {
-    logger.info('[QuantService] Running Arb Scanner...');
-    try {
-        const pythonBin = await resolvePythonBin();
-        return new Promise((resolve) => {
-            const py = spawn(pythonBin, ['api_football_arb_scraper.py'], {
-                cwd: path.join(__dirname, 'scrapers'),
-                env: buildPythonEnv(),
-            });
-            py.stdout.on('data', d => logger.info(`[Python|ArbScanner] ${d}`));
-            py.stderr.on('data', d => logger.warn(`[Python|ArbScanner|ERR] ${d}`));
-            py.on('close', code => {
-                if (code === 0) resolve({ status: 'success' });
-                else resolve({ status: 'error', reason: `exit code ${code}` });
-            });
-            py.on('error', err => resolve({ status: 'error', error: err.message }));
-        });
-    } catch (e) {
-        logger.error(`[QuantService] Arb Scanner failed: ${e.message}`);
-        return { status: 'error', error: e.message };
-    }
+    logger.info('[QuantService] Arb Scanner is RETIRED — legacy Firestore writer disabled.');
+    return { status: 'retired' };
 };
