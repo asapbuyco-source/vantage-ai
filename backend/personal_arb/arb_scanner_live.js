@@ -465,18 +465,13 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
-// ── WhatsApp Cloud API (Meta official) ──
-// Env vars (Railway + .env.local):
-//   WHATSAPP_TOKEN            access token — temporary (24h, for tests) or permanent system-user token
-//   WHATSAPP_PHONE_NUMBER_ID  from Meta app → WhatsApp → API Setup (numeric ID, not the phone number)
-//   WHATSAPP_TO               your WhatsApp number, digits only with country code (e.g. 2376XXXXXXXX)
-//   WHATSAPP_TEMPLATE         optional approved Utility template name — REQUIRED for alerts sent
-//                             outside the 24h customer-service window (business-initiated)
-//   WHATSAPP_TEMPLATE_LANG    template language code (default en_US)
-// Free-form text only delivers within 24h of your last message to the business number; outside
-// that window the API returns error 131047 and we fall back to the approved template.
+// ── WhatsApp Cloud API (Meta official) — DISABLED by default ──
+// Set WHATSAPP_ENABLED=1 to re-enable. Until then every WhatsApp function is a no-op
+// (Telegram is the only alert channel).
+const WA_ENABLED = () => process.env.WHATSAPP_ENABLED === '1';
 const WA_GRAPH = 'https://graph.facebook.com/v21.0';
 async function sendWhatsApp(text) {
+  if (!WA_ENABLED()) return 'disabled';
   const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
   if (!token || !phoneId || !to) return 'skipped';
   try {
@@ -502,6 +497,7 @@ async function sendWhatsApp(text) {
 // Send a PNG screenshot to WhatsApp too (screenshots previously went to Telegram
 // only — a WhatsApp-centric user never saw them).
 async function sendWhatsAppPhoto(pngBuffer, caption) {
+  if (!WA_ENABLED()) return false;
   const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
   if (!token || !phoneId || !to) return false;
   try {
@@ -553,6 +549,7 @@ async function sendWhatsAppPhoto(pngBuffer, caption) {
 //     Links: {{7}}
 //     Verify prices on both sites before betting.
 async function sendWhatsAppTemplate(params) {
+  if (!WA_ENABLED()) return false;
   const token = process.env.WHATSAPP_TOKEN, phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID, to = process.env.WHATSAPP_TO;
   const name = process.env.WHATSAPP_TEMPLATE;
   if (!token || !phoneId || !to || !name) return false;
@@ -734,8 +731,8 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
     const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
     const j = await r.json().catch(() => ({}));
     console.log(`[Shot] ${book} → ${j.ok ? 'sent' : j.description || 'failed'}`);
-    // And to WhatsApp (screenshots used to go to Telegram only)
-    await sendWhatsAppPhoto(png, caption);
+    // And to WhatsApp (only when explicitly re-enabled)
+    if (WA_ENABLED()) await sendWhatsAppPhoto(png, caption);
   } catch (e) {
     console.log(`[Shot] ${book} screenshot failed: ${e.message.slice(0, 80)}`);
   } finally {
@@ -845,8 +842,9 @@ async function report(c) {
   const full = lines.join('\n');
   console.log(full);
   const waState = await notify(full);
-  // Outside the 24h WhatsApp service window free-form fails — fall back to the approved template
-  if (waState === 'window_closed' && process.env.WHATSAPP_TEMPLATE) await sendWhatsAppTemplate(buildArbTemplateParams(c));
+  // WhatsApp is disabled unless WHATSAPP_ENABLED=1; the template fallback only
+  // applies if it is ever re-enabled (24h service window closed).
+  if (waState === 'window_closed' && WA_ENABLED() && process.env.WHATSAPP_TEMPLATE) await sendWhatsAppTemplate(buildArbTemplateParams(c));
   // Screenshot each book's match page for EVERY arb — so you SEE the exact bet and
   // the highlighted odds button (asian-line rows are the hardest to find). Auto-click
   // the odds button so the bet slip shows the selection. Screenshot is best-effort:
