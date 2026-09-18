@@ -599,8 +599,10 @@ async function notify(text) {
 }
 
 // Screenshot a book's match page and send it to Telegram — so you SEE the exact bet.
-// `hint.text` = the market line/section label as displayed on that page (e.g. "2.5,3.0"
-// for an asian total, "-0.25" for AH) — the picker requires it near the odds button.
+// MOBILE VIEWPORT: the user bets on their phone, and betfrenzy's mobile layout shows
+// the exact row labels ("Over/Under 2.0,2.5 Goals") — a desktop shot doesn't match
+// what the user sees. A ZOOMED CROP around the highlighted button (section title +
+// the row) is sent, not a full-page viewport, so the marker is impossible to miss.
 async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chat || !link) return;
@@ -609,23 +611,19 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
   const file = path.join(SHOT_DIR, `${book}_${Date.now()}.png`);
   let ctx;
   try {
-    // 1xbet-family runs headed (needs display); others headless
+    // Mobile-first: betfrenzy/betpawa/premierbet render the same way on a phone.
+    // 1xbet-family stays headed desktop (WAF-blocked anyway, skipped at call site).
     const headed = ['1xbet', 'betwinner', 'paripesa'].includes(book);
-    ctx = await launchBook(book, { headless: !headed, viewport: { width: 1400, height: 1000 } });
+    ctx = await launchBook(book, { headless: !headed, viewport: { width: 390, height: 844, isMobile: !headed } });
     const page = await ctx.newPage();
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(['1xbet', 'betwinner', 'paripesa'].includes(book) ? 16000 : 9000); // let markets render
-    // Highlight the odds button: find element whose text matches the odds, outline + scroll to it.
-    // CRITICAL: skip elements inside half-time / special-period markets — the scanner only ever
-    // reports FULL-MATCH arbs, so highlighting a "1st Half" button would be a false visual.
+    let shotBox = null, shotWhere = '';
     if (oddsValue) {
       // Section-first picker: find the market SECTION by its title (with the line closest
       // to ours — page lines can drift), then the odds button within it by closest value.
-      // Row-label matching proved unreliable: betfrenzy never renders the feed's split
-      // labels ("2.5,3.0"), and the first odds match on the page can be a completely
-      // different market (Anytime Goalscorer 2.05). Markets also render late, so the
-      // whole pick is retried until sections appear (up to ~30s).
-      const pickAndClick = () => page.evaluate(({ odds, hint }) => {
+      // Markets render late, so the whole pick is retried until sections appear (~30s).
+      const pickAndHighlight = () => page.evaluate(({ odds, hint }) => {
         const want = parseFloat(String(odds));
         const market = hint?.market || '';
         const wantLine = hint?.line != null ? parseFloat(hint.line) : null;
@@ -651,7 +649,6 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
               const v = parseFloat(t.replace(',', '.'));
               return !isNaN(v) && v >= 1.01 && v <= 100;
             });
-          // keep only leaf-most nodes: drop wrappers whose descendants also carry odds text
           return all.filter(b => !Array.from(b.querySelectorAll('*')).some(c => {
             const ct = (c.textContent || '').trim();
             if (!ct || ct.length > 8) return false;
@@ -659,8 +656,6 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
             return !isNaN(cv) && cv >= 1.01 && cv <= 100;
           }));
         };
-        // 1) find section containers: title at the head, NOT a half/special market, and
-        // containing at least 2 odds buttons (a real market section, not a label grid)
         const sections = [];
         for (const el of document.querySelectorAll('div,section,article,li')) {
           const t = (el.textContent || '').trim();
@@ -669,67 +664,81 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           if (!titleRe.test(head)) continue;
           if (market === 'ou' && target === 'corners' && !/corner/i.test(head)) continue;
           if (market === 'ou' && target === 'goals' && /corner/i.test(head)) continue;
-          // 1X2: only the plain "Full Time" section — not "Full Time & 2 Up", "& both teams", etc.
           if (market === '1x2' && /&|\bup\b|both/i.test(head)) continue;
           if (isHalf(t)) continue;
           const btns = oddsButtons(el);
           if (btns.length < 2) continue;
           sections.push({ el, t, line: lineOf(head), len: t.length, btns });
         }
-        // 2) pick the section: closest line to ours (missing line = poor match), then the
-        // tightest container so we don't grab a page-wide wrapper
         let best = null, bestD = Infinity, bestLen = Infinity;
         for (const s of sections) {
           const d = (wantLine != null) ? (s.line != null ? Math.abs(s.line - wantLine) : 999) : 0;
           if (d < bestD || (d === bestD && s.len < bestLen)) { bestD = d; bestLen = s.len; best = s; }
         }
         if (!best) return { ok: false, where: 'section not found' };
-        // 3) odds button within the section: closest value to ours (robust to Over/Under
-        // DOM order and line drift); fall back to position index, else show the section
         let hit = null, bd = Infinity;
         for (const b of best.btns) {
           const v = parseFloat((b.textContent || '').trim().replace(',', '.'));
           const d = Math.abs(v - want);
           if (d < bd) { bd = d; hit = b; }
         }
-        if (bd > 0.5) hit = null; // line may have drifted up to a half-step; beyond that only show the section
+        if (bd > 0.5) hit = null;
         if (!hit && typeof index === 'number' && best.btns[index]) hit = best.btns[index];
         if (hit) {
           hit.scrollIntoView({ block: 'center', inline: 'center' });
           hit.style.outline = '4px solid #ff2d2d';
           hit.style.outlineOffset = '2px';
           hit.style.boxShadow = '0 0 0 6px rgba(255,45,45,0.4)';
-          let targetEl = hit;
-          const ce = hit.closest('a, button, [class*="odd"], [class*="bet"], [class*="selection"], [class*="outcome"], [role="button"]');
-          if (ce) targetEl = ce;
-          try { targetEl.click(); } catch {}
-          return { ok: true, clicked: true, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
+          const r = hit.getBoundingClientRect();
+          return { ok: true, box: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
         }
-        // no odds button matched — at least show the right section, and DRAW an orange
-        // outline around the whole section so the user still sees exactly where it is
+        // section-only fallback: draw the orange outline and return the section box
         best.el.scrollIntoView({ block: 'center' });
         best.el.style.outline = '4px solid #ff9900';
         best.el.style.outlineOffset = '2px';
-        return { ok: true, clicked: false, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
+        const r2 = best.el.getBoundingClientRect();
+        return { ok: true, box: { x: Math.round(r2.x), y: Math.round(r2.y), w: Math.round(r2.width), h: Math.round(r2.height) }, where: best.t.slice(0, 45).replace(/\s+/g, ' ') };
       }, { odds: oddsValue, hint: hint || {} });
       let res = { ok: false, where: 'not evaluated' };
       for (let attempt = 0; attempt < 7; attempt++) {
-        res = await pickAndClick();
+        res = await pickAndHighlight();
         if (res.ok) break;
         console.log(`[Shot] ${book} markets not ready yet (attempt ${attempt + 1}/7) — waiting 4s...`);
         await page.waitForTimeout(4000);
       }
-      console.log(`[Shot] ${book} odds ${oddsValue} -> ${res.clicked ? 'highlighted + clicked' : res.ok ? 'section shown (odds not found in section)' : 'no match'}: ${res.where || ''}`);
-      await page.waitForTimeout(3500);
+      shotBox = res.box || null;
+      shotWhere = res.where || '';
+      console.log(`[Shot] ${book} odds ${oddsValue} -> ${res.ok ? `marked: ${res.where}` : 'no match'}`);
+      await page.waitForTimeout(1500);
     }
-    await page.screenshot({ path: file, fullPage: false });
+    // ZOOMED CROP around the marker: section title above + the row below.
+    // The crop is what gets sent — the red/orange box is always in frame.
+    const vp = page.viewportSize();
+    let clip = null;
+    if (shotBox) {
+      const cropH = Math.min(430, vp.height);
+      const cy = shotBox.y + shotBox.h / 2;
+      let y = cy - 210;
+      if (y < 0) y = 0;
+      if (y + cropH > vp.height) y = Math.max(0, vp.height - cropH);
+      clip = { x: 0, y, width: vp.width, height: cropH };
+      console.log(`[Shot] ${book} crop y=${y} h=${cropH} (marker at ${shotBox.y})`);
+    }
+    await page.screenshot({ path: file, clip: clip || undefined });
+    // After the clean shot, auto-click the marker (bet slip shows the selection on the page)
+    if (shotBox) {
+      try {
+        await page.mouse.click(shotBox.x + shotBox.w / 2, shotBox.y + shotBox.h / 2);
+        console.log(`[Shot] ${book} auto-clicked marker`);
+      } catch (e) { console.log(`[Shot] ${book} click failed: ${e.message.slice(0, 60)}`); }
+    }
     await ctx.close();
     ctx = null;
     const png = fs.readFileSync(file);
     // Send as photo to Telegram
     const form = new FormData();
     form.append('chat_id', chat);
-    form.append('caption', caption);
+    form.append('caption', `${caption}${shotWhere ? `\n📍 Marked: ${shotWhere}` : ''}`);
     form.append('photo', new Blob([png], { type: 'image/png' }), `${book}.png`);
     const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
     const j = await r.json().catch(() => ({}));
