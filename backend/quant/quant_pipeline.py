@@ -912,7 +912,11 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
         return {"status": "skipped", "reason": "no_matches_analyzed", "date": date_str, "matches_analyzed": len(matches)}
 
     # ── Step 10: Generate accumulators ─────────────────────────────────────
-    accas_dict = generate_accumulators(acc_pool, acc_pool)
+    # bet_pool = EV/value bets; acc_pool = high-probability picks. The 4 EV tiers
+    # (baseline/alpha/syndicate/variance) are built from bet_pool; safe_stack is
+    # built from acc_pool. FIX: bet_pool was computed but never passed — every
+    # tier ran on acc_pool, so "Alpha Edge" etc. were just re-sorted safe picks.
+    accas_dict = generate_accumulators(bet_pool, acc_pool)
     
     total_accas = sum(len(v) for v in accas_dict.values())
     _safe_print(f"[QuantPipeline] 🎰 Generated {total_accas} named accumulators across 4 tiers.")
