@@ -6,6 +6,9 @@ echo "=== [start] node version: $(node --version)"
 echo "=== [start] cwd: $(pwd)"
 echo "=== [start] playwright: $(node -e "console.log(require.resolve('playwright'))" 2>&1 || echo MISSING)"
 echo "=== [start] starting Xvfb on :99..."
+# Crash-restarts can leave a stale Xvfb + lock (the old process still owns :99).
+pkill -f "Xvfb :99" 2>/dev/null || true
+rm -f /tmp/.X99-lock
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
 XVFB_PID=$!
 sleep 3

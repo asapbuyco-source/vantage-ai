@@ -777,7 +777,7 @@ function howToFindLeg(leg, c) {
     if (/asian handicap/.test(market)) {
       const m = b.match(/([+-]\d+(?:\.\d+)?)/);
       const row = m ? m[1] : '';
-      const isHomeSide = b.startsWith(c.teams[0]);
+      const isHomeSide = b.toLowerCase().startsWith(String(c.teams[0]).toLowerCase());
       if (leg.book === 'betfrenzy') return `Asian Handicap section, ${row} (${isHomeSide ? 'home' : 'away'} button)`;
       return `Asian Handicap section, button "${isHomeSide ? '1' : '2'}(${row})"`;
     }
@@ -802,10 +802,10 @@ function screenshotHintForLeg(leg, c) {
   };
   if (/^Over/i.test(b)) return { market: 'ou', target: /corner/i.test(b) ? 'corners' : 'goals', line: lineFromBet(), index: 0 };
   if (/^Under/i.test(b)) return { market: 'ou', target: /corner/i.test(b) ? 'corners' : 'goals', line: lineFromBet(), index: 1 };
-  // AH legs end with a signed line ("Anderlecht -0.25", "Lyon +0.25")
+  // AH legs end with a signed line ("anderlecht -0.25", "lyon +0.25")
   const ah = b.match(/([+-]\d+(?:\.\d+)?)\s*$/);
-  if (ah) return { market: 'ah', line: parseFloat(ah[1]), index: b.startsWith(home) ? 0 : 1 };
-  if (/draw no bet|draw refunds/i.test(b)) return { market: 'dnb', index: b.startsWith(home) ? 0 : 1 };
+  if (ah) return { market: 'ah', line: parseFloat(ah[1]), index: b.toLowerCase().startsWith(String(home).toLowerCase()) ? 0 : 1 };
+  if (/draw no bet|draw refunds/i.test(b)) return { market: 'dnb', index: b.toLowerCase().startsWith(String(home).toLowerCase()) ? 0 : 1 };
   if (/or Draw|No Draw/i.test(b)) {
     const idx = /\(1X\)/.test(b) ? 0 : /\(X2\)/.test(b) ? 1 : 2;
     return { market: 'dc', index: idx };
@@ -866,7 +866,7 @@ async function report(c) {
   // alert still open the right page for manual checks.
   const SCREENSHOT_SKIP = new Set(['1xbet', 'betwinner', 'paripesa']);
   for (const s of c.legs) {
-    if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds, screenshotHintForLeg(s));
+    if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds, screenshotHintForLeg(s, c));
   }
 }
 
