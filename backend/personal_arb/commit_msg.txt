@@ -1,15 +1,19 @@
-audit fixes (per external audit): parallel pass-1, retire legacy writers, toml fix
+fix(shot+verify): refuse wrong-market highlights + warn when a line is not on the page
 
-- collectCandidates now fetches all 7 books in PARALLEL - discovery pass is a single
-  aligned snapshot instead of mixing sequential snapshots (audit finding 3)
-- quantService.runArbScanner is a hard no-op: RETIRED (legacy Firestore writer has no
-  period/scope gate, no aligned verification - would publish false positives if
-  re-enabled). scheduler task already disabled.
-- legacy scrapers flagged RETIRED: api_football_arb_scraper.py, arb_calculator.py,
-  betpawa_scraper.py, xbet_scraper.py (audit finding 2)
-- railway.toml no longer defaults ARB_PROXY to empty - the blank default silently
-  disabled 5 of 7 books when dashboard vars were absent; now documented as required
-  (finding 4)
+Diagnosed with the Brentford-Chelsea and Connah's Quay events:
+- the alert math is correct (0.74% = worst case at exactly 3 goals; 1.46% is the
+  naive figure that ignores the quarter-line split)
+- but betfrenzy's feed O/U line (1_3, e.g. 3.0,3.5 / 2.5,3.0) is NOT rendered on
+  their page for many events (verified: 8 retries over ~40s, no split row; only
+  'Over/Under 2.5 Goals' and 'Total Goals' rows 0.5/1.5/3.5...). The old picker
+  then highlighted a WRONG section ('Full Time & Over/Under 2.5'), producing a
+  screenshot that did not verify the alert.
 
-NOT done (per user): Firestore wiring - scanner stays private, Telegram/WhatsApp only.
-Live verified: 7/7 books, parallel fetch, tests pass.
+Picker fixes:
+- lineOf now parses split titles to their mid ('Over/Under 2.0,2.5 Goals' -> 2.25)
+  and signed AH pairs to their mid ('-1.0,-1.5' -> -1.25); AH distance by magnitude
+- tolerance: quarter lines require an EXACT match (0.05), half/integer 0.35 —
+  a section further away is a different market and is refused
+- when refused, a separate Telegram warning is sent ('could NOT locate this bet...
+  treat this leg as UNVERIFIED') plus the screenshot caption carries the warning
+Verified: Connah's now refused ('closest off by 0.25'); Brentford has no split row.

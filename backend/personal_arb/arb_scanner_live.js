@@ -636,10 +636,24 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           : market === '1x2' ? /full\s*time\s*(?:result|1x2)?/i
           : /over\s*\/?\s*under/i;
         const lineOf = (t) => {
-          if (market === 'ah') { const m = t.match(/handicap\s*([+-]?\d+(?:[.,]\d+)?)/i); return m ? parseFloat(m[1].replace(',', '.')) : null; }
-          const m = t.match(/under\s*(\d+(?:[.,]\d+)?)/i) || t.match(/(\d+(?:[.,]\d+)?)\s*(?:goals?|corners)?/i);
-          return m ? parseFloat(m[1].replace(',', '.')) : null;
+          if (market === 'ah') {
+            // mobile AH rows read "Asian Handicap<teams>-1.0,-1.51.98+1.0,+1.51.82"
+            const m = t.match(/([+-]\d+(?:\.\d+)?)(?:,\s*([+-]\d+(?:\.\d+)?))?/);
+            if (!m) return null;
+            const a = parseFloat(m[1]);
+            const b = m[2] != null ? parseFloat(m[2]) : null;
+            return b != null ? (a + b) / 2 : a; // mid of a split
+          }
+          // title forms: "Over/Under 2.5 Goals" or "Over/Under 2.0,2.5 Goals"
+          const m = t.match(/over\s*\/?\s*under\s*([\d.,]+)/i);
+          if (m) {
+            const parts = m[1].split(',').map(parseFloat).filter(v => !isNaN(v));
+            if (parts.length) return parts.reduce((a, x) => a + x, 0) / parts.length; // mid of split
+          }
+          const m2 = t.match(/under\s*(\d+(?:[.,]\d+)?)/i);
+          return m2 ? parseFloat(m2[1].replace(',', '.')) : null;
         };
+        const isQuarter = (v) => { const r = Math.abs(v) % 1; return Math.abs(r - 0.25) < 0.01 || Math.abs(r - 0.75) < 0.01; };
         const isHalf = (t) => /(1st|2nd|first|second)\s*half|half\s*time|\b1h\b|\b2h\b|minutes?/i.test(t.slice(0, 60));
         const oddsButtons = (el) => {
           const all = Array.from(el.querySelectorAll('a, button, span, div, [class*="odd"], [class*="coef"], [class*="price"]'))
@@ -672,10 +686,20 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
         }
         let best = null, bestD = Infinity, bestLen = Infinity;
         for (const s of sections) {
-          const d = (wantLine != null) ? (s.line != null ? Math.abs(s.line - wantLine) : 999) : 0;
+          const d = (wantLine != null)
+            ? (s.line != null ? Math.abs(market === 'ah' ? Math.abs(s.line) - Math.abs(wantLine) : s.line - wantLine) : 999)
+            : 0;
           if (d < bestD || (d === bestD && s.len < bestLen)) { bestD = d; bestLen = s.len; best = s; }
         }
-        if (!best) return { ok: false, where: 'section not found' };
+        // Quarter lines are split-stake markets: only an exact match counts (the page
+        // must render the split, e.g. "2.0,2.5" → mid 2.25). Half/integer lines tolerate
+        // normal drift. A section further than this is a DIFFERENT market — e.g.
+        // betfrenzy showing 'Over/Under 2.5' while the feed's 2.75 line isn't rendered:
+        // highlighting it would mislead, so report not-found instead.
+        const tol = (wantLine != null && isQuarter(wantLine)) ? 0.05 : 0.35;
+        if (!best || (wantLine != null && bestD > tol)) {
+          return { ok: false, where: best ? `closest section off by ${bestD.toFixed(2)} (${best.t.slice(0, 35)})` : 'section not found' };
+        }
         let hit = null, bd = Infinity;
         for (const b of best.btns) {
           const v = parseFloat((b.textContent || '').trim().replace(',', '.'));
@@ -735,10 +759,18 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
     await ctx.close();
     ctx = null;
     const png = fs.readFileSync(file);
+    // If the market could not be located, warn LOUDLY in a separate message — a silent
+    // plain screenshot would look like confirmation of a line the book may not offer.
+    if (!shotBox) {
+      await sendTelegram(`⚠️ ${book.toUpperCase()}: could NOT locate this bet on the page:\n${caption}\nThe line may not be offered on ${book} right now — treat this leg as UNVERIFIED and check manually before betting.`);
+    }
     // Send as photo to Telegram
     const form = new FormData();
     form.append('chat_id', chat);
-    form.append('caption', `${caption}${shotWhere ? `\n📍 Marked: ${shotWhere}` : ''}`);
+    const locateNote = shotBox
+      ? (shotWhere ? `\n📍 Marked: ${shotWhere}` : '')
+      : `\n⚠️ MARKET NOT LOCATED on this page — the exact line may not be offered here. VERIFY MANUALLY before betting.`;
+    form.append('caption', `${caption}${locateNote}`);
     form.append('photo', new Blob([png], { type: 'image/png' }), `${book}.png`);
     const r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
     const j = await r.json().catch(() => ({}));
