@@ -1,0 +1,30 @@
+fix(quant): execute deep-audit v2 fixes (calibration persistence, boost clamp, ID-space conversion, kelly floor, FH grading)
+
+P1:
+- Calibration auto-update now PERSISTS to Firestore (system_config/calibration_registry):
+  update_calibration_from_results(db=...) writes, grading_engine loads at startup
+  so factors survive restarts (were in-memory only -> silently reverted)
+- Empirical boost clamped to the RAW model probability (apply_empirical_boost cap):
+  the correction can no longer reverse the calibration discount (0.65->0.55->0.78
+  bug; now 0.65->0.55->0.55)
+
+P2:
+- ID-space conversion (Sportmonks -> API-Football, the live fixture source):
+  Elo LEAGUE_HOME_ADV + LEAGUE_K_FACTOR keys (8/564/82/384/301/72 -> 39/140/78/135/61/88,
+  UCL 2, UEL 3, UECL 848, Super Lig 203, Brasileirao 71, MLS 253, Saudi 307)
+  PRE_SEED_ELO team IDs converted (verified via API-Football rosters)
+  DERBY_PAIRS -> API-Football IDs + NEW name-based derby detection (is_derby_match
+  also takes team names; robust to any ID system) - derby/rho was fully inert before
+  LEAGUE_GOALS_MODIFIER mixed ID spaces: converted all keys to API-Football
+  (88 Eredivisie, 136 Serie B, 62 Ligue 2, 141 Segunda, 81 2.BL, 72 Bras Serie B,
+  119/120/121 England L1/L2/NL, 1447 LP2, 1062 PSL, 2532 USL, 128 Argentina, 265 Chile)
+- MIN_STAKE_PCT floor now enforced in kelly_stake (bets <0.5% bankroll -> 0.0)
+- Home Win / Away Win FULLY DISABLED (21%/14% hit rate, -43% ROI); Draw kept (0.90 factor)
+
+P3:
+- Under 1.5 Goals added to the defensive probability sanity cap
+- grade_risk is FH-aware: first-half markets use stricter thresholds (safe >=60%/8%EV)
+- Kelly per market: prediction dict gains value_bets[] with per-bet kelly, EV, grade
+
+Verified: syntax + runtime checks (disabled win markets, boost clamp, derby by name/ID,
+FH grading, league modifier lookups), quant_pipeline imports clean.

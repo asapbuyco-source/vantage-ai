@@ -480,10 +480,16 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
 
     # Workstream 6: Auto-update calibration from grading results
     try:
-        from calibration_registry import update_calibration_from_results
+        from calibration_registry import update_calibration_from_results, load_calibration_from_firestore
+        # Load persisted calibration factors at startup (they were previously
+        # only in-memory and silently reverted on every restart).
+        try:
+            load_calibration_from_firestore(db)
+        except Exception as e:
+            print(f"[Grading] Calibration load skipped (non-fatal): {e}", file=sys.stderr)
         graded_preds = [p for p in predictions if p.get("status") in ("won", "lost", "void")]
         if graded_preds:
-            calib_result = update_calibration_from_results(graded_preds)
+            calib_result = update_calibration_from_results(graded_preds, db=db)
             if calib_result.get("markets_updated", 0) > 0:
                 print(f"[Grading] ✅ Auto-updated calibration for {calib_result['markets_updated']} markets")
     except Exception as e:
