@@ -215,7 +215,8 @@ export const triggerTipOfTheDay = async () => {
     logger.info('[Scheduler] Triggering Tip of the Day push...');
     try {
         const db = admin.firestore();
-        const todayKey = new Date().toISOString().split('T')[0];
+        // Use Lagos (Africa/Lagos) date key — UTC split is wrong between 00:00-01:00 WAT
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
         
         const snap = await db.collection('quant_predictions').doc(todayKey).get();
         if (!snap.exists || !snap.data().predictions) {

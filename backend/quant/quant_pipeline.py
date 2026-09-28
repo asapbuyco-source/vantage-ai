@@ -9,7 +9,7 @@ Daily workflow:
   3. Run Poisson model
   4. Run Elo model
   5. Run Form model
-  6. Combine models (60/30/10)
+  6. Combine models (60/25/10 + adaptive H2H)
   7. Evaluate all markets for EV
   8. Apply risk filters
   9. Calculate Kelly stakes
@@ -39,7 +39,6 @@ try:
 except ImportError:
     pass
 import json
-import math
 from datetime import datetime, timezone, timedelta
 
 # ── Local imports ─────────────────────────────────────────────────────────────
@@ -48,8 +47,8 @@ from poisson_model import compute_probabilities, compute_dynamic_rho, top_scorel
 import math as _math
 from elo_rating import load_ratings_from_firestore, match_probabilities as elo_probs, save_dirty_ratings, get_team_rating, set_rating, is_derby_match, DEFAULT_ELO
 from form_model import compute_form_probabilities
-from probability_engine import compute_combined, CombinedProbabilities
-from ev_engine import evaluate_all_markets, get_best_value_bet
+from probability_engine import compute_combined, compute_adjusted_lambdas, CombinedProbabilities
+from ev_engine import evaluate_all_markets
 from calibration_registry import MARKET_FACTORS, get_calibration_factor, get_dynamic_calibration_factor
 try:
     import intel_model_feed as intel
@@ -214,8 +213,6 @@ def _data_quality_score(match, best_bet, odds_fresh: bool, home_stats, away_stat
         score -= 0.10
     if not best_bet or best_bet.odds <= 1.0:
         score -= 0.20
-    if getattr(match, 'provider_source', '') == 'api_football':
-        score -= 0.05
     return max(0.0, round(score, 2))
 
 
@@ -648,6 +645,14 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                         })
 
             # ── Build prediction dict with RICH match stats ─────────────────
+            # Adjusted lambdas (injury + home advantage + xG bias) — the SAME
+            # values the model probabilities come from, so the displayed
+            # expected goals and top scorelines match the model.
+            adj_mu_home, adj_mu_away = compute_adjusted_lambdas(
+                mu_home, mu_away,
+                match.home_sidelined_count, match.away_sidelined_count,
+                match.league_id, match.league_tier,
+            )
             pred = {
                 "fixture_id": match.fixture_id,
                 "league": match.league,
@@ -659,7 +664,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "away_team_id": match.away_team_id,
                 "home_team_logo": match.home_logo,
                 "away_team_logo": match.away_logo,
-                "provider_source": getattr(match, "provider_source", "sportmonks"),
+                "provider_source": getattr(match, "provider_source", "api_football"),
                 "kickoff_utc": match.kickoff_utc,
                 "kickoff_local": match.kickoff_local,
                 # ── Best bet for this match ─────────────────────────────────
@@ -721,8 +726,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 # OPP-03: Flag high-value away wins as potential upsets
                 "upset_alert": best_bet is not None and best_bet.market == "Away Win" and best_bet.expected_value >= 0.05,
                 # ── Match analysis data (rich stats for cards) ──────────────
-                "expected_goals_home": round(mu_home, 2),
-                "expected_goals_away": round(mu_away, 2),
+                "expected_goals_home": round(adj_mu_home, 2),
+                "expected_goals_away": round(adj_mu_away, 2),
                 "home_form": home_form_str,
                 "away_form": away_form_str,
                 "home_win_rate": round(home_stats.win_rate * 100, 1),
@@ -795,7 +800,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     for b in approved_bets[:5]
                 ],
                 # Most likely scorelines from Poisson grid (for UI display)
-                "top_scorelines": top_scorelines(compute_score_grid(mu_home, mu_away, rho), n=4),
+                # Uses the ADJUSTED lambdas so scorelines match model probs
+                "top_scorelines": top_scorelines(compute_score_grid(adj_mu_home, adj_mu_away, rho), n=4),
                 # Phase 1.6: Hedge Over 1.5 saver for high-confidence Over 2.5 picks
                 "hedge_suggestion": {
                     "market": "Over 1.5 Goals",
@@ -846,7 +852,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 })
 
             # ── Accumulator pool: HIGHEST-probability pick per fixture (not EV pick) ──
-            # Users want accumulators built from safest bets, not value bets
+            # Users want accumulators built from safest bets, not value bets.
+            # NOTE: this first pool build is superseded by the post-calibration
+            # rebuild below; it only exists to derive the per-match safest bet.
             acc_markets = [
                 ("Over 1.5 Goals", probs.over15, best_bet.odds if best_bet and "over 1.5" in best_bet.market.lower() else 0),
                 ("Over 2.5 Goals", probs.over25, best_bet.odds if best_bet and "over 2.5" in best_bet.market.lower() else 0),
@@ -865,19 +873,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             if acc_candidates:
                 # Pick the highest probability market
                 best_market, best_prob, best_odds = max(acc_candidates, key=lambda x: x[1])
-                acc_pool.append({
-                    "fixture_id": match.fixture_id,
-                    "league": match.league,
-                    "home_team": match.home_team,
-                    "away_team": match.away_team,
-                    "market": best_market,
-                    "odds": best_odds,
-                    "model_prob": round(best_prob, 4),
-                    "expected_value": round(best_prob * best_odds - 1, 4) if best_odds > 0 else 0,
-                    "category": "safe",
-                    "kickoff_utc": match.kickoff_utc,
-                    "kickoff_local": match.kickoff_local,
-                })
+                # FIX (Banker of the Day): persist the safest bet so the banker
+                # selection and grading_engine._safest_bet path actually fire.
+                pred["_safest_bet"] = [best_market, round(best_prob, 4)]
 
             emoji = {"high": "🟢", "medium": "🟡", "low": "⚪", "none": "⚫"}.get(value_rank, "⚫")
             bet_label = best_bet.market if best_bet else "N/A"

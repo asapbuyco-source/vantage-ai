@@ -1,13 +1,12 @@
 """
 data_pipeline.py
 ────────────────
-Fetches and normalizes match + team data from sport-highlights-api (RapidAPI).
+Fetches and normalizes match + team data from API-Football (v3).
 Outputs a list of enriched MatchData objects ready for the model pipeline.
 
 Data sources:
-  - sport-highlights-api (fixtures, match details, AI consensus predictions)
-  - sportscore_client / free_data_client (team form, odds)
-  - API-Football (H2H data — free plan)
+  - API-Football v3 (fixtures, odds, form/xG, injuries, H2H, weather)
+  - Supabase Vantage Intelligence (intel_model_feed — Elo seeds, xG priors)
 """
 
 import os
@@ -48,24 +47,6 @@ except ImportError:
 
 def _get_paginated(path, params=None, max_pages=5):
     return _get(path, params)
-
-# ── ClubElo Seeding (override manual club Elo system) ───────────────────────
-def _seed_club_elo_cache():
-    """Seed Elo cache from ClubElo at startup."""
-    try:
-        from clubelo_client import seed_elo_cache as _seed_elo
-        elos = _seed_elo()
-        if elos:
-            print(f"[DataPipeline] ClubElo cache seeded with {len(elos)} ratings", file=sys.stderr)
-    except Exception as e:
-        print(f"[DataPipeline] ClubElo seeding failed (non-fatal): {e}", file=sys.stderr)
-
-_club_elo_seeded = False
-def _ensure_club_elo_seeded():
-    global _club_elo_seeded
-    if not _club_elo_seeded:
-        _seed_club_elo_cache()
-        _club_elo_seeded = True
 
 # ── League Average Goals Helper ────────────────────────────────────────────────
 _LEAGUE_AVG_CACHE = {}
@@ -213,7 +194,7 @@ class MatchData:
     kickoff_local: str
     home_logo: str = ""
     away_logo: str = ""
-    provider_source: str = "sport_highlights"
+    provider_source: str = "api_football"
     home_stats: Optional[TeamStats] = None
     away_stats: Optional[TeamStats] = None
     home_sidelined_count: int = 0
@@ -255,69 +236,7 @@ class MatchData:
 
 
 # ── API Helpers ───────────────────────────────────────────────────────────────
-# (Sportmonks helpers removed — using sport_highlights_client instead)
-
-
-def _af_fetch_fixtures(date_str: str) -> list:
-    """Fallback fixture source when Sportmonks returns an empty slate.
-
-    API-Football fallback intentionally does not create value bets by itself
-    because odds may be unavailable. It keeps the dashboard populated with
-    real fixtures and model probability leans instead of leaving users with a
-    blank day.
-    """
-    if not AF_KEY:
-        print("[DataPipeline] API-Football fallback skipped: API_FOOTBALL_KEY is not configured.", file=sys.stderr)
-        return []
-
-    data = _af_get("fixtures", {"date": date_str, "timezone": "Africa/Lagos"})
-    rows = data.get("response", []) if isinstance(data, dict) else []
-    if not rows:
-        errors = data.get("errors") if isinstance(data, dict) else None
-        print(f"[DataPipeline] API-Football fallback returned 0 fixtures for {date_str}. errors={str(errors)[:300]}", file=sys.stderr)
-        return []
-
-    fixtures = []
-    for row in rows[:MAX_MATCHES]:
-        fixture = row.get("fixture", {}) or {}
-        league = row.get("league", {}) or {}
-        teams = row.get("teams", {}) or {}
-        home = teams.get("home", {}) or {}
-        away = teams.get("away", {}) or {}
-        if not fixture.get("id") or not home.get("id") or not away.get("id"):
-            continue
-        fixtures.append({
-            "_provider": "api_football",
-            "id": fixture.get("id"),
-            "league_id": league.get("id") or 0,
-            "league": {
-                "id": league.get("id") or 0,
-                "name": league.get("name") or "Unknown League",
-                "image_path": league.get("logo") or "",
-            },
-            "starting_at": fixture.get("date") or "",
-            "participants": [
-                {
-                    "id": home.get("id"),
-                    "name": home.get("name") or "Home",
-                    "image_path": home.get("logo") or "",
-                    "meta": {"location": "home"},
-                },
-                {
-                    "id": away.get("id"),
-                    "name": away.get("name") or "Away",
-                    "image_path": away.get("logo") or "",
-                    "meta": {"location": "away"},
-                },
-            ],
-            "scores": [],
-            "odds": [],
-            "statistics": [],
-            "sidelined": [],
-        })
-
-    print(f"[DataPipeline] API-Football fallback supplied {len(fixtures)} fixtures for {date_str}.")
-    return fixtures
+# (Sportmonks helpers removed — API-Football is now the sole fixture source)
 
 
 def fetch_matches(date_str: str | None = None) -> list[MatchData]:
@@ -333,7 +252,7 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
 
     from api_football_client import (
         fetch_fixtures_by_date, fetch_odds_for_fixture,
-        fetch_predictions, fetch_team_form_and_xg, fetch_injuries,
+        fetch_team_form_and_xg, fetch_injuries,
         reset_call_counts, log_api_summary, _fetch_h2h_cached,
         fetch_league_gpg
     )
@@ -493,24 +412,10 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
         except Exception as e:
             print(f"[DataPipeline] Odds fetch error for {home_name} vs {away_name}: {e}", file=sys.stderr)
 
-        # ── Enrich: Predictions (Restoring 10% AI Consensus) ──────────────
-        try:
-            preds = fetch_predictions(fixture_id)
-            if preds and preds.get("home_win"):
-                hw_str = str(preds.get("home_win", "0%")).replace("%", "")
-                dr_str = str(preds.get("draw", "0%")).replace("%", "")
-                aw_str = str(preds.get("away_win", "0%")).replace("%", "")
-                md.sm_pred_home_win = float(hw_str) / 100.0
-                md.sm_pred_draw = float(dr_str) / 100.0
-                md.sm_pred_away_win = float(aw_str) / 100.0
-                md.sm_pred_available = True
-        except Exception as e:
-            print(f"[DataPipeline] Predictions fetch error for {fixture_id}: {e}", file=sys.stderr)
-
         # ── Enrich: Form & xG (No more rate limits) ──────────────
         try:
-            home_form_str, home_avg_sc, home_avg_con, home_last_date = fetch_team_form_and_xg(home_id, limit=20)
-            away_form_str, away_avg_sc, away_avg_con, away_last_date = fetch_team_form_and_xg(away_id, limit=20)
+            home_form_str, home_avg_sc, home_avg_con, home_last_date, home_opponents = fetch_team_form_and_xg(home_id, limit=20)
+            away_form_str, away_avg_sc, away_avg_con, away_last_date, away_opponents = fetch_team_form_and_xg(away_id, limit=20)
 
             # Phase 1.2: Fatigue — compute days since last match
             if home_last_date and md.kickoff_utc:
@@ -545,6 +450,7 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                 avg_conceded=home_avg_con or 0.0,
                 avg_xg_created=(home_avg_sc or 0.0) * 0.95,
                 avg_xg_conceded=(home_avg_con or 0.0) * 0.95,
+                recent_opponents=home_opponents,
             )
             md.away_stats = TeamStats(
                 team_id=away_id, team_name=away_name,
@@ -558,6 +464,7 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                 avg_conceded=away_avg_con or 0.0,
                 avg_xg_created=(away_avg_sc or 0.0) * 0.95,
                 avg_xg_conceded=(away_avg_con or 0.0) * 0.95,
+                recent_opponents=away_opponents,
             )
             
             league_avg = _league_avg(lid)
@@ -603,21 +510,6 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                 md.expected_goals_away = min(md.expected_goals_away, league_gpg * 0.70)
         except Exception as e:
             print(f"[DataPipeline] Team stats fetch error for {fixture_id}: {e}", file=sys.stderr)
-
-        # ── Enrich: Pinnacle Odds (sharpest lines for EV verification) ───
-        try:
-            from api_football_client import fetch_pinnacle_odds
-            pinnacle = fetch_pinnacle_odds(fixture_id)
-            if pinnacle:
-                md.pinnacle_home = pinnacle.get("pinnacle_home", 0.0)
-                md.pinnacle_draw = pinnacle.get("pinnacle_draw", 0.0)
-                md.pinnacle_away = pinnacle.get("pinnacle_away", 0.0)
-                md.pinnacle_over25 = pinnacle.get("pinnacle_over25", 0.0)
-                md.pinnacle_under25 = pinnacle.get("pinnacle_under25", 0.0)
-                md.pinnacle_btts_yes = pinnacle.get("pinnacle_btts_yes", 0.0)
-                md.pinnacle_btts_no = pinnacle.get("pinnacle_btts_no", 0.0)
-        except Exception as e:
-            print(f"[DataPipeline] Pinnacle odds fetch error for {fixture_id}: {e}", file=sys.stderr)
 
         # ── Enrich: Real xG from fixture statistics ────────────────────────
         try:

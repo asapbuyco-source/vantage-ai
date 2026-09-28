@@ -187,20 +187,8 @@ check("python-dateutil", check_dateutil)
 # ═══════════════════════════════════════════════════════════════════════════════
 section("7. Internal Modules (Quant Engine)")
 # ═══════════════════════════════════════════════════════════════════════════════
-def check_free_data_client():
-    import free_data_client
-    # Verify the key objects exist
-    assert hasattr(free_data_client, "SOFASCORE_LEAGUE_MAP"), "Missing SOFASCORE_LEAGUE_MAP"
-    assert hasattr(free_data_client, "ODDS_SPORT_MAP"),       "Missing ODDS_SPORT_MAP"
-    assert hasattr(free_data_client, "fetch_xg_for_match"),   "Missing fetch_xg_for_match"
-    assert hasattr(free_data_client, "fetch_fixtures_today"), "Missing fetch_fixtures_today"
-    return f"free_data_client — all key symbols present"
-
-def check_sofascore_client():
-    import sofascore_client
-    assert hasattr(sofascore_client, "fetch_todays_fixtures_sofascore"), "Missing fetch_todays_fixtures_sofascore"
-    assert hasattr(sofascore_client, "fetch_historical_xg_sofascore"),  "Missing fetch_historical_xg_sofascore"
-    return f"sofascore_client — all key symbols present"
+# (free_data_client / sofascore_client / sport_highlights_client checks removed —
+#  those modules were deleted when the pipeline consolidated on API-Football.)
 
 def check_league_config():
     import league_config
@@ -215,8 +203,6 @@ def check_data_pipeline():
     assert hasattr(data_pipeline, 'APPROVED_LEAGUE_IDS'), "Missing APPROVED_LEAGUE_IDS"
     return f"data_pipeline — fetch_matches present"
 
-check("free_data_client",  check_free_data_client)
-check("sofascore_client",  check_sofascore_client)
 check("league_config",     check_league_config)
 check("data_pipeline",     check_data_pipeline)
 

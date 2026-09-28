@@ -345,6 +345,7 @@ function buildPythonEnv() {
         FOOTBALL_DATA_KEY: process.env.FOOTBALL_DATA_KEY || '',
         API_BASKETBALL_KEY: process.env.API_BASKETBALL_KEY || '',
         ODDS_API_KEY: process.env.ODDS_API_KEY || '',
+        OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY || '',
         GOOGLE_GENAI_API_KEY: process.env.GOOGLE_GENAI_API_KEY || '',
         OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
         FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',

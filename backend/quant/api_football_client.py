@@ -2,8 +2,8 @@
 api_football_client.py
 ───────────────────────
 Centralized client for API-Football (v3).
-Handles fetching fixtures, odds, predictions, and form/xG data.
-Replaces sport_highlights_client, sportscore_client, and free_data_client.
+Handles fetching fixtures, odds, form/xG, injuries, H2H, and season stats.
+Replaced sport_highlights_client, sportscore_client, and free_data_client.
 """
 
 import os
@@ -279,41 +279,29 @@ def fetch_odds_for_fixture(fixture_id: int, bookmaker_id: int = 8) -> dict:
         _cache_set(cache_key, odds_data)
     return odds_data
 
-def fetch_predictions(fixture_id: int) -> dict:
-    """Fetch native API-Football ML predictions for a fixture."""
-    data = _get("predictions", {"fixture": fixture_id}, call_type="predictions")
-    if not data or not data.get("response"):
-        return {}
-    
-    pred = data["response"][0].get("predictions", {})
-    return {
-        "home_win": pred.get("percent", {}).get("home"),
-        "draw": pred.get("percent", {}).get("draw"),
-        "away_win": pred.get("percent", {}).get("away"),
-        "advice": pred.get("advice"),
-    }
-
 def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
     """
     Fetch the last `limit` finished fixtures for a team.
-    Returns (form_string, avg_scored, avg_conceded, last_match_date).
+    Returns (form_string, avg_scored, avg_conceded, last_match_date, recent_opponents).
     Cached for 60 minutes by team_id.
     """
     cache_key = f"form_{team_id}_{limit}"
     cached = _cache_get(cache_key, ttl_minutes=60)
     if cached is not None:
-        return cached.get("form_string", ""), cached.get("avg_scored"), cached.get("avg_conceded"), cached.get("last_match_date", "")
+        return (cached.get("form_string", ""), cached.get("avg_scored"), cached.get("avg_conceded"),
+                cached.get("last_match_date", ""), cached.get("recent_opponents", []))
 
     data = _get("fixtures", {"team": team_id, "last": limit, "status": "FT"}, call_type="form")
     fixtures = data.get("response", []) if data else []
     
     if not fixtures:
-        return "", None, None, ""
+        return "", None, None, "", []
 
     form_chars = []
     total_scored = 0
     total_conceded = 0
     last_match_date = ""
+    recent_opponents = []
     
     for fix in reversed(fixtures):
         home_id = fix["teams"]["home"]["id"]
@@ -332,6 +320,9 @@ def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
         is_home = (home_id == team_id)
         scored = goals_home if is_home else goals_away
         conceded = goals_away if is_home else goals_home
+        opponent_id = away_id if is_home else home_id
+        if opponent_id:
+            recent_opponents.append(opponent_id)
         
         total_scored += scored
         total_conceded += conceded
@@ -353,9 +344,10 @@ def fetch_team_form_and_xg(team_id: int, limit: int = 10) -> tuple:
         "avg_scored": avg_scored,
         "avg_conceded": avg_conceded,
         "last_match_date": last_match_date,
+        "recent_opponents": recent_opponents,
     }
     _cache_set(cache_key, result)
-    return form_string, avg_scored, avg_conceded, last_match_date
+    return form_string, avg_scored, avg_conceded, last_match_date, recent_opponents
 
 def fetch_injuries(fixture_id: int) -> dict:
     """
@@ -487,7 +479,13 @@ def fetch_player_stats(fixture_id: int) -> dict:
 
 
 def fetch_team_season_stats(team_id: int, league_id: int, season: int = 2026) -> dict:
-    """Fetch team season statistics including real xG, goals, clean sheets, etc."""
+    """
+    Fetch team season statistics from API-Football /teams/statistics.
+    Returns parsed season aggregates: matches_played, wins, draws, losses,
+    goals_for/against (total + avg), clean_sheets, failed_to_score.
+    NOTE: the endpoint has NO xG — real xG comes from fetch_team_xg_average.
+    Cached for 6 hours.
+    """
     cache_key = f"team_stats_{team_id}_{league_id}_{season}"
     cached = _cache_get(cache_key, ttl_minutes=360)  # 6-hour cache
     if cached is not None:
@@ -500,6 +498,50 @@ def fetch_team_season_stats(team_id: int, league_id: int, season: int = 2026) ->
     result = {}
     if not data or not data.get("response"):
         _cache_set(cache_key, result)
+        return result
+
+    resp = data["response"][0] if isinstance(data["response"], list) else data["response"]
+    if not isinstance(resp, dict):
+        _cache_set(cache_key, result)
+        return result
+
+    fixtures_data = resp.get("fixtures", {}) or {}
+    goals_data = resp.get("goals", {}) or {}
+    clean_sheet = resp.get("clean_sheet", {}) or {}
+    failed_to_score = resp.get("failed_to_score", {}) or {}
+
+    def _num(value, default=0):
+        try:
+            return int(value or default)
+        except (ValueError, TypeError):
+            return default
+
+    def _float(value, default=0.0):
+        try:
+            return float(value or default)
+        except (ValueError, TypeError):
+            return default
+
+    matches_played = _num(fixtures_data.get("played", {}).get("total")) if isinstance(fixtures_data.get("played"), dict) else 0
+    goals_for_total = _num(goals_data.get("for", {}).get("total", {}).get("total")) if isinstance(goals_data.get("for"), dict) else 0
+    goals_against_total = _num(goals_data.get("against", {}).get("total", {}).get("total")) if isinstance(goals_data.get("against"), dict) else 0
+
+    result = {
+        "matches_played": matches_played,
+        "wins": _num(fixtures_data.get("wins", {}).get("total")) if isinstance(fixtures_data.get("wins"), dict) else 0,
+        "draws": _num(fixtures_data.get("draws", {}).get("total")) if isinstance(fixtures_data.get("draws"), dict) else 0,
+        "losses": _num(fixtures_data.get("loses", {}).get("total")) if isinstance(fixtures_data.get("loses"), dict) else 0,
+        "goals_for_total": goals_for_total,
+        "goals_against_total": goals_against_total,
+        "goals_for_avg": round(goals_for_total / matches_played, 2) if matches_played else _float(goals_data.get("for", {}).get("average", {}).get("total")),
+        "goals_against_avg": round(goals_against_total / matches_played, 2) if matches_played else _float(goals_data.get("against", {}).get("average", {}).get("total")),
+        "clean_sheets": _num(clean_sheet.get("total")),
+        "failed_to_score": _num(failed_to_score.get("total")),
+        # xG is not available from /teams/statistics — fetch_team_xg_average provides it.
+        "xg_for": 0.0,
+    }
+
+    _cache_set(cache_key, result)
     return result
 
 
@@ -561,57 +603,6 @@ def fetch_team_xg_average(team_id: int, limit: int = 10) -> dict:
         "xg_against": round(sum(xg_against_values) / len(xg_against_values), 2) if xg_against_values else 0.0,
         "sample_size": len(xg_for_values),
     }
-
-    _cache_set(cache_key, result)
-    return result
-
-    resp = data["response"]
-    fixtures_data = resp.get("fixtures", {})
-    goals_data = resp.get("goals", {})
-
-    # Extract xG if available
-    def _extract_stat(stats_list, stat_type):
-        for s in stats_list:
-            if s.get("type") == stat_type:
-                try:
-                    val = s.get("value")
-                    if isinstance(val, str) and "%" in val:
-                        return float(val.replace("%", "")) / 100.0
-                    return float(val)
-                except (ValueError, TypeError):
-                    pass
-        return None
-
-    # Minute-based stats (more reliable when available)
-    minute_stats = resp.get("minutes", {}) if isinstance(resp, dict) else {}
-    xg_value = None
-    for key in minute_stats:
-        if "expected_goals" in key.lower():
-            try:
-                xg_value = float(minute_stats[key].get("total", 0))
-            except (ValueError, TypeError, AttributeError):
-                pass
-            break
-
-    result = {
-        "matches_played": fixtures_data.get("played", {}).get("total", 0) if isinstance(fixtures_data.get("played"), dict) else 0,
-        "wins": fixtures_data.get("wins", {}).get("total", 0) if isinstance(fixtures_data.get("wins"), dict) else 0,
-        "draws": fixtures_data.get("draws", {}).get("total", 0) if isinstance(fixtures_data.get("draws"), dict) else 0,
-        "losses": fixtures_data.get("loses", {}).get("total", 0) if isinstance(fixtures_data.get("loses"), dict) else 0,
-        "goals_for_total": goals_data.get("for", {}).get("total", {}).get("total", 0) if isinstance(goals_data.get("for"), dict) else 0,
-        "goals_against_total": goals_data.get("against", {}).get("total", {}).get("total", 0) if isinstance(goals_data.get("against"), dict) else 0,
-        "goals_for_avg": float(goals_data.get("for", {}).get("average", {}).get("total", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0.0,
-        "goals_against_avg": float(goals_data.get("against", {}).get("average", {}).get("total", 0) or 0) if isinstance(goals_data.get("against"), dict) else 0.0,
-        "clean_sheets": int(goals_data.get("for", {}).get("total", {}).get("home", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0,
-        "failed_to_score": int(goals_data.get("for", {}).get("total", {}).get("away", 0) or 0) if isinstance(goals_data.get("for"), dict) else 0,
-        "xg_for": xg_value or (float(goals_data.get("for", {}).get("average", {}).get("total", 0) or 0) * 0.95) if isinstance(goals_data.get("for"), dict) else 0.0,
-    }
-
-    if result["matches_played"] > 0:
-        result["goals_for_avg"] = round(result["goals_for_total"] / result["matches_played"], 2)
-        result["goals_against_avg"] = round(result["goals_against_total"] / result["matches_played"], 2)
-        if xg_value:
-            result["xg_for"] = round(xg_value / result["matches_played"], 2)
 
     _cache_set(cache_key, result)
     return result

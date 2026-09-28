@@ -4,7 +4,7 @@ probability_engine.py
 Weighted model combiner.
 Merges Poisson, Elo, and Form probabilities into a single consensus.
 
-Weights: 60% Poisson | 30% Elo | 10% Form
+Weights: 60% Poisson | 25% Elo | 10% Form | adaptive H2H (5-12%)
 
 MODEL-07: Probability calibration layer added.
 Before this fix, model probabilities were systematically 10-30% too high
@@ -24,7 +24,6 @@ Safety downgrades now use the appropriate per-market confidence score.
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-from calibration_registry import get_calibration_factor
 from poisson_model import MarketProbabilities, compute_probabilities, compute_fh_markets
 from elo_rating import match_probabilities as elo_match_probs
 from form_model import compute_form_probabilities, FormProbabilities
@@ -60,12 +59,6 @@ def get_adaptive_h2h_weight(h2h_total: int, is_derby: bool, h2h_home_wins: int =
     if h2h_total >= 8:
         return 0.08  # lots of H2H data — increase weight slightly
     return 0.05  # default
-
-
-def _calibrate(raw: float, market_key: str, default: float = 0.92) -> float:
-    """Apply empirical calibration discount to a raw probability."""
-    factor = get_calibration_factor(market_key, default)
-    return max(0.01, min(0.99, raw * factor))
 
 
 @dataclass
@@ -123,6 +116,46 @@ def _normalize(p_home: float, p_draw: float, p_away: float) -> tuple[float, floa
     if total == 0:
         return 1/3, 1/3, 1/3
     return p_home / total, p_draw / total, p_away / total
+
+
+def compute_adjusted_lambdas(
+    mu_home: float,
+    mu_away: float,
+    home_sidelined: int = 0,
+    away_sidelined: int = 0,
+    league_id: int | None = None,
+    league_tier: int = 2,
+) -> tuple[float, float]:
+    """
+    Apply the model's lambda adjustments to raw xG inputs.
+    Single source of truth so the Poisson grid, displayed expected goals, and
+    top scorelines all use the SAME adjusted lambdas as the final probabilities.
+    """
+    # UPGRADE #13: Sidelined (Injury) Penalty
+    # Every missing player reduces expected goals by ~3%.
+    # If more than 4 players are missing, it signals a deeper squad crisis.
+    home_injury_penalty = min(0.25, home_sidelined * 0.03 + (0.05 if home_sidelined > 4 else 0.0))
+    away_injury_penalty = min(0.25, away_sidelined * 0.03 + (0.05 if away_sidelined > 4 else 0.0))
+
+    adj_mu_home = max(0.20, mu_home * (1.0 - home_injury_penalty))
+    adj_mu_away = max(0.20, mu_away * (1.0 - away_injury_penalty))
+
+    # FIX-5: Home advantage — per-league override (empirical 2024 FT: Ligue1 46.6% HW, Bundes 38.3%)
+    # Derived from 1614 Big-5 fixtures: Ligue1/LaLiga strongest home, Bundes weakest
+    HOME_ADVANTAGE = {1: 1.10, 2: 1.08, 3: 1.05, 4: 1.03, 5: 1.00}
+    LEAGUE_HOME_ADVANTAGE = {39: 1.08, 140: 1.10, 78: 1.05, 135: 1.08, 61: 1.10}
+    ha = LEAGUE_HOME_ADVANTAGE.get(league_id, HOME_ADVANTAGE.get(league_tier, 1.08))
+    adj_mu_home *= ha
+
+    # Bias correction: Poisson model systematically overestimates goals (~8% overconfident).
+    # Global xG deflator derived from calibration data: predicted=88% vs actual=82% for O2.5.
+    XG_BIAS_CORRECTION = 0.92
+    adj_mu_home *= XG_BIAS_CORRECTION
+    adj_mu_away *= XG_BIAS_CORRECTION
+    adj_mu_home = max(0.15, adj_mu_home)
+    adj_mu_away = max(0.15, adj_mu_away)
+
+    return adj_mu_home, adj_mu_away
 
 
 def compute_combined(
@@ -215,39 +248,13 @@ def compute_combined(
     # ── Model 1: Poisson (MODEL-01: form-adjusted xG before grid) ────────
     # Multiplicative xG form scaling applied before Poisson grid so the full
     # probability distribution stays coherent (old additive tweak did not).
-    _hfs = getattr(home_stats, 'form_score', 0.5) if home_stats else 0.5
-    _afs = getattr(away_stats, 'form_score', 0.5) if away_stats else 0.5
-    
-    # UPGRADE #13: Sidelined (Injury) Penalty
-    # Every missing player reduces expected goals by ~3%. 
-    # If more than 4 players are missing, it signals a deeper squad crisis.
-    home_injury_penalty = min(0.25, home_sidelined * 0.03 + (0.05 if home_sidelined > 4 else 0.0))
-    away_injury_penalty = min(0.25, away_sidelined * 0.03 + (0.05 if away_sidelined > 4 else 0.0))
 
-    # FIX #3 + FIX #10: Form is NO LONGER baked into adj_mu.
-    # It enters the consensus purely through W_FORM * form.home_win below.
-    # Old multiplier (0.90 + _hfs*0.20) double-counted form AND had a range of
-    # [0.90, 1.10] that punished neutral teams (form_score=0 → -10% xG).
-    # New multiplier: (0.85 + _hfs*0.30) would be correct IF we kept form here,
-    # but we remove it entirely and apply injury penalty only.
-    adj_mu_home = max(0.20, mu_home * (1.0 - home_injury_penalty))
-    adj_mu_away = max(0.20, mu_away * (1.0 - away_injury_penalty))
-
-    # FIX-5: Home advantage — per-league override (empirical 2024 FT: Ligue1 46.6% HW, Bundes 38.3%)
-    # Derived from 1614 Big-5 fixtures: Ligue1/LaLiga strongest home, Bundes weakest
-    HOME_ADVANTAGE = {1: 1.10, 2: 1.08, 3: 1.05, 4: 1.03, 5: 1.00}
-    LEAGUE_HOME_ADVANTAGE = {39: 1.08, 140: 1.10, 78: 1.05, 135: 1.08, 61: 1.10}
-    ha = LEAGUE_HOME_ADVANTAGE.get(league_id, HOME_ADVANTAGE.get(league_tier, 1.08))
-    adj_mu_home *= ha
-
-    # Bias correction: Poisson model systematically overestimates goals (~8% overconfident).
-    # Global xG deflator derived from calibration data: predicted=88% vs actual=82% for O2.5.
-    # Deflate expected goals by 8% to align Poisson output with observed hit rates.
-    XG_BIAS_CORRECTION = 0.92
-    adj_mu_home *= XG_BIAS_CORRECTION
-    adj_mu_away *= XG_BIAS_CORRECTION
-    adj_mu_home = max(0.15, adj_mu_home)
-    adj_mu_away = max(0.15, adj_mu_away)
+    # UPGRADE #13: Sidelined (Injury) Penalty + home advantage + global xG bias.
+    # Refactored into compute_adjusted_lambdas so quant_pipeline renders the
+    # same adjusted xG (scorelines / expected goals) as the model probabilities.
+    adj_mu_home, adj_mu_away = compute_adjusted_lambdas(
+        mu_home, mu_away, home_sidelined, away_sidelined, league_id, league_tier
+    )
 
     poisson: MarketProbabilities = compute_probabilities(adj_mu_home, adj_mu_away, rho)
     fh = compute_fh_markets(adj_mu_home, adj_mu_away, rho)

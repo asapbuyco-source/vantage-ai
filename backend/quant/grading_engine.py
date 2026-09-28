@@ -32,7 +32,7 @@ except ImportError:
     fetch_match_result_free = None
 
 
-# (Sportmonks helpers removed — using sport-highlights-api instead)
+# (Sportmonks helpers removed — API-Football + football-data.org are the result sources)
 
 FINISHED_STATES = {"FT", "AET", "PEN", "FINS"}
 VOIDED_STATES = {"CANCL", "POSTP", "INT", "ABANDONED", "TBA", "NS"}
@@ -108,7 +108,7 @@ def resolveMarket(market: str) -> MarketType:
     return MarketType.UNKNOWN
 
 
-# (Sportmonks helper functions removed — using sport-highlights-api instead)
+# (Sportmonks helper functions removed — API-Football is the primary result source)
 
 
 def _compute_clv(pick_odds: float, closing_odds: float) -> float:
@@ -144,6 +144,36 @@ def _compute_ev(pick_odds: float, win_prob: float) -> float:
     if pick_odds <= 1.0 or win_prob <= 0.0 or win_prob >= 1.0:
         return 0.0
     return (win_prob * pick_odds) - (1.0 - win_prob)
+
+def _enrich_closing_odds(results_map: dict, fixture_ids: set) -> None:
+    """
+    Populate closing_odds for graded fixtures so CLV can be computed.
+    API-Football retains the pre-match odds for a fixture; at grading time the
+    odds endpoint returns the last posted odds. Best-effort: on any failure the
+    entry keeps closing_odds = {} and CLV is simply skipped.
+    """
+    try:
+        from ev_engine import MARKET_TO_ODDS_FIELD
+        from api_football_client import fetch_odds_for_fixture
+    except ImportError:
+        return
+    for fid in fixture_ids:
+        result = results_map.get(fid)
+        if not result or result.get("closing_odds"):
+            continue
+        try:
+            odds_data = fetch_odds_for_fixture(int(fid)) or {}
+            closing = {
+                market: float(odds_data[field])
+                for market, field in MARKET_TO_ODDS_FIELD.items()
+                if odds_data.get(field)
+            }
+            if closing:
+                result["closing_odds"] = closing
+        except (ValueError, TypeError):
+            continue
+        except Exception as e:
+            print(f"[Grading] Closing-odds fetch failed for fixture {fid}: {e}", file=sys.stderr)
 
 def _has_negative_ev(pred: dict) -> bool:
     """
@@ -361,6 +391,10 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
         res1 = _fetch_results_from_football_data_org(date_str, predictions) or {}
         res2 = _fetch_results_from_football_data_org(next_date_str, predictions) or {}
         results_map = {**res1, **res2}
+
+    # ── Step 4: Enrich with real closing odds (for CLV) ──────────────────────
+    # Only fetch odds for fixtures we are actually grading, to bound API calls.
+    _enrich_closing_odds(results_map, {str(p.get("fixture_id", "")) for p in to_grade})
 
     graded_count = 0
     clv_sum = 0.0
