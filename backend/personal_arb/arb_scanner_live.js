@@ -20,9 +20,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Load .env.local for Telegram creds (same file server.js uses)
 dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 
-// Guaranteed-ROI floor for AH arbs (worst-case settlement return must beat this).
+// Guaranteed-ROI floor for arbs (worst-case settlement return must beat this).
 // False positives are unacceptable — missing an arb is fine.
-const MIN_GUARANTEED_ROI = 0.003; // 0.3% worst-case after split-stake settlement
+// 2026-09: raised 0.3% → 1% — a sub-1% guaranteed arb is eaten by odds movement
+// between placing leg 1 and leg 2 (books reprice within seconds of a big stake).
+const MIN_GUARANTEED_ROI = 0.01; // 1% worst-case ROI floor
 
 // Residential proxy (optional): ARB_PROXY=http://user:pass@host:port
 // Applies to all browser sessions so bookmaker bot checks see a residential IP.
@@ -985,7 +987,13 @@ function findCandidates(all) {
   const found = [];
   // pct is ALWAYS worst-case-based: pct = (worst/100 - 1) * 100. For binary markets
   // worst = 100/inv (exact); for quarter-line markets worst = 50 + 50/inv or the AH sim.
-  const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope) => found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope });
+  const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope) => {
+    // MIN_GUARANTEED_ROI floor: refuse anything below 1% WORST-CASE return.
+    // A sub-1% arb is not worth the latency risk of placing two legs.
+    const worstRoi = worst / 100 - 1;
+    if (worstRoi < MIN_GUARANTEED_ROI) return;
+    found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope });
+  };
   const invDisplay = (worst) => 2 - worst / 100;
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in

@@ -13,6 +13,10 @@ Private tool (branch `personal/arb`) — scans Cameroon bookmakers for cross-boo
 
 Arb methods: 2-way (O/U, AH), 3-way (1X2, DC), N-way via `arb_calc.js` (`Σ 1/odds < 1`, stake = `(1/odds_i)/Σ × bankroll`).
 
+**Report floor: ≥1% guaranteed (worst-case) ROI.** Nothing below 1% worst-case is
+alerted — binary markets use `100/inv`, quarter lines the honest `50 + 50/inv`,
+AH the settlement simulation. `--diag` still shows sub-1% near-misses for analysis.
+
 ## Local setup
 ```
 npm i -D playwright
