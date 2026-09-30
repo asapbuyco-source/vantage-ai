@@ -1,15 +1,12 @@
 /**
- * telegram_control.js — owner-only Telegram control for the arb scanner.
- * Lets you change per-book stake anchors, the ROI floor, and view status
- * WITHOUT touching the server:
+ * telegram_control.js — owner-only Telegram control for the arb scanner,
+ * driven by INLINE KEYBOARD BUTTONS (text commands still work as fallback).
  *
- *   amount betpawa 30000      set betpawa stake anchor to 30,000 XAF
- *   amount all 20000          set every book to 20,000 XAF
- *   amounts / status          show current anchors + floor
- *   minroi 2                  alert floor = 2% worst-case ROI
- *   help                      command list
+ * Flow:
+ *   💰 Amount  → pick book (or All) → bot prompts "send the amount" → you type it
+ *   📉 Min ROI → bot prompts the %  → you type it
+ *   📊 Status / ❓ Help / ↩️ Menu
  *
- * Slashes are optional; "frs"/"f"/commas in amounts are stripped.
  * ONLY the configured TELEGRAM_CHAT_ID can issue commands.
  * Config persists to bot_config.json (gitignored).
  */
@@ -50,6 +47,65 @@ export function saveConfig() {
   }
 }
 
+// ── Pending-input state machine ──────────────────────────────────────────────
+// After a button prompt ("send the amount for betpawa"), the next plain message
+// from the owner is consumed as the value. Expires so a random later message is
+// never eaten by a stale prompt.
+const PENDING_TTL_MS = 5 * 60 * 1000;
+const pendingInput = { type: null, book: null, at: 0 };
+
+const btn = (text, data) => ({ text, callback_data: data });
+
+const MENU_KEYBOARD = {
+  inline_keyboard: [
+    [btn('💰 Amount', 'amount')],
+    [btn('📉 Min ROI', 'minroi')],
+    [btn('📊 Status', 'status'), btn('❓ Help', 'help')],
+  ],
+};
+
+function bookKeyboard() {
+  return {
+    inline_keyboard: [
+      [btn('All books', 'amount:all')],
+      [btn('BetFrenzy', 'amount:betfrenzy'), btn('BetPawa', 'amount:betpawa')],
+      [btn('PMUC', 'amount:pmuc'), btn('PremierBet', 'amount:premierbet')],
+      [btn('1xBet', 'amount:1xbet'), btn('BetWinner', 'amount:betwinner'), btn('PariPesa', 'amount:paripesa')],
+      [btn('↩️ Menu', 'menu')],
+    ],
+  };
+}
+
+function backKeyboard() {
+  return { inline_keyboard: [[btn('↩️ Menu / Cancel', 'menu')]] };
+}
+
+const MENU_TEXT = [
+  '🎛️ Arb Bot Control',
+  'Tap a button — or type commands directly:',
+  '"amount betpawa 30000" | "minroi 2" | "amounts"',
+].join('\n');
+
+function statusLines() {
+  const lines = ['💰 Stake anchors (per leg, per book):'];
+  for (const b of KNOWN_BOOKS.sort()) {
+    lines.push(`  ${b}: ${(config.bankrolls[b] ?? DEFAULT_BANKROLL).toLocaleString()} XAF`);
+  }
+  lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
+  return lines.join('\n');
+}
+
+const HELP = [
+  '🎛️ Arb Bot Control',
+  'Buttons do everything; text commands also work:',
+  'amount <book|all> <XAF> — set per-book stake anchor',
+  '    e.g. "amount betpawa 30000"',
+  'amounts — show all anchors',
+  'minroi <pct> — alert floor (e.g. "minroi 2" = 2% worst-case)',
+  'status — full status',
+  'Alerts show real stakes scaled from the anchor book amount.',
+].join('\n');
+
 const BOOK_ALIASES = {
   betfrenzy: 'betfrenzy', bf: 'betfrenzy', 'betfrenzy.cm': 'betfrenzy',
   betpawa: 'betpawa', betpwaa: 'betpawa', betpwa: 'betpawa', bp: 'betpawa', 'bet pawa': 'betpawa',
@@ -73,34 +129,10 @@ function parseAmount(raw) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function statusLines() {
-  const lines = ['💰 Stake anchors (per leg, per book):'];
-  for (const b of KNOWN_BOOKS.sort()) {
-    lines.push(`  ${b}: ${(config.bankrolls[b] ?? DEFAULT_BANKROLL).toLocaleString()} XAF`);
-  }
-  lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
-  lines.push('Send "help" for commands.');
-  return lines.join('\n');
-}
-
-const HELP = [
-  '🎛️ Arb Bot Control',
-  'amount <book> <XAF> — set per-book stake anchor',
-  '    e.g. "amount betpawa 30000" (or /amount betpawa 30000)',
-  'amount all <XAF> — set every book',
-  'amounts — show all anchors',
-  'minroi <pct> — alert floor (e.g. "minroi 2" = 2% worst-case)',
-  'status — full status',
-  'help — this message',
-  '',
-  'Alerts show real stakes scaled from the anchor book amount.',
-].join('\n');
-
 export function handleMessage(text) {
   const lower = String(text || '').trim().toLowerCase();
   if (!lower) return null;
 
-  // amount <book|all> <n>  (slashes and "set" optional, "frs" stripped by parseAmount)
   let m = lower.match(/^(?:\/)?(?:set\s+)?amount\s+(.+?)\s+([\d\s.,]+)$/);
   if (m) {
     const book = resolveBook(m[1]);
@@ -116,23 +148,81 @@ export function handleMessage(text) {
     return `✅ ${book} stake anchor = ${amount.toLocaleString()} XAF — next ${book} alerts use it`;
   }
 
-  m = lower.match(/^(?:\/)?(?:set\s+)?minroi\s+([\d.]+)$/);
+  m = lower.match(/^(?:\/)?(?:set\s+)?minroi\s+([\d.,]+)$/);
   if (m) {
-    const pct = parseFloat(m[1]);
+    const pct = parseFloat(m[1].replace(',', '.'));
     if (!Number.isFinite(pct) || pct <= 0 || pct > 50) return 'Usage: minroi <pct> — e.g. "minroi 2" (2% floor)';
     config.min_roi = pct / 100;
     saveConfig();
     return `✅ Alert floor = ${pct}% worst-case ROI`;
   }
 
-  if (lower.includes('amounts') || lower === 'status' || lower === 'status ' || lower === '/status') {
-    return statusLines();
-  }
+  if (lower.includes('amounts') || lower === 'status' || lower === '/status') return statusLines();
   if (lower === 'help' || lower === '/help') return HELP;
 
   if (!lower.startsWith('/')) {
     return 'Unknown command. Try: "amount betpawa 30000" | "amounts" | "minroi 2" | "help"';
   }
+  return null;
+}
+
+// ── Button (callback_query) handling ─────────────────────────────────────────
+export function handleCallback(data) {
+  const d = String(data || '');
+  if (d === 'menu') return { text: MENU_TEXT, keyboard: MENU_KEYBOARD };
+  if (d === 'status') return { text: statusLines(), keyboard: MENU_KEYBOARD };
+  if (d === 'help') return { text: HELP, keyboard: MENU_KEYBOARD };
+  if (d === 'amount') return { text: 'Choose the book to set its stake anchor:', keyboard: bookKeyboard() };
+  if (d.startsWith('amount:')) {
+    const book = d.slice(7);
+    pendingInput.type = 'amount';
+    pendingInput.book = book;
+    pendingInput.at = Date.now();
+    const label = book === 'all' ? 'ALL books' : book;
+    return { text: `Send the amount for ${label} (XAF):\n\n(send "cancel" to abort)`, keyboard: backKeyboard() };
+  }
+  if (d === 'minroi') {
+    pendingInput.type = 'minroi';
+    pendingInput.book = null;
+    pendingInput.at = Date.now();
+    return { text: 'Send the minimum ROI % (1–50):\n\n(send "cancel" to abort)', keyboard: backKeyboard() };
+  }
+  return null;
+}
+
+// Consume the owner's next plain message as the prompted value.
+export function handlePendingInput(text) {
+  const lower = String(text || '').trim().toLowerCase();
+  if (lower === 'cancel' || lower === 'menu' || lower === 'abort') {
+    pendingInput.type = null;
+    return { text: MENU_TEXT, keyboard: MENU_KEYBOARD };
+  }
+  if (pendingInput.type === 'amount') {
+    const amount = parseAmount(text);
+    if (!amount) return { text: 'Invalid amount — send a number (e.g. 30000):', keyboard: backKeyboard() };
+    const book = pendingInput.book;
+    if (book === 'all') {
+      for (const b of KNOWN_BOOKS) config.bankrolls[b] = amount;
+      saveConfig();
+      pendingInput.type = null;
+      return { text: `✅ All books stake anchor = ${amount.toLocaleString()} XAF`, keyboard: MENU_KEYBOARD };
+    }
+    config.bankrolls[book] = amount;
+    saveConfig();
+    pendingInput.type = null;
+    return { text: `✅ ${book} stake anchor = ${amount.toLocaleString()} XAF — next ${book} alerts use it`, keyboard: MENU_KEYBOARD };
+  }
+  if (pendingInput.type === 'minroi') {
+    const pct = parseFloat(String(text || '').replace(',', '.'));
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 50) {
+      return { text: 'Invalid — send a % between 1 and 50:', keyboard: backKeyboard() };
+    }
+    config.min_roi = pct / 100;
+    saveConfig();
+    pendingInput.type = null;
+    return { text: `✅ Alert floor = ${pct}% worst-case ROI`, keyboard: MENU_KEYBOARD };
+  }
+  pendingInput.type = null;
   return null;
 }
 
@@ -161,8 +251,8 @@ export function totalStake(legs) {
 }
 
 /**
- * Long-poll Telegram updates and process owner commands. Runs forever —
- * call it only in loop mode (not --once/--diag, which should exit).
+ * Long-poll Telegram updates and process owner commands + button taps.
+ * Runs forever — call it only in loop mode (not --once/--diag, which should exit).
  */
 export function startTelegramControl() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -172,16 +262,30 @@ export function startTelegramControl() {
     return;
   }
   const API = `https://api.telegram.org/bot${token}`;
-  const send = async (text) => {
+  const send = async (text, keyboard) => {
     try {
       await fetch(`${API}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: owner, text, disable_web_page_preview: true }),
+        body: JSON.stringify({
+          chat_id: owner,
+          text,
+          disable_web_page_preview: true,
+          ...(keyboard ? { reply_markup: keyboard } : {}),
+        }),
       });
     } catch (e) {
       console.log(`[BotCtl] send failed: ${e.message.slice(0, 80)}`);
     }
+  };
+  const answer = async (callbackQueryId) => {
+    try {
+      await fetch(`${API}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQueryId }),
+      });
+    } catch { /* non-fatal */ }
   };
   const poll = async () => {
     for (;;) {
@@ -193,12 +297,36 @@ export function startTelegramControl() {
         if (!j.ok) { await new Promise(res => setTimeout(res, 3000)); continue; }
         for (const u of j.result || []) {
           if (u.update_id > config.last_update_id) config.last_update_id = u.update_id;
-          const msg = u.message || u.edited_message || u.channel_post;
+
+          // ── Button tap ──
+          if (u.callback_query) {
+            const cq = u.callback_query;
+            const cqOwner = String(cq.from?.id ?? cq.message?.chat?.id ?? '');
+            if (cqOwner !== owner) continue;
+            const res = handleCallback(cq.data);
+            if (res) {
+              await answer(cq.id);
+              await send(res.text, res.keyboard);
+            }
+            continue;
+          }
+
+          // ── Plain message ──
+          const msg = u.message || u.edited_message;
           if (!msg) continue;
           const chatId = String(msg.chat?.id ?? '');
           if (chatId !== owner) continue; // owner-only
-          const reply = handleMessage(msg.text);
-          if (reply) await send(reply);
+
+          const freshPrompt = pendingInput.type && (Date.now() - pendingInput.at) < PENDING_TTL_MS;
+          let res = null;
+          if (freshPrompt) {
+            res = handlePendingInput(msg.text);
+          } else {
+            pendingInput.type = null; // stale prompt — drop it, treat as command
+            const reply = handleMessage(msg.text);
+            if (reply) res = { text: reply, keyboard: MENU_KEYBOARD };
+          }
+          if (res?.text) await send(res.text, res.keyboard);
         }
         saveConfig(); // persist last_update_id
       } catch (e) {
@@ -208,5 +336,5 @@ export function startTelegramControl() {
     }
   };
   poll();
-  console.log('[BotCtl] Telegram control listening (owner-only)…');
+  console.log('[BotCtl] Telegram control listening (owner-only, buttons enabled)…');
 }
