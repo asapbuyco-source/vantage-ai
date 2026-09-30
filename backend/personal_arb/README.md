@@ -54,6 +54,14 @@ Why xvfb: 1xbet blocks headless Chromium — xvfb provides a virtual display so 
 On arb found: `🎯 ARB <market> <pct>% <home> vs <away> [books] <odds> — stake <per-leg>`.
 Semi-auto: alert only; place bets manually (books have no retail API; automation violates ToS).
 
+**Bot control (buttons + text, owner-only)** — `amount betpawa 30000`, `amounts`, `minroi 2`, `status`, `help`.
+Stakes in alerts are scaled from your per-book anchors; subscribers get share ratios.
+
+**Subscribers** — 👥 menu: forward a message from the person (or `add <chatId> <name>`).
+Everyone on the list receives every signal (share ratios, no personal stakes); screenshots stay owner-only.
+⚠️ Every extra account betting the same arb raises the syndicate pattern for the books' fraud systems —
+accounts get limited/voided faster. Keep the list small and trusted.
+
 ## Notes
 - Cross-book filter enforced — same-book line mismatches are voided by bookmakers, not arbs.
 - Real arbs cluster in the last minutes before kickoff; breadth < latency.

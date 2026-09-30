@@ -23,18 +23,23 @@ const DEFAULT_CONFIG = {
   bankrolls: {},       // book -> XAF stake anchor (per leg on that book)
   min_roi: 0.01,       // alert floor: worst-case ROI must be >= this
   last_update_id: 0,   // Telegram getUpdates offset (persisted)
+  recipients: [],      // [{ id, name, addedAt }] — signal recipients (owner + these)
 };
 
 export function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-      return { ...DEFAULT_CONFIG, ...saved, bankrolls: { ...(saved.bankrolls || {}) } };
+      return {
+        ...DEFAULT_CONFIG, ...saved,
+        bankrolls: { ...(saved.bankrolls || {}) },
+        recipients: Array.isArray(saved.recipients) ? saved.recipients : [],
+      };
     }
   } catch (e) {
     console.log(`[BotCtl] config load error: ${e.message.slice(0, 80)}`);
   }
-  return { ...DEFAULT_CONFIG, bankrolls: {} };
+  return { ...DEFAULT_CONFIG, bankrolls: {}, recipients: [] };
 }
 
 export const config = loadConfig();
@@ -60,9 +65,26 @@ const MENU_KEYBOARD = {
   inline_keyboard: [
     [btn('💰 Amount', 'amount')],
     [btn('📉 Min ROI', 'minroi')],
+    [btn('👥 Subscribers', 'subs')],
     [btn('📊 Status', 'status'), btn('❓ Help', 'help')],
   ],
 };
+
+function subsKeyboard() {
+  return {
+    inline_keyboard: [
+      [btn('➕ Add subscriber', 'subs:add')],
+      [btn('📋 List', 'subs:list'), btn('➖ Remove', 'subs:remove')],
+      [btn('↩️ Menu', 'menu')],
+    ],
+  };
+}
+
+function removeKeyboard() {
+  const rows = config.recipients.map(r => [btn(`➖ ${r.name || r.id}`, `subs:remove:${r.id}`)]);
+  rows.push([btn('↩️ Menu', 'menu')]);
+  return { inline_keyboard: rows };
+}
 
 function bookKeyboard() {
   return {
@@ -83,7 +105,7 @@ function backKeyboard() {
 const MENU_TEXT = [
   '🎛️ Arb Bot Control',
   'Tap a button — or type commands directly:',
-  '"amount betpawa 30000" | "minroi 2" | "amounts"',
+  '"amount betpawa 30000" | "minroi 2" | "amounts" | "list"',
 ].join('\n');
 
 function statusLines() {
@@ -92,8 +114,17 @@ function statusLines() {
     lines.push(`  ${b}: ${(config.bankrolls[b] ?? DEFAULT_BANKROLL).toLocaleString()} XAF`);
   }
   lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
+  lines.push(`👥 Subscribers: ${config.recipients.length ? config.recipients.map(r => `${r.name || r.id} (${r.id})`).join(', ') : 'none'}`);
   return lines.join('\n');
 }
+
+const SUBS_HELP = [
+  '👥 Subscribers receive every signal (share ratios, not your personal stakes).',
+  '➕ Add — forward me any message from the person, or send "add <chatId> <name>".',
+  '📋 List — show current subscribers.',
+  '➖ Remove — pick who to drop.',
+  '⚠️ Every subscriber betting the same arb raises the syndicate pattern for the books.',
+].join('\n');
 
 const HELP = [
   '🎛️ Arb Bot Control',
@@ -133,10 +164,28 @@ export function handleMessage(text) {
   const lower = String(text || '').trim().toLowerCase();
   if (!lower) return null;
 
-  let m = lower.match(/^(?:\/)?(?:set\s+)?amount\s+(.+?)\s+([\d\s.,]+)$/);
+  // add <chatId> <name> — manual subscriber add (owner-only path via chat filter)
+  let m = String(text || '').match(/^(?:\/)?add\s+(\d+)\s+(.+)$/i);
   if (m) {
-    const book = resolveBook(m[1]);
-    const amount = parseAmount(m[2]);
+    const id = m[1];
+    const name = m[2].trim();
+    if (!config.recipients.some(r => r.id === id)) {
+      config.recipients.push({ id, name: name.slice(0, 40), addedAt: new Date().toISOString() });
+      saveConfig();
+      return `✅ Added subscriber ${name} (${id}) — they now get every signal (share ratios).`;
+    }
+    return `ℹ️ ${name || id} is already a subscriber.`;
+  }
+
+  if (lower === 'list' || lower === '/list' || lower.includes('subscribers')) {
+    if (!config.recipients.length) return '👥 No subscribers yet. Use ➕ Add (or "add <chatId> <name>").';
+    return '👥 Subscribers:\n' + config.recipients.map(r => `  • ${r.name || r.id} (${r.id}) — added ${(r.addedAt || '').slice(0, 10)}`).join('\n');
+  }
+
+  let m2 = lower.match(/^(?:\/)?(?:set\s+)?amount\s+(.+?)\s+([\d\s.,]+)$/);
+  if (m2) {
+    const book = resolveBook(m2[1]);
+    const amount = parseAmount(m2[2]);
     if (!book || !amount) return 'Usage: amount <book|all> <XAF> — e.g. "amount betpawa 30000"';
     if (book === 'all') {
       for (const b of KNOWN_BOOKS) config.bankrolls[b] = amount;
@@ -148,9 +197,9 @@ export function handleMessage(text) {
     return `✅ ${book} stake anchor = ${amount.toLocaleString()} XAF — next ${book} alerts use it`;
   }
 
-  m = lower.match(/^(?:\/)?(?:set\s+)?minroi\s+([\d.,]+)$/);
-  if (m) {
-    const pct = parseFloat(m[1].replace(',', '.'));
+  m2 = lower.match(/^(?:\/)?(?:set\s+)?minroi\s+([\d.,]+)$/);
+  if (m2) {
+    const pct = parseFloat(m2[1].replace(',', '.'));
     if (!Number.isFinite(pct) || pct <= 0 || pct > 50) return 'Usage: minroi <pct> — e.g. "minroi 2" (2% floor)';
     config.min_roi = pct / 100;
     saveConfig();
@@ -161,7 +210,7 @@ export function handleMessage(text) {
   if (lower === 'help' || lower === '/help') return HELP;
 
   if (!lower.startsWith('/')) {
-    return 'Unknown command. Try: "amount betpawa 30000" | "amounts" | "minroi 2" | "help"';
+    return 'Unknown command. Try: "amount betpawa 30000" | "amounts" | "minroi 2" | "list" | "help"';
   }
   return null;
 }
@@ -187,15 +236,74 @@ export function handleCallback(data) {
     pendingInput.at = Date.now();
     return { text: 'Send the minimum ROI % (1–50):\n\n(send "cancel" to abort)', keyboard: backKeyboard() };
   }
+  if (d === 'subs') return { text: SUBS_HELP, keyboard: subsKeyboard() };
+  if (d === 'subs:list') {
+    const txt = config.recipients.length
+      ? '👥 Subscribers:\n' + config.recipients.map(r => `  • ${r.name || r.id} (${r.id}) — added ${(r.addedAt || '').slice(0, 10)}`).join('\n')
+      : '👥 No subscribers yet.';
+    return { text: txt, keyboard: subsKeyboard() };
+  }
+  if (d === 'subs:add') {
+    pendingInput.type = 'adduser';
+    pendingInput.book = null;
+    pendingInput.at = Date.now();
+    return {
+      text: '➕ Add a subscriber:\nOption 1 — FORWARD me any message from them (best).\nOption 2 — send: add <chatId> <name>\n\n(send "cancel" to abort)',
+      keyboard: backKeyboard(),
+    };
+  }
+  if (d === 'subs:remove') {
+    if (!config.recipients.length) return { text: '👥 No subscribers to remove.', keyboard: subsKeyboard() };
+    return { text: '➖ Pick who to remove:', keyboard: removeKeyboard() };
+  }
+  if (d.startsWith('subs:remove:')) {
+    const id = d.slice('subs:remove:'.length);
+    const idx = config.recipients.findIndex(r => r.id === id);
+    if (idx === -1) return { text: 'ℹ️ Not a subscriber anymore.', keyboard: subsKeyboard() };
+    const [removed] = config.recipients.splice(idx, 1);
+    saveConfig();
+    return { text: `✅ Removed ${removed.name || removed.id} — no longer receives signals.`, keyboard: subsKeyboard() };
+  }
   return null;
 }
 
-// Consume the owner's next plain message as the prompted value.
-export function handlePendingInput(text) {
-  const lower = String(text || '').trim().toLowerCase();
+// Consume the owner's next message as the prompted value.
+// `msg` may be the raw Telegram message object (for forward_from) or a string.
+export function handlePendingInput(msg) {
+  const raw = typeof msg === 'string' ? msg : (msg?.text ?? '');
+  const lower = String(raw).trim().toLowerCase();
   if (lower === 'cancel' || lower === 'menu' || lower === 'abort') {
     pendingInput.type = null;
     return { text: MENU_TEXT, keyboard: MENU_KEYBOARD };
+  }
+  if (pendingInput.type === 'adduser') {
+    const forward = typeof msg === 'object' ? msg?.forward_from : null;
+    if (forward && forward.id) {
+      const id = String(forward.id);
+      if (config.recipients.some(r => r.id === id)) {
+        pendingInput.type = null;
+        return { text: `ℹ️ ${forward.first_name || id} is already a subscriber.`, keyboard: subsKeyboard() };
+      }
+      const fullName = ((forward.first_name || '') + (forward.last_name ? ' ' + forward.last_name : '')).trim();
+      config.recipients.push({ id, name: fullName, addedAt: new Date().toISOString() });
+      saveConfig();
+      pendingInput.type = null;
+      return { text: `✅ Added subscriber ${fullName || id} (${id}) — they now get every signal (share ratios).`, keyboard: subsKeyboard() };
+    }
+    const m = String(raw || '').match(/^(?:\/)?add\s+(\d+)\s+(.+)$/i);
+    if (m) {
+      const id = m[1];
+      const name = m[2].trim();
+      if (config.recipients.some(r => r.id === id)) {
+        pendingInput.type = null;
+        return { text: `ℹ️ ${name || id} is already a subscriber.`, keyboard: subsKeyboard() };
+      }
+      config.recipients.push({ id, name: name.slice(0, 40), addedAt: new Date().toISOString() });
+      saveConfig();
+      pendingInput.type = null;
+      return { text: `✅ Added subscriber ${name} (${id}) — they now get every signal (share ratios).`, keyboard: subsKeyboard() };
+    }
+    return { text: 'That didn\'t work. FORWARD me a message from the person, or send: add <chatId> <name>\n\n(send "cancel" to abort)', keyboard: backKeyboard() };
   }
   if (pendingInput.type === 'amount') {
     const amount = parseAmount(text);
@@ -213,7 +321,7 @@ export function handlePendingInput(text) {
     return { text: `✅ ${book} stake anchor = ${amount.toLocaleString()} XAF — next ${book} alerts use it`, keyboard: MENU_KEYBOARD };
   }
   if (pendingInput.type === 'minroi') {
-    const pct = parseFloat(String(text || '').replace(',', '.'));
+    const pct = parseFloat(String(raw || '').replace(',', '.'));
     if (!Number.isFinite(pct) || pct <= 0 || pct > 50) {
       return { text: 'Invalid — send a % between 1 and 50:', keyboard: backKeyboard() };
     }
@@ -248,6 +356,35 @@ export function scaleStakes(legs) {
 
 export function totalStake(legs) {
   return legs.reduce((s, l) => s + Number(l.stake || 0), 0);
+}
+
+// ── Signal delivery (used by arb_scanner_live.js) ────────────────────────────
+// Owner always receives; subscribers receive the same text (share ratios, no
+// personal stakes). Screenshots are owner-only (heavy per-leg browser work).
+export function getRecipients() {
+  return [...config.recipients];
+}
+
+export async function sendMessageTo(chatId, text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token || !chatId) return false;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+    });
+    return r.ok;
+  } catch (e) {
+    console.log(`[BotCtl] send to ${chatId} failed: ${e.message.slice(0, 80)}`);
+    return false;
+  }
+}
+
+/** Send one text to every SUBSCRIBER (owner is handled separately by the scanner). Best-effort. */
+export async function broadcastSignal(text) {
+  await Promise.allSettled(config.recipients.map(r => sendMessageTo(r.id, text)));
+  return true;
 }
 
 /**
@@ -320,7 +457,7 @@ export function startTelegramControl() {
           const freshPrompt = pendingInput.type && (Date.now() - pendingInput.at) < PENDING_TTL_MS;
           let res = null;
           if (freshPrompt) {
-            res = handlePendingInput(msg.text);
+            res = handlePendingInput(msg);
           } else {
             pendingInput.type = null; // stale prompt — drop it, treat as command
             const reply = handleMessage(msg.text);

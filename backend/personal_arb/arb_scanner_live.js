@@ -10,7 +10,7 @@
  */
 import { calcArb } from './arb_calc.js';
 import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, asianSplitDisplay } from './arb_engine.mjs';
-import { config as botConfig, startTelegramControl, scaleStakes, totalStake } from './telegram_control.js';
+import { config as botConfig, startTelegramControl, scaleStakes, totalStake, broadcastSignal } from './telegram_control.js';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -596,9 +596,11 @@ function buildArbTemplateParams(c) {
 }
 
 // Send to every configured channel (Telegram + WhatsApp). Missing config = skipped.
+// Owner gets `text`; subscribers get `subText` (share ratios — no personal stakes).
 // Returns the WhatsApp delivery state so callers can fall back to a template when needed.
-async function notify(text) {
+async function notify(text, subText = text) {
   const [, wa] = await Promise.allSettled([sendTelegram(text), sendWhatsApp(text)]);
+  await broadcastSignal(subText); // subscribers always receive (owner handled above)
   return wa.status === 'fulfilled' ? wa.value : 'error';
 }
 
@@ -856,54 +858,67 @@ function screenshotHintForLeg(leg, c) {
 async function report(c) {
   const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
-  // Scale the 100-unit stakes to the user's per-book anchors (Telegram "amount").
-  // Falls back to the 100-unit scale when no anchors are configured.
-  c.legs = scaleStakes(c.legs);
-  const total = totalStake(c.legs);
   // 1xbet-family feeds (1xbet/betwinner/paripesa) lag their live pages — flag them
   const hasFeedLag = c.legs.some(l => ['1xbet', 'betwinner', 'paripesa'].includes(l.book));
   const tag = periodShort(c.period) ? ` (${periodShort(c.period)})` : '';
-  const lines = [];
-  lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
-  lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
-  const scopeStr = c.scope && c.scope !== 'MATCH' ? `  |  Scope: ${scopeLabel(c.scope)}` : '';
-  lines.push(`Market: ${c.kind}  |  Period: ${periodLabel(c.period || PERIOD.UNKNOWN)}${scopeStr}`);
-  lines.push(`Guaranteed ROI: ${pct.toFixed(2)}%`);
-  lines.push(`Prices checked at ${new Date().toISOString().slice(11, 19)} UTC — verify on site NOW`);
-  // Kickoff countdown — user decides if they have time to place both legs
-  if (c.kickoff) {
-    const mins = Math.round((c.kickoff - Date.now()) / 60000);
-    if (mins > 0 && mins <= 30) lines.push(`⏰ KICKS OFF IN ${mins} MIN — place BOTH legs FAST`);
-    else if (mins > 30) lines.push(`Kickoff in ${mins} min`);
-    else lines.push(`⏰ KICKOFF IMMINENT (${mins} min) — likely too late, verify before betting`);
-  }
-  lines.push('─'.repeat(32));
-  c.legs.forEach((s, i) => {
-    const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betwinner' ? 'BetWinner' : s.book === 'paripesa' ? 'PariPesa' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
-    lines.push(`${i + 1}) ON ${cap.toUpperCase()} → bet: ${s.bet}${tag}`);
-    lines.push(`    Odds ${s.odds} | Stake ${s.stake} XAF → wins ${s.payout} XAF`);
-    // Guaranteed "how to find it" — works even if the screenshot fails
-    const find = howToFindLeg(s, c);
-    if (find) lines.push(`    ${find}`);
-    if (s.link) lines.push(`    Link: ${s.link}`);
-  });
-  lines.push('─'.repeat(32));
-  lines.push(`Total stake ${total} XAF → worst case pays ${Math.round(c.worst * total / 100)} XAF (guaranteed regardless of result)`);
-  if (hasFeedLag) lines.push('⚠️ 1XBET-FAMILY odds come from their feed, NOT the live page. Confirm the price on the site BEFORE betting — if it moved, the arb is gone.');
-  if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
-  const full = lines.join('\n');
-  console.log(full);
-  const waState = await notify(full);
+  // Build the alert text for a given leg set.
+  // scaled=true → owner version (per-book XAF stakes from Telegram anchors);
+  // false → subscriber version (share ratios only — they size their own stakes).
+  const build = (legs, scaled) => {
+    const lines = [];
+    lines.push(suspicious ? '⚠️ POSSIBLE ARB — VERIFY PRICES BEFORE BETTING' : '🎯 ARBITRAGE FOUND — BET NOW');
+    lines.push(`${c.teams[0]} vs ${c.teams[1]}`);
+    const scopeStr = c.scope && c.scope !== 'MATCH' ? `  |  Scope: ${scopeLabel(c.scope)}` : '';
+    lines.push(`Market: ${c.kind}  |  Period: ${periodLabel(c.period || PERIOD.UNKNOWN)}${scopeStr}`);
+    lines.push(`Guaranteed ROI: ${pct.toFixed(2)}%`);
+    lines.push(`Prices checked at ${new Date().toISOString().slice(11, 19)} UTC — verify on site NOW`);
+    // Kickoff countdown — user decides if they have time to place both legs
+    if (c.kickoff) {
+      const mins = Math.round((c.kickoff - Date.now()) / 60000);
+      if (mins > 0 && mins <= 30) lines.push(`⏰ KICKS OFF IN ${mins} MIN — place BOTH legs FAST`);
+      else if (mins > 30) lines.push(`Kickoff in ${mins} min`);
+      else lines.push(`⏰ KICKOFF IMMINENT (${mins} min) — likely too late, verify before betting`);
+    }
+    lines.push('─'.repeat(32));
+    legs.forEach((s, i) => {
+      const cap = s.book === '1xbet' ? '1xbet' : s.book === 'betwinner' ? 'BetWinner' : s.book === 'paripesa' ? 'PariPesa' : s.book === 'betfrenzy' ? 'BetFrenzy' : s.book === 'premierbet' ? 'PremierBet' : s.book === 'pmuc' ? 'PMUC' : s.book === 'betpawa' ? 'BetPawa' : s.book;
+      lines.push(`${i + 1}) ON ${cap.toUpperCase()} → bet: ${s.bet}${tag}`);
+      if (scaled) {
+        lines.push(`    Odds ${s.odds} | Stake ${s.stake} XAF → wins ${s.payout} XAF`);
+      } else {
+        const share = parseFloat(s.stake) / 100;
+        lines.push(`    Odds ${s.odds} | Stake share ${(share * 100).toFixed(1)}% of your total`);
+      }
+      // Guaranteed "how to find it" — works even if the screenshot fails
+      const find = howToFindLeg(s, c);
+      if (find) lines.push(`    ${find}`);
+      if (s.link) lines.push(`    Link: ${s.link}`);
+    });
+    lines.push('─'.repeat(32));
+    if (scaled) {
+      const total = totalStake(legs);
+      lines.push(`Total stake ${total} XAF → worst case pays ${Math.round(c.worst * total / 100)} XAF (guaranteed regardless of result)`);
+    } else {
+      lines.push('Stake ratio applies to ANY total you choose — size your own stakes.');
+    }
+    if (hasFeedLag) lines.push('⚠️ 1XBET-FAMILY odds come from their feed, NOT the live page. Confirm the price on the site BEFORE betting — if it moved, the arb is gone.');
+    if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
+    return lines.join('\n');
+  };
+
+  // Owner version: stakes scaled to the per-book anchors (Telegram "amount").
+  const ownerLegs = scaleStakes(c.legs);
+  const ownerText = build(ownerLegs, true);
+  // Subscriber version: same alert, share ratios instead of personal XAF.
+  const subText = ownerLegs === c.legs ? ownerText : build(c.legs, false);
+  console.log(ownerText);
+  const waState = await notify(ownerText, subText);
   // WhatsApp is disabled unless WHATSAPP_ENABLED=1; the template fallback only
   // applies if it is ever re-enabled (24h service window closed).
   if (waState === 'window_closed' && WA_ENABLED() && process.env.WHATSAPP_TEMPLATE) await sendWhatsAppTemplate(buildArbTemplateParams(c));
-  // Screenshot each book's match page for EVERY arb — so you SEE the exact bet and
-  // the highlighted odds button (asian-line rows are the hardest to find). Auto-click
-  // the odds button so the bet slip shows the selection. Screenshot is best-effort:
+  // Screenshot each book's match page for EVERY arb — owner-only (the subscriber
+  // alert already carries the "how to find it" hints + links). Best-effort:
   // failures are logged, never block the alert.
-  // 1xbet-family books (1xbet/betwinner/paripesa) refuse the direct screenshot browser
-  // on the server (their WAF blocks the Railway IP) — skipped; their links in the
-  // alert still open the right page for manual checks.
   const SCREENSHOT_SKIP = new Set(['1xbet', 'betwinner', 'paripesa']);
   for (const s of c.legs) {
     if (s.link && !SCREENSHOT_SKIP.has(s.book)) await sendBookScreenshot(s.book, s.link, `${c.teams[0]} vs ${c.teams[1]} — ${s.bet}${tag} @ ${s.odds} (${s.book.toUpperCase()})`, s.odds, screenshotHintForLeg(s, c));
