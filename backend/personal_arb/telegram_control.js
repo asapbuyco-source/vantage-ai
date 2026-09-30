@@ -91,6 +91,7 @@ function removeKeyboard() {
 function bookKeyboard() {
   return {
     inline_keyboard: [
+      [btn('💰 Current amounts', 'amounts')],
       [btn('All books', 'amount:all')],
       [btn('BetFrenzy', 'amount:betfrenzy'), btn('BetPawa', 'amount:betpawa')],
       [btn('PMUC', 'amount:pmuc'), btn('PremierBet', 'amount:premierbet')],
@@ -110,11 +111,16 @@ const MENU_TEXT = [
   '"amount betpawa 30000" | "minroi 2" | "amounts" | "list"',
 ].join('\n');
 
-function statusLines() {
-  const lines = ['💰 Stake anchors (per leg, per book):'];
+function amountsLines() {
+  const lines = ['💰 Current stake anchors (per leg, per book):'];
   for (const b of KNOWN_BOOKS.sort()) {
     lines.push(`  ${b}: ${(config.bankrolls[b] ?? DEFAULT_BANKROLL).toLocaleString()} XAF`);
   }
+  return lines.join('\n');
+}
+
+function statusLines() {
+  const lines = [...amountsLines().split('\n')];
   lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
   lines.push(`👥 Subscribers: ${config.recipients.length ? config.recipients.map(r => `${r.name || r.id} (${r.id})`).join(', ') : 'none'}`);
   if (config.pendingApprovals.length) {
@@ -228,6 +234,7 @@ export function handleCallback(data) {
   if (d === 'status') return { text: statusLines(), keyboard: MENU_KEYBOARD };
   if (d === 'help') return { text: HELP, keyboard: MENU_KEYBOARD };
   if (d === 'amount') return { text: 'Choose the book to set its stake anchor:', keyboard: bookKeyboard() };
+  if (d === 'amounts') return { text: amountsLines(), keyboard: bookKeyboard() };
   if (d.startsWith('amount:')) {
     const book = d.slice(7);
     pendingInput.type = 'amount';
@@ -335,7 +342,7 @@ export function handlePendingInput(msg) {
     return { text: 'That didn\'t work. FORWARD me a message from the person, or send: add <chatId> <name>\n\n(send "cancel" to abort)', keyboard: backKeyboard() };
   }
   if (pendingInput.type === 'amount') {
-    const amount = parseAmount(text);
+    const amount = parseAmount(raw);
     if (!amount) return { text: 'Invalid amount — send a number (e.g. 30000):', keyboard: backKeyboard() };
     const book = pendingInput.book;
     if (book === 'all') {
