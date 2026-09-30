@@ -148,9 +148,14 @@ const ticketLegs = useMemo(() => {
 
     const fetchTicketExplanation = async (ticket: Match[]) => {
         try {
+            const currentUser = (await import('../firebaseConfig')).auth.currentUser;
+            const token = currentUser ? await currentUser.getIdToken() : '';
             const response = await fetch(`${backendUrl}/api/ai/ticket-explanation`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
                 body: JSON.stringify({
                     ticket,
                     stake: parseFloat(stake) || 1000,

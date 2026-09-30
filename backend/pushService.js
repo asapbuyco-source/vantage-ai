@@ -143,28 +143,37 @@ export async function broadcastPush(notification) {
             }
         };
 
-        const result = await admin.messaging().sendEachForMulticast({
-            tokens,
-            ...message,
-        });
-
+        // FCM caps a single multicast at 500 tokens — chunk to support >500 subscribers.
+        const FCM_BATCH_SIZE = 500;
+        let successCount = 0;
+        let failureCount = 0;
         let deleteCount = 0;
-        for (const failure of result.failureList) {
-            if (failure.error?.message?.includes('Invalid registration token') ||
-                failure.error?.message?.includes('not registered')) {
-                const docId = fcmSnapshot.docs.find(d => d.data().fcmToken === failure.token)?.id;
-                if (docId) {
-                    await db.collection('push_subscriptions').doc(docId).delete();
-                    deleteCount++;
+        for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
+            const batch = tokens.slice(i, i + FCM_BATCH_SIZE);
+            const result = await admin.messaging().sendEachForMulticast({
+                tokens: batch,
+                ...message,
+            });
+            successCount += result.successCount;
+            failureCount += result.failureCount;
+
+            for (const failure of result.failureList) {
+                if (failure.error?.message?.includes('Invalid registration token') ||
+                    failure.error?.message?.includes('not registered')) {
+                    const docId = fcmSnapshot.docs.find(d => d.data().fcmToken === failure.token)?.id;
+                    if (docId) {
+                        await db.collection('push_subscriptions').doc(docId).delete();
+                        deleteCount++;
+                    }
                 }
             }
         }
 
-        logger.info(`[PushService] Broadcast: ${result.successCount} sent, ${result.failureCount} failed, ${deleteCount} cleaned up`);
+        logger.info(`[PushService] Broadcast: ${successCount} sent, ${failureCount} failed, ${deleteCount} cleaned up`);
         return {
             success: true,
-            sentCount: result.successCount,
-            failCount: result.failureCount,
+            sentCount: successCount,
+            failCount: failureCount,
             deletedCount: deleteCount
         };
     } catch (e) {

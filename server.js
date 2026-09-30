@@ -381,7 +381,7 @@ async function generateDailyTip(predictions) {
     }
 }
 
-app.post('/api/ai/features', async (req, res) => {
+app.post('/api/ai/features', aiLimiter, requireFirebaseUser, async (req, res) => {
     try {
         const { predictions } = req.body;
         const [leagueRadar, accaCopilot, dailyTip] = await Promise.all([
@@ -396,7 +396,7 @@ app.post('/api/ai/features', async (req, res) => {
     }
 });
 
-app.post('/api/ai/ticket-explanation', async (req, res) => {
+app.post('/api/ai/ticket-explanation', aiLimiter, requireFirebaseUser, async (req, res) => {
     try {
         const { ticket, stake, legCount } = req.body;
         if (!ticket || ticket.length === 0) {
@@ -732,6 +732,16 @@ const openaiLimiter = rateLimit({
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'Too many OpenAI requests from this IP, please try again in 15 minutes' }
+});
+
+// AI feature endpoints (league radar / acca copilot / daily tip / ticket explanation)
+// burn OpenRouter credits — bound per-IP usage AND require a signed-in user.
+const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many AI requests from this IP, please try again in 15 minutes' }
 });
 
 app.post('/api/openai/generate', adminAuth, openaiLimiter, async (req, res) => {

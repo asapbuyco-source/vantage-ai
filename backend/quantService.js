@@ -519,11 +519,18 @@ export const runQuantPipeline = async (dateStr = null, dryRun = false) => {
                     // Update Firestore with enriched predictions
                     if (JSON.stringify(enrichedPredictions) !== JSON.stringify(predictions)) {
                         try {
+                            // PAYWALL: quant_predictions is publicly readable (firestore.rules).
+                            // Strip VIP-only content (AI analysis, other good markets, banker
+                            // metadata) from the PUBLIC copy so the VIP tier stays exclusive.
+                            const publicPredictions = enrichedPredictions.map(p => {
+                                const { analysis_en, analysis_fr, all_value_bets, _safest_bet, hedge_suggestion, ...pub } = p;
+                                return pub;
+                            });
                             await db.collection('quant_predictions').doc(effectiveDate).set(
-                                { predictions: enrichedPredictions },
+                                { predictions: publicPredictions },
                                 { merge: true }
                             );
-                            // Also update VIP document
+                            // VIP document keeps the full enriched payload
                             await db.collection('quant_vip').doc(effectiveDate).set(
                                 { predictions: enrichedPredictions },
                                 { merge: true }

@@ -176,7 +176,9 @@ def process_games(games_data, min_ev=MIN_EV, min_probability=MIN_PROBABILITY, re
             
             approved_bets.append({
                 "id": f"bball_{game_id}",
+                "fixture_id": f"bball_{game_id}",
                 "league": "NBA",
+                "league_tier": 1,
                 "homeTeam": home_team,
                 "awayTeam": away_team,
                 "homeTeamLogo": "",
@@ -186,8 +188,13 @@ def process_games(games_data, min_ev=MIN_EV, min_probability=MIN_PROBABILITY, re
                 "prediction_en": bet["prediction_en"],
                 "prediction_fr": bet["prediction_fr"],
                 "confidence": confidence,
+                "probability": round(bet["prob"], 4),
                 "odds": round(bet["odds"], 2),
                 "category": category,
+                "value_rank": "high" if category == "safe" else "medium",
+                "ev_pct": round(bet["ev"] * 100, 1),
+                "expected_value": round(bet["ev"], 4),
+                "vault_eligible": True,
                 "analysis_en": f"Consensus EV: +{round(bet['ev']*100, 1)}% | Win Prob: {confidence}% | Best Odds: {bet['odds']}{relaxation_note_en}",
                 "analysis_fr": f"Consensus EV: +{round(bet['ev']*100, 1)}% | Prob Victoire: {confidence}% | Meilleure Cote: {bet['odds']}{relaxation_note_fr}",
                 "sport": "basketball",

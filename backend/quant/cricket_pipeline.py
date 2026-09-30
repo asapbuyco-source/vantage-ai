@@ -157,7 +157,9 @@ def process_fixtures(fixtures):
 
         picks.append({
             "id": f"cricket_{fixture.get('id')}",
+            "fixture_id": str(fixture.get("id") or ""),
             "league": _name(league, "Cricket"),
+            "league_tier": 2,
             "fixtureId": fixture.get("id"),
             "homeTeam": home_team,
             "awayTeam": away_team,
@@ -168,8 +170,11 @@ def process_fixtures(fixtures):
             "prediction_en": prediction_en,
             "prediction_fr": prediction_fr,
             "confidence": confidence,
+            "probability": round(confidence / 100, 4),
             "odds": round(odds, 2),
             "category": category,
+            "value_rank": "medium" if category in ("safe", "value") else "low",
+            "vault_eligible": True,
             "analysis_en": analysis_note,
             "analysis_fr": analysis_note,
             "sport": "cricket",

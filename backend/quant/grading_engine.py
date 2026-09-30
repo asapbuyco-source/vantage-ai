@@ -184,11 +184,13 @@ def _has_negative_ev(pred: dict) -> bool:
     if pick_odd <= 1.0:
         return False
     market = pred.get("bet_type", "")
-    home_prob = float(pred.get("home_prob", 0) or 0)
-    away_prob = float(pred.get("away_prob", 0) or 0)
+    # NOTE: pipeline stores home_win_prob / away_win_prob / draw_prob / btts_prob
+    # (the old home_prob/away_prob/btts_yes_prob keys never existed → filter was inert)
+    home_prob = float(pred.get("home_win_prob", 0) or 0)
+    away_prob = float(pred.get("away_win_prob", 0) or 0)
     draw_prob = float(pred.get("draw_prob", 0) or 0)
     over25_prob = float(pred.get("over25_prob", 0) or 0)
-    btts_yes_prob = float(pred.get("btts_yes_prob", 0) or 0)
+    btts_yes_prob = float(pred.get("btts_prob", 0) or 0)
     win_prob = 0.0
     if "home win" in market.lower() and home_prob > 0:
         win_prob = home_prob

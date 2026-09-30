@@ -330,8 +330,14 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
 
     const excerpt = content.replace(/<[^>]+>/g, '').substring(0, 160).trim() + '...';
     
-    // Unique doc ID - merge all leagues into one daily doc
-    const docId = `${todayStr}_${language}_roundup`;
+    // Unique doc ID per league — 4 leagues writing to the same id would clobber
+    // each other (only the last league's blog survived). BlogIndex links by
+    // doc id, so suffixed ids resolve to the correct post.
+    const leagueSlug = String(league || 'roundup')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    const docId = `${todayStr}_${language}_roundup_${leagueSlug}`;
 
     await db.collection('daily_blogs').doc(docId).set({
         title,

@@ -163,7 +163,9 @@ def build_unified_vault(date_str: str = None):
     try:
         doc = db.collection("basketball_predictions").document(date_str).get()
         if doc.exists:
-            preds = doc.to_dict().get("predictions", [])
+            # basketball_pipeline saves under "matches" — check both keys
+            data = doc.to_dict()
+            preds = data.get("predictions", data.get("matches", []))
             candidates = extract_vault_candidates(preds, "basketball")
             all_candidates.extend(candidates)
             print(f"  Basketball: {len(preds)} predictions -> {len(candidates)} vault candidates")
@@ -174,7 +176,9 @@ def build_unified_vault(date_str: str = None):
     try:
         doc = db.collection("cricket_predictions").document(date_str).get()
         if doc.exists:
-            preds = doc.to_dict().get("predictions", [])
+            # cricket_pipeline saves under "matches" — check both keys
+            data = doc.to_dict()
+            preds = data.get("predictions", data.get("matches", []))
             candidates = extract_vault_candidates(preds, "cricket")
             all_candidates.extend(candidates)
             print(f"  Cricket: {len(preds)} predictions -> {len(candidates)} vault candidates")
