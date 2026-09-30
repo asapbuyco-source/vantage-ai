@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
   min_roi: 0.01,       // alert floor: worst-case ROI must be >= this
   last_update_id: 0,   // Telegram getUpdates offset (persisted)
   recipients: [],      // [{ id, name, addedAt }] — signal recipients (owner + these)
+  pendingApprovals: [],// [{ id, name, at }] — non-owner who messaged the bot, awaiting owner approval
 };
 
 export function loadConfig() {
@@ -34,6 +35,7 @@ export function loadConfig() {
         ...DEFAULT_CONFIG, ...saved,
         bankrolls: { ...(saved.bankrolls || {}) },
         recipients: Array.isArray(saved.recipients) ? saved.recipients : [],
+        pendingApprovals: Array.isArray(saved.pendingApprovals) ? saved.pendingApprovals : [],
       };
     }
   } catch (e) {
@@ -115,12 +117,16 @@ function statusLines() {
   }
   lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
   lines.push(`👥 Subscribers: ${config.recipients.length ? config.recipients.map(r => `${r.name || r.id} (${r.id})`).join(', ') : 'none'}`);
+  if (config.pendingApprovals.length) {
+    lines.push(`⏳ Awaiting approval: ${config.pendingApprovals.map(p => `${p.name || p.id} (${p.id})`).join(', ')}`);
+  }
   return lines.join('\n');
 }
 
 const SUBS_HELP = [
   '👥 Subscribers receive every signal (share ratios, not your personal stakes).',
-  '➕ Add — forward me any message from the person, or send "add <chatId> <name>".',
+  '➕ Add — FORWARD any message from the person, or send "add <chatId> <name>".',
+  '💡 Easiest: tell the person to message this bot once — you get an Approve/Deny button.',
   '📋 List — show current subscribers.',
   '➖ Remove — pick who to drop.',
   '⚠️ Every subscriber betting the same arb raises the syndicate pattern for the books.',
@@ -263,6 +269,29 @@ export function handleCallback(data) {
     const [removed] = config.recipients.splice(idx, 1);
     saveConfig();
     return { text: `✅ Removed ${removed.name || removed.id} — no longer receives signals.`, keyboard: subsKeyboard() };
+  }
+  // Approve / deny someone who messaged the bot asking to join
+  if (d.startsWith('approve:')) {
+    const id = d.slice('approve:'.length);
+    const idx = config.pendingApprovals.findIndex(p => p.id === id);
+    if (idx === -1) return { text: 'ℹ️ No pending request with that ID.', keyboard: MENU_KEYBOARD };
+    const [req] = config.pendingApprovals.splice(idx, 1);
+    if (!config.recipients.some(r => r.id === id)) {
+      config.recipients.push({ id, name: req.name || id, addedAt: new Date().toISOString() });
+    }
+    saveConfig();
+    // notify the new subscriber they're in
+    sendMessageTo(id, '✅ Approved — you now receive every Vantage arb signal (share ratios). Verify prices before betting.');
+    return { text: `✅ Approved ${req.name || id} — they now get every signal.`, keyboard: subsKeyboard() };
+  }
+  if (d.startsWith('deny:')) {
+    const id = d.slice('deny:'.length);
+    const idx = config.pendingApprovals.findIndex(p => p.id === id);
+    if (idx === -1) return { text: 'ℹ️ No pending request with that ID.', keyboard: MENU_KEYBOARD };
+    const [req] = config.pendingApprovals.splice(idx, 1);
+    saveConfig();
+    sendMessageTo(id, '❌ Your signal access request was declined by the owner.');
+    return { text: `❌ Declined ${req.name || id}.`, keyboard: subsKeyboard() };
   }
   return null;
 }
@@ -452,7 +481,26 @@ export function startTelegramControl() {
           const msg = u.message || u.edited_message;
           if (!msg) continue;
           const chatId = String(msg.chat?.id ?? '');
-          if (chatId !== owner) continue; // owner-only
+
+          // ── NON-owner messaging the bot: log a pending approval request ──
+          if (chatId !== owner) {
+            const from = msg.from || {};
+            const sid = String(from.id ?? chatId);
+            if (config.recipients.some(r => r.id === sid)) continue; // already in
+            const existing = config.pendingApprovals.find(p => p.id === sid);
+            if (existing) existing.at = Date.now(); // refresh
+            else config.pendingApprovals.push({ id: sid, name: (from.first_name || '') + (from.last_name ? ' ' + from.last_name : ''), at: Date.now() });
+            config.pendingApprovals = config.pendingApprovals.filter(p => Date.now() - p.at < 24 * 60 * 60 * 1000); // prune stale
+            saveConfig();
+            await sendMessageTo(sid, '⏳ Signal access request received — the owner has been notified. You will get alerts once approved.');
+            const req = config.pendingApprovals.find(p => p.id === sid);
+            await send(`👤 ${req?.name || sid} (${sid}) wants to receive signals — approve?`, {
+              inline_keyboard: [
+                [btn('✅ Approve', `approve:${sid}`), btn('❌ Deny', `deny:${sid}`)],
+              ],
+            });
+            continue;
+          }
 
           const freshPrompt = pendingInput.type && (Date.now() - pendingInput.at) < PENDING_TTL_MS;
           let res = null;
