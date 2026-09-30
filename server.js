@@ -325,6 +325,17 @@ async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
     return content;
 }
 
+// AI feature endpoints (league radar / acca copilot / daily tip / ticket explanation)
+// burn OpenRouter credits — bound per-IP usage AND require a signed-in user.
+// NOTE: must be declared BEFORE the /api/ai/* routes below (const TDZ).
+const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many AI requests from this IP, please try again in 15 minutes' }
+});
+
 async function generateLeagueRadar(predictions) {
     if (!predictions || predictions.length === 0) return null;
     try {
@@ -732,16 +743,6 @@ const openaiLimiter = rateLimit({
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'Too many OpenAI requests from this IP, please try again in 15 minutes' }
-});
-
-// AI feature endpoints (league radar / acca copilot / daily tip / ticket explanation)
-// burn OpenRouter credits — bound per-IP usage AND require a signed-in user.
-const aiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 40,
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    message: { error: 'Too many AI requests from this IP, please try again in 15 minutes' }
 });
 
 app.post('/api/openai/generate', adminAuth, openaiLimiter, async (req, res) => {
