@@ -829,27 +829,36 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             predictions.append(pred)
 
             # ── Add to accumulator pool — separate eligibility from vault ───
+            # TOP-LEAGUE ONLY (tier <= 2): accumulators must come from the
+            # leagues with the most reliable model data, not long-tail leagues.
             acca_eligible = bool(
                 best_bet
                 and best_bet.odds > 1.0
                 and odds_fresh
                 and category in ("safe", "value")
                 and value_rank in ("high", "medium")
-                and match.league_tier < 5
+                and match.league_tier <= 2
             )
             if best_bet and acca_eligible:
-                bet_pool.append({
-                    "fixture_id": match.fixture_id,
-                    "league": match.league,
-                    "home_team": match.home_team,
-                    "away_team": match.away_team,
-                    "market": best_bet.market,
-                    "odds": best_bet.odds,
-                    "model_prob": best_bet.model_prob,
-                    "expected_value": best_bet.expected_value,
-                    "kickoff_utc": match.kickoff_utc,
-                    "kickoff_local": match.kickoff_local,
-                })
+                # Use ALL approved "other good markets" per fixture, not just the
+                # single best bet — the optimizer then picks the strongest market
+                # per fixture for the combination. Cap at 4 to bound search size.
+                acca_markets_for_fixture = approved_bets[:4] if approved_bets else [best_bet]
+                for ab in acca_markets_for_fixture:
+                    if ab.odds <= 1.0 or ab.model_prob < 0.55:
+                        continue
+                    bet_pool.append({
+                        "fixture_id": match.fixture_id,
+                        "league": match.league,
+                        "home_team": match.home_team,
+                        "away_team": match.away_team,
+                        "market": ab.market,
+                        "odds": ab.odds,
+                        "model_prob": ab.model_prob,
+                        "expected_value": ab.expected_value,
+                        "kickoff_utc": match.kickoff_utc,
+                        "kickoff_local": match.kickoff_local,
+                    })
 
             # ── Accumulator pool: HIGHEST-probability pick per fixture (not EV pick) ──
             # Users want accumulators built from safest bets, not value bets.
@@ -895,7 +904,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
     # pool so accumulators benefit from league-level adjustments.
     acc_pool = []
     for pred in predictions:
-        if pred.get("category") in ("safe", "value") and pred.get("odds", 0) > 1.0 and pred.get("league_tier", 5) < 5:
+        # Top-league only (tier <= 2) — same gate as bet_pool.
+        if pred.get("category") in ("safe", "value") and pred.get("odds", 0) > 1.0 and pred.get("league_tier", 5) <= 2:
             acc_pool.append({
                 "fixture_id": pred["fixture_id"],
                 "league": pred.get("league", ""),
@@ -909,6 +919,27 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "kickoff_local": pred.get("kickoff_local", ""),
                 "category": pred.get("category", "value"),
             })
+            # Also feed the "other good markets" (all_value_bets) into the
+            # safe-stack pool so high-probability alternatives per fixture
+            # are candidates, not just the single headline pick.
+            for vb in (pred.get("all_value_bets") or [])[:4]:
+                vb_prob = vb.get("prob") or 0
+                vb_odds = vb.get("odds") or 0
+                if vb_prob < 0.70 or vb_odds <= 1.0 or not vb.get("market"):
+                    continue
+                acc_pool.append({
+                    "fixture_id": pred["fixture_id"],
+                    "league": pred.get("league", ""),
+                    "home_team": pred.get("home_team", ""),
+                    "away_team": pred.get("away_team", ""),
+                    "market": vb["market"],
+                    "odds": vb_odds,
+                    "model_prob": vb_prob,
+                    "expected_value": vb.get("ev") or 0,
+                    "kickoff_utc": pred.get("kickoff_utc", ""),
+                    "kickoff_local": pred.get("kickoff_local", ""),
+                    "category": pred.get("category", "value"),
+                })
 
     if not predictions:
         _safe_print("[QuantPipeline] No matches could be analyzed today.")

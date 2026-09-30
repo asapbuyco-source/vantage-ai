@@ -61,8 +61,7 @@ _MARKET_KEY_MAP = {
     "AH Away +0.5": "AH Away +0.5",
     "Double Chance (X2)": "Double Chance (X2)",
     # New markets — calibration seeds added 2026-07-30
-    "Over 0.5 Goals": "over05",
-    "Under 0.5 Goals": "under05",
+    # (full-match Over/Under 0.5 removed — odds too small, nobody bets them; FH 0.5 kept)
     "Over 4.5 Goals": "over45",
     "Under 4.5 Goals": "under45",
     "Over 1.5 FH Goals": "fh_over15",
@@ -141,9 +140,8 @@ MARKET_TO_PROB = {
     "1H Home Win": "fh_home_win",
     "1H Draw": "fh_draw",
     "1H Away Win": "fh_away_win",
-    # Over/Under 0.5 & 4.5 Goals (extreme goal lines)
-    "Over 0.5 Goals": "over05",
-    "Under 0.5 Goals": "under05",
+    # Over/Under 4.5 Goals (extreme goal lines) — full-match 0.5 removed:
+    # odds too small to be a real betting market (FH Over 0.5 kept above)
     "Over 4.5 Goals": "over45",
     "Under 4.5 Goals": "under45",
     # Corner markets

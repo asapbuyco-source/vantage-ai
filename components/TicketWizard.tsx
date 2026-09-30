@@ -17,16 +17,11 @@ const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
 
 interface TicketWizardProps {}
 
-const DEFAULT_SPORT = 'football';
 const MIN_CONFIDENCE = 60;
 const MIN_PROBABILITY = 0.50;
 
-function getMatchKey(match: Match): string {
-    return String(match.fixture_id ?? match.fixtureId ?? match.id);
-}
-
-function getMatchSport(match: Match): string {
-    return match.sport ?? DEFAULT_SPORT;
+function getFixtureKey(match: Match): string {
+    return String(match.fixture_id ?? match.fixtureId ?? match.id ?? '');
 }
 
 function getModelProbability(match: Match): number {
@@ -67,7 +62,7 @@ function ticketQualityScore(match: Match): number {
 export const TicketWizard: React.FC<TicketWizardProps> = () => {
     const navigate = useNavigate();
     const { t, language } = useAppContext();
-    const { predictions, basketballPredictions, cricketPredictions } = useData();
+    const { predictions } = useData();
     const { toggleSavedPick, isPickSaved } = useAppContext();
     const { userProfile } = useAuth();
     const isVip = userProfile?.isVip || false;
@@ -87,10 +82,45 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
     const [ticketExplanation, setTicketExplanation] = useState<string | null>(null);
     const [isLoadingExplanation, setIsLoadingExplanation] = useState(false);
 
-    const allMatches = useMemo(
-        () => [...predictions, ...basketballPredictions, ...cricketPredictions],
-        [predictions, basketballPredictions, cricketPredictions]
-    );
+// AI ticket pool: FOOTBALL TOP LEAGUES ONLY (tiers 1-2), built from each
+// match's headline pick PLUS its "other good markets" (all_value_bets) — the
+// same markets shown in the match's Other Good Markets section.
+const ticketLegs = useMemo(() => {
+    const legs: any[] = [];
+    for (const m of predictions) {
+        if ((m.sport ?? 'football') !== 'football') continue;
+        if ((m.league_tier ?? 5) > 2) continue;
+
+        const markets = [
+            { market: getTicketMarket(m), odds: m.odds ?? 0, prob: getModelProbability(m), ev: (m.expected_value ?? 0) },
+            ...(Array.isArray(m.all_value_bets) ? m.all_value_bets : []).map((b: any) => ({
+                market: b.market,
+                odds: b.odds ?? 0,
+                prob: b.prob ?? b.model_prob ?? 0,
+                ev: b.ev ?? 0,
+            })),
+        ];
+
+        for (const mk of markets) {
+            if (!mk.market || mk.odds <= 1.0 || mk.prob < MIN_PROBABILITY) continue;
+            legs.push({
+                ...m,
+                id: `${m.id}-${mk.market.replace(/\s+/g, '-').toLowerCase()}`,
+                fixtureKey: getFixtureKey(m),
+                bet_type: mk.market,
+                prediction: mk.market,
+                prediction_en: mk.market,
+                odds: mk.odds,
+                probability: mk.prob,
+                calibrated_probability: mk.prob,
+                confidence: Math.round(mk.prob * 100),
+                expected_value: mk.ev,
+                sport: 'football',
+            });
+        }
+    }
+    return legs;
+}, [predictions]);
 
     const generateTicket = () => {
         setIsGenerating(true);
@@ -98,7 +128,7 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
         setTicketExplanation(null);
 
         setTimeout(() => {
-            const ticket = findBestCombination(allMatches, legCount);
+            const ticket = findBestCombination(ticketLegs, legCount);
             setGeneratedTicket(ticket);
             setIsGenerating(false);
             setStep(3);
@@ -138,7 +168,7 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
         }
     };
 
-    const findBestCombination = (matches: Match[], maxLegs: number): Match[] | null => {
+    const findBestCombination = (matches: any[], maxLegs: number): any[] | null => {
         if (matches.length === 0) return null;
 
         const sameLeagueCap = Math.ceil(maxLegs / 3);
@@ -159,22 +189,19 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
 
         if (pool.length === 0) return null;
 
-        const ticket: Match[] = [];
+        const ticket: any[] = [];
         const usedMarketBases: Record<string, number> = {};
-        const sportLegs: Record<string, number> = {};
         const usedTeams = new Set<string>();
 
         for (const match of pool) {
             if (ticket.length >= maxLegs) break;
 
-            if (ticket.some(m => getMatchKey(m) === getMatchKey(match))) continue;
+            // Max 1 leg per fixture — the optimizer picks its strongest market
+            if (ticket.some(m => getFixtureKey(m) === getFixtureKey(match))) continue;
 
             const l = match.league || 'unknown';
             const leagueCount = ticket.filter(m => (m.league || 'unknown') === l).length;
             if (leagueCount >= sameLeagueCap) continue;
-
-            const st = getMatchSport(match);
-            if ((sportLegs[st] ?? 0) >= 3) continue;
 
             const mb = getMarketBase(getTicketMarket(match));
             const cap = marketCaps[mb] ?? 2;
@@ -186,7 +213,6 @@ export const TicketWizard: React.FC<TicketWizardProps> = () => {
 
             ticket.push(match);
             usedMarketBases[mb] = (usedMarketBases[mb] ?? 0) + 1;
-            sportLegs[st] = (sportLegs[st] ?? 0) + 1;
         }
 
         return ticket.length > 0 ? ticket : null;

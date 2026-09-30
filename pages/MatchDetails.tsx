@@ -668,13 +668,11 @@ fetchDetails();
                                             { l: 'Away', p: (match.away_win_prob || 0) * 100 },
                                         ].sort((a: any, b: any) => b.p - a.p) },
                                         { g: 'Goals Over', items: [
-                                            { l: 'Over 0.5', p: (match.over05_prob || 0) * 100 },
                                             { l: 'Over 1.5', p: (match.over15_prob || 0) * 100 },
                                             { l: 'Over 2.5', p: (match.over25_prob || 0) * 100 },
                                             { l: 'Over 3.5', p: (match.over35_prob || 0) * 100 },
                                         ].filter((r: any) => r.p > 0).sort((a: any, b: any) => b.p - a.p) },
                                         { g: 'Goals Under', items: [
-                                            { l: 'Under 0.5', p: (match.under05_prob || 0) * 100 },
                                             { l: 'Under 1.5', p: (match.under15_prob || 0) * 100 },
                                             { l: 'Under 2.5', p: (match.under25_prob || 0) * 100 },
                                             { l: 'Under 3.5', p: (match.under35_prob || 0) * 100 },
