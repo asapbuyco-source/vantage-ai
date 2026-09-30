@@ -10,6 +10,7 @@
  */
 import { calcArb } from './arb_calc.js';
 import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, asianSplitDisplay } from './arb_engine.mjs';
+import { config as botConfig, startTelegramControl, scaleStakes, totalStake } from './telegram_control.js';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -24,7 +25,8 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 // False positives are unacceptable — missing an arb is fine.
 // 2026-09: raised 0.3% → 1% — a sub-1% guaranteed arb is eaten by odds movement
 // between placing leg 1 and leg 2 (books reprice within seconds of a big stake).
-const MIN_GUARANTEED_ROI = 0.01; // 1% worst-case ROI floor
+// Live-tunable via Telegram: "minroi 2" (see telegram_control.js).
+const MIN_GUARANTEED_ROI = () => botConfig.min_roi; // 1% worst-case ROI floor
 
 // Residential proxy (optional): ARB_PROXY=http://user:pass@host:port
 // Applies to all browser sessions so bookmaker bot checks see a residential IP.
@@ -854,6 +856,10 @@ function screenshotHintForLeg(leg, c) {
 async function report(c) {
   const pct = c.pct;
   const suspicious = pct > MAX_PLAUSIBLE_ARB;
+  // Scale the 100-unit stakes to the user's per-book anchors (Telegram "amount").
+  // Falls back to the 100-unit scale when no anchors are configured.
+  c.legs = scaleStakes(c.legs);
+  const total = totalStake(c.legs);
   // 1xbet-family feeds (1xbet/betwinner/paripesa) lag their live pages — flag them
   const hasFeedLag = c.legs.some(l => ['1xbet', 'betwinner', 'paripesa'].includes(l.book));
   const tag = periodShort(c.period) ? ` (${periodShort(c.period)})` : '';
@@ -882,7 +888,7 @@ async function report(c) {
     if (s.link) lines.push(`    Link: ${s.link}`);
   });
   lines.push('─'.repeat(32));
-  lines.push(`Total stake 100 XAF → worst case pays ${c.worst?.toFixed(2) ?? c.legs[0]?.payout} XAF (guaranteed regardless of result)`);
+  lines.push(`Total stake ${total} XAF → worst case pays ${Math.round(c.worst * total / 100)} XAF (guaranteed regardless of result)`);
   if (hasFeedLag) lines.push('⚠️ 1XBET-FAMILY odds come from their feed, NOT the live page. Confirm the price on the site BEFORE betting — if it moved, the arb is gone.');
   if (suspicious) lines.push('⚠️ Over 15% profit = likely a stale price. Check odds are live on both sites first.');
   const full = lines.join('\n');
@@ -988,10 +994,10 @@ function findCandidates(all) {
   // pct is ALWAYS worst-case-based: pct = (worst/100 - 1) * 100. For binary markets
   // worst = 100/inv (exact); for quarter-line markets worst = 50 + 50/inv or the AH sim.
   const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope) => {
-    // MIN_GUARANTEED_ROI floor: refuse anything below 1% WORST-CASE return.
-    // A sub-1% arb is not worth the latency risk of placing two legs.
+    // MIN_GUARANTEED_ROI floor: refuse anything below the live-tunable worst-case
+    // floor (Telegram "minroi"). A sub-floor arb is not worth the latency risk.
     const worstRoi = worst / 100 - 1;
-    if (worstRoi < MIN_GUARANTEED_ROI) return;
+    if (worstRoi < MIN_GUARANTEED_ROI()) return;
     found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope });
   };
   const invDisplay = (worst) => 2 - worst / 100;
@@ -1106,7 +1112,7 @@ for (const [k, grp] of g) {
       { handicap: signed[0], odds: bHome.odds }, { handicap: signed[1], odds: bAway.odds },
       parseFloat(r.stakes[0].stake), parseFloat(r.stakes[1].stake));
     const worstRoi = wc.worstReturn / 100 - 1;
-    if (worstRoi <= MIN_GUARANTEED_ROI) {
+    if (worstRoi <= MIN_GUARANTEED_ROI()) {
       rejectLog(`AH|${k}`, bHome, bAway, 'AH_WORST_CASE_BELOW_FLOOR', `naive ${(1 - inv).toFixed(4)} worst ${worstRoi.toFixed(4)} floor ${MIN_GUARANTEED_ROI}`);
       continue;
     }
@@ -1278,6 +1284,8 @@ if (warm) {
   console.log(`\n[Diag] would-report above floor: ${over.length}/${rows.length} | best worst-case: ${over.length ? over.sort((a,b) => b.worst - a.worst)[0].worst.toFixed(2) + '%' : 'n/a'}`);
 } else {
   console.log(`[Arb] Loop mode: scanning every ${loopMin} min. Ctrl+C to stop.`);
+  // Owner-only Telegram control: change stake anchors / ROI floor live
+  startTelegramControl();
   for (;;) { await scan(); await new Promise(r => setTimeout(r, loopMin * 60000)); }
 }
 

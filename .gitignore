@@ -118,3 +118,4 @@ arb_screenshots/
 backend/quant/.vantage_cache/
 odds_test.json
 backend/quant/odds_test.json
+backend/personal_arb/bot_config.json
