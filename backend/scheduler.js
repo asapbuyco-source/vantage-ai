@@ -343,6 +343,8 @@ export const initScheduler = () => {
                     env: { ...process.env },
                     timeout: 60000,
                 });
+                // Never let a missing Python binary crash the whole server (ENOENT on 'error').
+                child.on('error', e => logger.warn({ error: e.message, script: 'banker_summary.py' }, '[Scheduler] Python spawn failed'));
 
                 let stdout = '';
                 child.stdout.on('data', d => stdout += d);
@@ -452,6 +454,7 @@ export const initScheduler = () => {
                         env: { ...process.env },
                         timeout: 120000,
                     });
+                    child.on('error', e => logger.warn({ error: e.message, script: 'live_score_writer.py' }, '[Scheduler] Python spawn failed'));
 
                     let stdout = '';
                     let stderr = '';
@@ -488,6 +491,7 @@ export const initScheduler = () => {
                     env: { ...process.env },
                     timeout: 300000,
                 });
+                child.on('error', e => logger.warn({ error: e.message, script: 'unified_vault.py' }, '[Scheduler] Python spawn failed'));
 
                 let stdout = '';
                 let stderr = '';
@@ -568,6 +572,7 @@ export const initScheduler = () => {
                         env: { ...process.env },
                         timeout: 600000,
                     });
+                    child.on('error', e => logger.warn({ error: e.message, script: 'historical_data_pipeline.py' }, '[Scheduler] Python spawn failed'));
 
                     let stdout = '';
                     child.stdout.on('data', d => stdout += d);
