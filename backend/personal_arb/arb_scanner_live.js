@@ -1017,6 +1017,13 @@ function findCandidates(all) {
   };
   const invDisplay = (worst) => 2 - worst / 100;
 
+  // Per-market diagnostics: how many cross-book pairs were considered and how many
+  // were NEAR-MISS (within 2% of an arb). Logged each cycle so "arbs are scarce"
+  // is diagnosable: pairs≈0 = coverage/matching; pairs>0 near=0 = efficient market
+  // or floor too high; near>0 = arbs are close, latency/floor is the gate.
+  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0] };
+  const note = (m, inv) => { diagStats[m][0]++; if (inv < 1.02) diagStats[m][1]++; };
+
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
   // different competitions (Champions League vs Youth League) never merge.
   // sport is part of the identity so team names can never collide across sports
@@ -1033,6 +1040,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(h, d);
     if (!pair.ok) { rejectLog(`1X2|${k}`, h, d, pair.reason, pair.detail); continue; }
     const inv = 1/h.odds + 1/d.odds + 1/a.odds;
+    note('1X2', inv);
     if (inv < 1) { const r = calcArb([{ book: h.book, odds: h.odds }, { book: d.book, odds: d.odds }, { book: a.book, odds: a.odds }]); const worst = 100 / inv; cand(`1X2|${k}`, '1X2 — Match Winner', [h.home || grp.matches[0].home, h.away || grp.matches[0].away],
       [{ book: h.book, bet: (h.home || grp.matches[0].home) + ' to win (1)', odds: h.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: h.link },
        { book: d.book, bet: 'Draw (X)', odds: d.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: d.link },
@@ -1050,6 +1058,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`OU|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
+    note('OU', inv);
     if (diag && inv < 1.02) { const hcpd = grp.matches[0].hcp; const worstD = worstPayoutFor2Way(hcpd, inv); diagRows.push({ m: 'OU', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpd, scope: pair.scope, naive: (1 - inv) * 100, worst: (worstD / 100 - 1) * 100, overFloor: worstD / 100 - 1 > MIN_GUARANTEED_ROI, legs: `${over.book} ${over.odds} | ${under.book} ${under.odds}` }); }
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`OU|${k}`, `Over/Under ${hcp} Goals${asian}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
@@ -1067,6 +1076,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(over, under);
     if (!pair.ok) { rejectLog(`CR|${k}`, over, under, pair.reason, pair.detail); continue; }
     const inv = 1/over.odds + 1/under.odds;
+    note('CR', inv);
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`CR|${k}`, `Corners Over/Under ${hcp}${asian}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} corners${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
        { book: under.book, bet: `Under ${hcp} corners${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
@@ -1085,6 +1095,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(b1x, bx2);
     if (!pair.ok) { rejectLog(`DC|${k}`, b1x, bx2, pair.reason, pair.detail); continue; }
     const inv = 1/b1x.odds + 1/bx2.odds + 1/b12.odds;
+    note('DC', inv);
     if (inv < 1) { const r = calcArb([{ book: b1x.book, odds: b1x.odds }, { book: bx2.book, odds: bx2.odds }, { book: b12.book, odds: b12.odds }]); const worst = 100 / inv; cand(`DC|${k}`, 'Double Chance', [k.split('|')[0], k.split('|')[1]],
       [{ book: b1x.book, bet: k.split('|')[0] + ' or Draw (1X)', odds: b1x.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: b1x.link },
        { book: bx2.book, bet: k.split('|')[1] + ' or Draw (X2)', odds: bx2.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bx2.link },
@@ -1106,7 +1117,8 @@ for (const [k, grp] of g) {
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`AH|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
     const inv = 1/bHome.odds + 1/bAway.odds;
-    // diag captures near-misses too (inv < 1.02) — stakes computed manually so it works above inv=1
+    note('AH', inv);
+    // diag captures near-misses too (inv < 1.02) - stakes computed manually so it works above inv=1
     if (diag && inv < 1.02) {
       const hcpx = parseFloat(grp.matches[0].hcp);
       const sA = 100 * (1 / bHome.odds) / inv, sB = 100 * (1 / bAway.odds) / inv;
@@ -1151,6 +1163,7 @@ for (const [k, grp] of g) {
     const pair = pairEligible(bYes, bNo);
     if (!pair.ok) { rejectLog(`BTTS|${k}`, bYes, bNo, pair.reason, pair.detail); continue; }
     const inv = 1/bYes.odds + 1/bNo.odds;
+    note('BTTS', inv);
     if (inv < 1) { const r = calcArb([{ book: bYes.book, odds: bYes.odds }, { book: bNo.book, odds: bNo.odds }]); const worst = 100 / inv; cand(`BTTS|${k}`, 'Both Teams To Score', [k.split('|')[0], k.split('|')[1]],
       [{ book: bYes.book, bet: 'Both teams score (Yes)', odds: bYes.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bYes.link },
        { book: bNo.book, bet: 'Not both score (No)', odds: bNo.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bNo.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
@@ -1166,11 +1179,16 @@ for (const [k, grp] of g) {
     const pair = pairEligible(bHome, bAway);
     if (!pair.ok) { rejectLog(`DNB|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
     const inv = 1/bHome.odds + 1/bAway.odds;
+    note('DNB', inv);
     if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const worst = 100 / inv; cand(`DNB|${k}`, 'Draw No Bet', [k.split('|')[0], k.split('|')[1]],
       [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
        { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
   console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
+  // WHY-SCARCE diagnostic: "pairs" = cross-book pairs considered; "near" = within 2% of an arb.
+  // pairs≈0 → coverage/matching problem; pairs>0 near=0 → market efficient or floor too high.
+  const fmtStat = (m) => `${m} ${diagStats[m][0]}${diagStats[m][1] ? `(near ${diagStats[m][1]})` : ''}`;
+  console.log(`[Arb] pairs: ${Object.keys(diagStats).map(fmtStat).join(', ')} | floor ${(MIN_GUARANTEED_ROI() * 100).toFixed(1)}%`);
   return found;
 }
 
