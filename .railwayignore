@@ -1,0 +1,13 @@
+# Railway upload exclusions (keeps the build context small; deps are installed at build time)
+node_modules
+.git
+dist
+.playwright_profile
+.vantage_cache
+backend/.vantage_cache
+backend/quant/.vantage_cache
+arb_screenshots
+.pytest_cache
+*.log
+.env.local
+.env
