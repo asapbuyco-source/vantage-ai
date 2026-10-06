@@ -1,0 +1,5 @@
+# Force LF for files that run inside Linux containers — Windows checkouts
+# otherwise produce CRLF and break shell scripts / Dockerfiles on deploy.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.mjs text eol=lf
