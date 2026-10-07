@@ -413,7 +413,35 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     intel_notes.append(f"intel-feed error: {_e}")
             else:
                 intel_notes.append("intel feed unavailable")
-            
+
+            # ── FREE Elo seeding from ClubElo.net (teams still without a rating) ──
+            # ClubElo is free and professionally maintained; used only when the
+            # team has no graded/pre-seeded/VTI Elo yet.
+            try:
+                from clubelo_client import get_club_elo_fuzzy
+                if get_team_rating(home_id) == DEFAULT_ELO:
+                    _ce = get_club_elo_fuzzy(match.home_team)
+                    if _ce:
+                        set_rating(home_id, float(_ce))
+                        intel_notes.append(f"ClubElo {match.home_team} {float(_ce):.0f}")
+                if get_team_rating(away_id) == DEFAULT_ELO:
+                    _ce = get_club_elo_fuzzy(match.away_team)
+                    if _ce:
+                        set_rating(away_id, float(_ce))
+                        intel_notes.append(f"ClubElo {match.away_team} {float(_ce):.0f}")
+            except Exception as _ce_err:
+                intel_notes.append(f"clubelo error: {_ce_err}")
+
+            # ── Weather: suppress expected goals in adverse conditions ──
+            # data_pipeline already fetched the multiplier (wind/rain/snow) but it
+            # was collected and never applied. Applying it to the lambdas shifts
+            # every goals market coherently (O/U, BTTS), not just O2.5.
+            _wp = getattr(match, 'weather_penalty', 1.0) or 1.0
+            if _wp != 1.0:
+                mu_home = max(0.15, mu_home * _wp)
+                mu_away = max(0.15, mu_away * _wp)
+                intel_notes.append(f"weather x{_wp}")
+
             home_stats = match.home_stats if match.home_stats else TeamStats(team_id=home_id, team_name=match.home_team)
             away_stats = match.away_stats if match.away_stats else TeamStats(team_id=away_id, team_name=match.away_team)
             
