@@ -214,7 +214,10 @@ export const sendDailyFreePicks = async () => {
         return false;
       }
       if (p.category !== 'safe' && p.category !== 'value') return false;
-      if (p.confidence == null || p.confidence < 55) return false;
+      if (p.confidence == null || p.confidence < 65) return false;
+      // Risk guard (2026-10): Telegram broadcasts must only surface top leagues —
+      // lower tiers carry too much variance for a public message.
+      if ((p.league_tier ?? 99) > 2) return false;
       // Kickoff must be in the future
       const kt = kickoffText(p);
       if (/^\d{2}:\d{2}$/.test(kt)) {
@@ -346,7 +349,7 @@ export const sendBankerOfTheDay = async () => {
     const dateStr = getLagosTodayKey();
     const all = (await loadAuthoritativePicks(dateStr)).filter(p => p.sport !== 'basketball');
     const candidate = all
-      .filter(p => (p.category === 'safe' || p.category === 'value') && (p.confidence ?? 0) >= 65 && validatePrediction(p).ok)
+      .filter(p => (p.category === 'safe' || p.category === 'value') && (p.confidence ?? 0) >= 65 && (p.league_tier ?? 99) <= 2 && validatePrediction(p).ok)
       .sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0))[0];
     if (!candidate) return { status: 'skipped', reason: 'no_top_pick' };
 

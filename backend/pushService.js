@@ -27,7 +27,9 @@ async function callGroq(messages, temperature = 0.3, maxTokens = 50) {
 export async function generateDailyTipFromPredictions(predictions) {
     if (!predictions || predictions.length === 0) return null;
     try {
-        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0)
+        // Risk guard (2026-10): the AI tip only reaches users for high-confidence,
+        // top-league picks — never a thin-EV bet from a minor league.
+        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0 && (p.confidence ?? 0) >= 70 && (p.league_tier ?? 99) <= 2)
             .sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0))[0];
         if (!bestPick) return null;
         const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."`;
