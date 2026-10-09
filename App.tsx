@@ -226,13 +226,29 @@ function AppContent() {
     );
   }
 
-  // Unauthenticated flow — but /blog routes are always publicly accessible
+  // Unauthenticated flow — public pages stay indexable (SEO, no soft-404 shells);
+  // everything else falls back to the marketing/landing view.
   if (!user) {
     return (
       <Routes>
         <Route path="/blog" element={<BlogIndex />} />
         <Route path="/blog/:date" element={<BlogPost />} />
         <Route path="/privacy-policy" element={<Privacy />} />
+        {/* ── Public SEO routes: real content for crawlers instead of a
+             LandingPage shell served with HTTP 200 (Search Console duplicates) ── */}
+        <Route path="/stats" element={<PublicStats />} />
+        <Route path="/learn" element={
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+            <Learn />
+          </Suspense>
+        } />
+        <Route path="/guide" element={
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-vantage-bg"><Loader2 className="animate-spin text-vantage-cyan" size={32} /></div>}>
+            <Learn />
+          </Suspense>
+        } />
+        <Route path="/match/:id" element={<MatchDetails />} />
+        <Route path="/free" element={<Home />} />
         <Route path="*" element={
           <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans">
             <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
