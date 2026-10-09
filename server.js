@@ -1369,11 +1369,10 @@ app.post('/api/push/register-fcm', pushLimiter, requireFirebaseUser, async (req,
 // Module-level base URL — used by sitemap AND SSR handler
 const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'https://vantageai.online';
 
-// 1. Serve static files from the React dist directory FIRST (except index.html)
 const distPath = path.join(__dirname, 'dist');
-app.use(express.static(distPath, { index: false }));
 
-// 2. Dynamic Sitemap Generator
+// 1. Dynamic Sitemap Generator — registered BEFORE express.static so the static
+// dist/sitemap.xml (7 hand-written URLs) never shadows the live Firestore-fed map.
 app.get('/sitemap.xml', async (req, res) => {
     try {
         res.header('Content-Type', 'application/xml');
@@ -1381,28 +1380,32 @@ app.get('/sitemap.xml', async (req, res) => {
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-        // Add static routes
-        const staticRoutes = ['/', '/blog', '/VIP', '/FreePicks', '/Kelly', '/Guide'];
+        // Static routes aligned with the real SPA routes
+        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
         });
 
         if (admin.apps.length > 0) {
-            // Get up to 60 most recent prediction days
-            const predictionSnap = await admin.firestore()
-                .collection('daily_predictions')
-                .orderBy('updatedAt', 'desc')
-                .limit(60)
-                .get();
+            // Quant prediction days — the live pipeline writes quant_predictions/{date}
+            const qSnap = await admin.firestore().collection('quant_predictions').limit(60).get();
+            qSnap.forEach(doc => {
+                const dateKey = doc.id;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+                    xml += `  <url>\n    <loc>${baseUrl}/predictions/${dateKey}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+                }
+            });
 
-            predictionSnap.forEach(doc => {
+            // Legacy daily_predictions (pre-quant days)
+            const legSnap = await admin.firestore().collection('daily_predictions').limit(30).get();
+            legSnap.forEach(doc => {
                 const dateKey = doc.id;
                 if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
                     xml += `  <url>\n    <loc>${baseUrl}/predictions/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
                 }
             });
 
-            // Get all blog posts for SEO
+            // Blog posts — doc ids ARE the URL slugs (e.g. 2026-10-06_en_roundup_epL)
             const blogSnap = await admin.firestore()
                 .collection('daily_blogs')
                 .orderBy('generatedAt', 'desc')
@@ -1410,13 +1413,10 @@ app.get('/sitemap.xml', async (req, res) => {
                 .get();
 
             blogSnap.forEach(doc => {
-                const dateKey = doc.id;
-                if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-                    xml += `  <url>\n    <loc>${baseUrl}/blog/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
-                }
+                xml += `  <url>\n    <loc>${baseUrl}/blog/${encodeURIComponent(doc.id)}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
             });
 
-            // Add individual match URLs from last 3 days for deeper indexing
+            // Individual match URLs from the last 3 days for deeper indexing
             const today = new Date();
             const matchIds = new Set();
             for (let i = 0; i < 3; i++) {
@@ -1429,7 +1429,7 @@ app.get('/sitemap.xml', async (req, res) => {
                         const matchId = m.id || m.fixture_id || `${m.home_team || 'home'}_${m.away_team || 'away'}`.replace(/\s+/g, '-').toLowerCase();
                         if (matchId && !matchIds.has(matchId)) {
                             matchIds.add(matchId);
-                            xml += `  <url>\n    <loc>${baseUrl}/match/${matchId}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+                            xml += `  <url>\n    <loc>${baseUrl}/match/${encodeURIComponent(matchId)}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
                         }
                     }
                 }
@@ -1443,6 +1443,9 @@ app.get('/sitemap.xml', async (req, res) => {
         res.status(500).end();
     }
 });
+
+// 2. Serve static files from the React dist directory (except index.html)
+app.use(express.static(distPath, { index: false }));
 
 // 3. Catch-all for rendering HTML
 app.use(async (req, res, next) => {
@@ -1488,15 +1491,27 @@ app.use(async (req, res, next) => {
         if (predictionsMatch && admin.apps.length > 0) {
             const dateKey = predictionsMatch[1];
 
-            // Try to fetch predictions and blog for this date
-            const [predDoc, blogDoc] = await Promise.all([
+            // Primary source: quant_predictions (the live quant pipeline);
+            // legacy daily_predictions as fallback.
+            const [qPredDoc, legPredDoc, blogDoc] = await Promise.all([
+                admin.firestore().collection('quant_predictions').doc(dateKey).get(),
                 admin.firestore().collection('daily_predictions').doc(dateKey).get(),
                 admin.firestore().collection('daily_blogs').doc(dateKey).get()
             ]);
+            const predDoc = qPredDoc.exists ? qPredDoc : legPredDoc;
 
             if (predDoc.exists) {
-                const matchCount = predDoc.data()?.matches?.length || 0;
-                const matches = predDoc.data()?.matches || [];
+                const preds = qPredDoc.exists
+                    ? (qPredDoc.data()?.predictions || [])
+                    : (predDoc.data()?.matches || []);
+                const matchCount = preds.length || 0;
+                const topPicks = preds.slice(0, 5)
+                    .map(p => {
+                        const home = p.home_team || p.homeTeam || 'Home';
+                        const away = p.away_team || p.awayTeam || 'Away';
+                        const market = p.prediction || p.bet_type || '—';
+                        return `{ "@type": "SportsEvent", "name": "${home} vs ${away}", "description": "${market}" }`;
+                    }).join(',\n');
 
                 // Construct a dynamic title and description
                 const title = `Pronostics Football ${dateKey} | Vantage AI (${matchCount} Matchs Analysés)`;
@@ -1510,13 +1525,18 @@ app.use(async (req, res, next) => {
                     blogContent = blogDoc.data().content || '';
                 }
 
-                // Inject SEO Tags
+                // Inject SEO Tags + canonical + JSON-LD
                 const seoTags = `
     <title>${title}</title>
     <meta name="description" content="${description}" />
+    <link rel="canonical" href="${baseUrl}/predictions/${dateKey}" />
+    <meta property="og:type" content="website" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:url" content="${baseUrl}/predictions/${dateKey}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"ItemList","name":"${title}","itemListElement":[${topPicks}]}
+    </script>
                 `;
 
                 // Replace the default title and placeholders
@@ -1584,18 +1604,33 @@ app.use(async (req, res, next) => {
                 const home = foundMatch.home_team || 'Home';
                 const away = foundMatch.away_team || 'Away';
                 const league = foundMatch.league || 'Football';
+                const market = foundMatch.prediction || foundMatch.bet_type || '';
                 const title = `${home} vs ${away} Prediction & Odds - ${league} | Vantage AI`;
                 const description = `Data-driven prediction for ${home} vs ${away}. View AI confidence, expected goals, head-to-head stats, and the best betting value from Vantage AI's quantitative model.`;
-                
+                const matchUrl = `${baseUrl}/match/${matchId}`;
+
                 const seoTags = `
     <title>${title}</title>
     <meta name="description" content="${description}" />
+    <link rel="canonical" href="${matchUrl}" />
+    <meta property="og:type" content="article" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
-    <meta property="og:url" content="${process.env.FRONTEND_URL || 'https://vantageai.online'}/match/${matchId}" />
+    <meta property="og:url" content="${matchUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"SportsEvent","name":"${home} vs ${away}","competitor":[{"@type":"SportsTeam","name":"${home}"},{"@type":"SportsTeam","name":"${away}"}],"description":"${market || 'Match prediction'}"}
+    </script>
                 `;
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
             }
+        }
+
+        // Canonical fallback for every page (home, blog, guide, stats, VIP…).
+        // Prevents ?tab= / ?lang= / trailing-slash duplicates from all pointing
+        // at the same shell. Query strings are dropped so variants collapse to one URL.
+        if (!html.includes('rel="canonical"')) {
+            const canonicalUrl = `${baseUrl}${req.path.replace(/\/+$/, '') || '/'}`;
+            html = html.replace('</head>', `    <link rel="canonical" href="${canonicalUrl}" />\n  </head>`);
         }
 
         res.send(html);
