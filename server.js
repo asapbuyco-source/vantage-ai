@@ -1369,6 +1369,27 @@ app.post('/api/push/register-fcm', pushLimiter, requireFirebaseUser, async (req,
 // Module-level base URL — used by sitemap AND SSR handler
 const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'https://vantageai.online';
 
+// ── SEO LEAGUE SLUGS (keep in sync with pages/LeaguePage.tsx) ──
+const SEO_LEAGUES = {
+    'premier-league': { nameFr: 'Premier League' },
+    'la-liga': { nameFr: 'La Liga' },
+    'bundesliga': { nameFr: 'Bundesliga' },
+    'serie-a': { nameFr: 'Série A' },
+    'ligue-1': { nameFr: 'Ligue 1' },
+    'champions-league': { nameFr: 'Ligue des Champions' },
+    'europa-league': { nameFr: 'Ligue Europa' },
+    'eredivisie': { nameFr: 'Eredivisie' },
+    'primeira-liga': { nameFr: 'Primeira Liga' },
+    'championship': { nameFr: 'Championship' },
+    'elite-one': { nameFr: 'Élite One' },
+    'liga-mx': { nameFr: 'Liga MX' },
+    'saudi-pro-league': { nameFr: 'Saudi Pro League' },
+    'sueper-lig': { nameFr: 'Süper Lig' },
+    'brasileirao': { nameFr: 'Brasileirão Série A' },
+    'mls': { nameFr: 'Major League Soccer' },
+    'fifa-world-cup': { nameFr: 'Coupe du Monde' },
+};
+
 const distPath = path.join(__dirname, 'dist');
 
 // 1. Dynamic Sitemap Generator — registered BEFORE express.static so the static
@@ -1433,6 +1454,10 @@ app.get('/sitemap.xml', async (req, res) => {
                         }
                     }
                 }
+            }
+        // Social/SEO league pages (phase 3 content)
+            for (const slug of Object.keys(SEO_LEAGUES)) {
+                xml += `  <url>\n    <loc>${baseUrl}/pronostics/${slug}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
             }
         }
 
@@ -1572,6 +1597,31 @@ app.use(async (req, res, next) => {
                     `;
                     html = html.replace('<!-- REACT_ROOT -->', blogInjection);
                 }
+            }
+        }
+
+        // ── SPECIFIC ROUTE: /pronostics/:leagueSlug (public SEO league pages) ──
+        const leagueMatch = req.path.match(/^\/pronostics\/([a-z0-9-]+)$/);
+        if (leagueMatch) {
+            const slug = leagueMatch[1];
+            const league = SEO_LEAGUES[slug];
+            if (league) {
+                const url = `${baseUrl}/pronostics/${slug}`;
+                const title = `Pronostics ${league.nameFr} du jour | Vantage AI`;
+                const description = `Pronostics football ${league.nameFr} du jour générés par l'IA de Vantage AI : analyses data-driven, probabilités, cotes et valeurs attendues pour vos paris.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${url}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${url}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"ItemList","name":"${title}"}
+    </script>
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
             }
         }
 

@@ -19,6 +19,7 @@ import { LiveScores } from './pages/LiveScores';
 import { BlogIndex } from './pages/BlogIndex';
 import { BlogPost } from './pages/BlogPost';
 import { MatchDetails } from './pages/MatchDetails';
+import { LeaguePage } from './pages/LeaguePage';
 import { Privacy } from './pages/Privacy';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -249,6 +250,7 @@ function AppContent() {
         } />
         <Route path="/match/:id" element={<MatchDetails />} />
         <Route path="/free" element={<Home />} />
+        <Route path="/pronostics/:leagueSlug" element={<LeaguePage />} />
         <Route path="*" element={
           <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans">
             <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -463,6 +465,7 @@ function AppContent() {
                     <Route path="/free" element={<Home />} />
                     <Route path="/vip" element={<VIP />} />
                     <Route path="/arb" element={<VIP />} />
+                    <Route path="/pronostics/:leagueSlug" element={<LeaguePage />} />
                     <Route path="/learn" element={<Learn />} />
                     <Route path="/guide" element={<Learn />} />
                     <Route path="/concierge" element={<TicketWizard />} />
