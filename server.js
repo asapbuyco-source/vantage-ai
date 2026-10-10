@@ -1706,6 +1706,51 @@ app.use(async (req, res, next) => {
             }
         }
 
+        // ── SPECIFIC ROUTE: /blog/:slug (100+ daily programmatic posts) ──
+        const blogMatch = req.path.match(/^\/blog\/([a-zA-Z0-9\-_.]+)$/);
+        if (blogMatch) {
+            try {
+                const bSnap = await admin.firestore().collection('daily_blogs').doc(blogMatch[1]).get();
+                if (bSnap.exists) {
+                    const bd = bSnap.data() || {};
+                    const blogUrl = `${baseUrl}/blog/${blogMatch[1]}`;
+                    const postTitle = bd.title || `Pronostics du jour | Vantage AI`;
+                    const title = `${postTitle} | Vantage AI`;
+                    const plainText = String(bd.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    const description = String(bd.excerpt || plainText).substring(0, 200) || `Pronostics football du jour générés par le modèle quantitatif de Vantage AI.`;
+                    const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${blogUrl}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${blogUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Article","headline":"${postTitle}","description":"${description}"}
+    </script>
+                `;
+                    html = html.replace(/<title>.*?<\/title>/, seoTags);
+                    // Let crawlers read the post body without JS
+                    const sanitizedContent = sanitizeHtml(String(bd.content || ''), {
+                        allowedTags: ['p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'a', 'blockquote'],
+                        allowedAttributes: { 'a': ['href'], 'span': ['style'] },
+                        transformTags: {
+                            'a': (tagName, attribs) => {
+                                const href = attribs.href || '';
+                                if (href && !href.match(/^https?:\/\//)) return { tagName, attribs: { ...attribs, href: '#' } };
+                                return { tagName, attribs };
+                            },
+                        },
+                    });
+                    html = html.replace('<!-- REACT_ROOT -->',
+                        `<div id="vantage-seo-content" style="display:none;" aria-hidden="true">${sanitizedContent}</div>\n<!-- REACT_ROOT -->`);
+                }
+            } catch (bErr) {
+                console.warn('[SSR] Blog SSR error:', bErr.message);
+            }
+        }
+
         // Canonical fallback for every page (home, blog, guide, stats, VIP…).
         // Prevents ?tab= / ?lang= / trailing-slash duplicates from all pointing
         // at the same shell. Query strings are dropped so variants collapse to one URL.

@@ -61,6 +61,11 @@
   status = 200
 
 [[redirects]]
+  from = "/blog/*"
+  to = "https://vantage-ai-production-ed4b.up.railway.app/blog/:splat"
+  status = 200
+
+[[redirects]]
   from = "/sitemap.xml"
   to = "https://vantage-ai-production-ed4b.up.railway.app/sitemap.xml"
   status = 200
