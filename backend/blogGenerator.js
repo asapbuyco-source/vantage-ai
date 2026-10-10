@@ -247,12 +247,42 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
     const hasBasketball = basketballMatches.length > 0;
 
     const templates = language === 'fr' ? TEMPLATES_FR : TEMPLATES_EN;
-    const keywords = language === 'fr' ? KEYWORDS_FR : KEYWORDS_EN;
 
-    const topPicks = allMatches
-        .filter(m => m.confidence >= 70)
-        .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
-        .slice(0, 5);
+    // Pick normalizer: quant docs use snake_case (home_team / away_team), legacy
+    // docs use camelCase (homeTeam / awayTeam). Mirrors the Telegram free-pick bar:
+    // safe/value category, >=65% confidence, real odds, football only.
+    const norm = (m) => {
+        const home = m.home_team || m.homeTeam || (m.home && m.home.name) || '';
+        const away = m.away_team || m.awayTeam || (m.away && m.away.name) || '';
+        return {
+            ...m,
+            home,
+            away,
+            market: m.prediction_en || m.prediction || m.bet_type || '—',
+            odds: Number(m.odds || m.pick_time_odds || 0),
+            confidence: m.confidence ?? (m.probability != null ? Math.round(m.probability * 100) : 0),
+            league: m.league || '',
+            ev: m.ev_pct != null ? m.ev_pct : (m.expected_value != null ? Math.round(m.expected_value * 100) : null),
+            fixtureId: String(m.fixture_id || m.id || ''),
+            kickoff: m.kickoff_local || m.time || '',
+            formHome: m.home_form || '',
+            formAway: m.away_form || '',
+            xgHome: m.expected_goals_home != null ? Number(m.expected_goals_home).toFixed(2) : null,
+            xgAway: m.expected_goals_away != null ? Number(m.expected_goals_away).toFixed(2) : null,
+        };
+    };
+
+    let picks = allMatches
+        .map(norm)
+        .filter(p => p.sport !== 'basketball' && p.odds > 1)
+        .filter(p => p.confidence >= 65 && (p.category === 'safe' || p.category === 'value'))
+        .sort((a, b) => b.confidence - a.confidence);
+
+    if (leagueOverride) {
+        const inLeague = picks.filter(p => String(p.league || '').toLowerCase().includes(leagueOverride.toLowerCase()));
+        if (inLeague.length >= 2) picks = inLeague;
+    }
+    const topPicks = picks.slice(0, 5);
 
     if (topPicks.length === 0) {
         const fallbackContent = generateDataDrivenPreview(db, allMatches, leagueOverride);
@@ -262,110 +292,84 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
         return { status: 'skipped', reason: 'predictions_pending_analysis' };
     }
 
-    const league = leagueOverride || selectRandom(LEAGUES);
+    const league = leagueOverride || topPicks[0].league || 'Top Leagues';
+    const dateLabel = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    const titleTemplates = templates.titles.map(t => 
-        t.replace('{league}', league).replace('{date}', todayStr)
-    );
-    const title = selectRandom(titleTemplates);
+    // SEO title with REAL team names — the daily doc date keeps the slug unique.
+    const headMatch = topPicks[0];
+    const title = `${headMatch.home} vs ${headMatch.away} — ${league} Predictions ${todayStr}`;
 
-    const introCount = topPicks.length;
-    const introTemplates = templates.intros.map(t => 
-        t.replace('{league}', league).replace('{count}', String(introCount)).replace('{date}', todayStr)
-    );
-    const intro = selectRandom(introTemplates);
+    const intro = (language === 'fr'
+        ? `Découvrez nos pronostics ${league} du ${dateLabel}. Notre moteur quantitatif (Poisson, Elo, forme) a analysé les matchs du jour pour identifier les meilleures valeurs.`
+        : `${league} betting predictions for ${dateLabel}, powered by Vantage AI's quantitative engine (Poisson, Elo, form). Today we highlight ${topPicks.length} high-confidence picks with odds, expected value and analysis.`).trim();
+
+    const pageUrl = (path) => `https://vantageai.online${path}`;
+    const oddsText = (p) => (p.odds > 0 ? `@ ${p.odds.toFixed(2)}` : '');
+    const evText = (p) => (p.ev != null ? ` | EV +${p.ev}%` : '');
+    const xgText = (p) => ((p.xgHome && p.xgAway) ? ` | xG ${p.xgHome}–${p.xgAway}` : '');
+    const formText = (p) => ((p.formHome || p.formAway) ? ` | Form ${p.formHome || 'N/A'} / ${p.formAway || 'N/A'}` : '');
+    const kickoffText = (p) => (p.kickoff ? ` | Kickoff ${p.kickoff}` : '');
 
     let matchesHtml = '';
-    for (const match of topPicks) {
-        const home = match.homeTeam || 'Home';
-        const away = match.awayTeam || 'Away';
-        const prediction = match.prediction_en || match.prediction || 'N/A';
-        const confidence = match.confidence || 0;
-        const odds = match.odds || 1.5;
-
-        const headerTemplate = selectRandom(templates.matchHeaders)
-            .replace('{home}', home).replace('{away}', away);
-        
-        const analysisTemplate = selectRandom(templates.matchAnalysis)
-            .replace('{home}', home)
-            .replace('{away}', away)
-            .replace('{league}', match.league || league)
-            .replace('{prediction}', prediction)
-            .replace('{confidence}', String(confidence))
-            .replace('{odds}', String(odds));
-
-        matchesHtml += `<h2>${headerTemplate}</h2>\n<p>${analysisTemplate}</p>\n`;
+    for (const p of topPicks) {
+        const link = p.fixtureId ? pageUrl(`/match/${encodeURIComponent(p.fixtureId)}`) : null;
+        matchesHtml += `<h2>${link ? `<a href="${link}">` : ''}${p.home} vs ${p.away}${link ? '</a>' : ''}</h2>\n`;
+        matchesHtml += `<p>${p.league} · ${p.market} ${oddsText(p)} · confidence ${p.confidence}%${evText(p)}${xgText(p)}${formText(p)}${kickoffText(p)}</p>\n`;
+        matchesHtml += `<p>${language === 'fr'
+            ? `Notre modèle identifie <strong>${p.market}</strong> comme le pari le plus intéressant de ce match. Les cotes actuelles (${p.odds.toFixed(2)})${p.ev != null ? ` offrent une valeur attendue de +${p.ev}%` : ''}.`
+            : `Our model sees <strong>${p.market}</strong> as the key angle here. With implied odds of ${p.odds.toFixed(2)}${p.ev != null ? ` and an expected value of +${p.ev}%` : ''}, this pick sits above our quality floor.`}</p>\n`;
+        if (link) matchesHtml += `<p><a href="${link}">${language === 'fr' ? 'Analyse complète du match →' : 'Full match analysis →'}</a></p>\n`;
     }
 
-    const accumHeader = selectRandom(templates.accumIntro);
-    let accumItemsHtml = '';
-    const safePicks = topPicks.filter(m => m.confidence >= 78).slice(0, 3);
-    for (const p of safePicks) {
-        const itemTemplate = selectRandom(templates.accumItems)
-            .replace('{home}', p.homeTeam || 'Home')
-            .replace('{away}', p.awayTeam || 'Away')
-            .replace('{prediction}', p.prediction_en || p.prediction || 'N/A')
-            .replace('{odds}', String(p.odds || 1.5));
-        accumItemsHtml += `<li>${itemTemplate}</li>\n`;
+    let accaHtml = '';
+    const safeAcca = topPicks.filter(p => p.confidence >= 70).slice(0, 3);
+    if (safeAcca.length >= 2) {
+        const accaItems = safeAcca.map(p => `<li>${p.home} vs ${p.away} — ${p.market} ${oddsText(p)}</li>`).join('\n');
+        const totalOdds = Math.round(safeAcca.reduce((a, p) => a * (p.odds || 1), 1) * 100) / 100;
+        accaHtml = `<h2>${language === 'fr' ? 'Coupon du jour' : 'Today\'s accumulator'}</h2>\n<ul>\n${accaItems}\n</ul>\n<p>${language === 'fr' ? `Cotes combinées : ${totalOdds}. Jouez de manière responsable.` : `Combined odds: ${totalOdds}. Bet responsibly.`}</p>\n`;
     }
 
-    let totalOdds = 1.0;
-    for (const p of safePicks) {
-        totalOdds *= (p.odds || 1.5);
-    }
-    totalOdds = Math.round(totalOdds * 100) / 100;
-
-    const accumOutroTemplate = selectRandom(templates.accumOutro)
-        .replace('{totalOdds}', String(totalOdds))
-        .replace('{count}', String(safePicks.length));
-    const outro = selectRandom(templates.outros);
+    const outro = (language === 'fr'
+        ? `Retrouvez chaque matin les meilleurs pronostics pour vos paris 1xBet et Premier Bet au Cameroun. Les pronostics ne garantissent aucun gain — jouez de manière responsable.`
+        : `Get fresh football predictions every morning for Cameroon's favourite books — free picks, VIP signals and a transparent track record. Predictions never guarantee winnings; bet responsibly.`).trim();
 
     let content = `<h1>${title}</h1>\n`;
     content += `<p>${intro}</p>\n`;
     content += matchesHtml;
-    content += `<h2>${accumHeader}</h2>\n`;
-    content += `<ul>\n${accumItemsHtml}</ul>\n`;
-    content += `<p>${accumOutroTemplate}</p>\n`;
-    content += `<p><strong>${outro}</strong></p>`;
+    content += accaHtml;
+    content += `<p><strong>${outro}</strong></p>\n`;
 
-    const excerpt = content.replace(/<[^>]+>/g, '').substring(0, 160).trim() + '...';
-    
-    // Unique doc ID per league — 4 leagues writing to the same id would clobber
-    // each other (only the last league's blog survived). BlogIndex links by
-    // doc id, so suffixed ids resolve to the correct post.
-    const leagueSlug = String(league || 'roundup')
+    const excerpt = content.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').substring(0, 160).trim() + '...';
+
+    // Unique doc ID per league — BlogIndex links by doc id, so suffixed ids resolve.
+    const leagueSlug = String(league)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
-    const docId = `${todayStr}_${language}_roundup_${leagueSlug}`;
+    const docId = `${todayStr}_${language}_roundup_${leagueSlug || 'top'}`;
 
     await db.collection('daily_blogs').doc(docId).set({
         title,
         content,
         excerpt,
-        tags: [
-            hasFootball ? 'football' : null,
-            hasBasketball ? 'basketball' : null,
-            language === 'fr' ? 'pronostics' : 'predictions',
-            language === 'fr' ? '1xbet' : 'betting',
-            league
-        ].filter(Boolean),
+        tags: ['football', 'predictions', 'betting', leagueSlug].concat(language === 'fr' ? ['pronostics'] : ['soccer tips']),
         generatedAt: new Date().toISOString(),
-        generatedBy: 'programmatic',
+        generatedBy: 'programmatic-v2',
         updatedAt: new Date().toISOString(),
         language,
-        footballCount: hasFootball ? topPicks.length : 0,
-        basketballCount: hasBasketball ? topPicks.filter(m => m.sport === 'basketball').length : 0,
+        footballCount: topPicks.length,
+        basketballCount: 0,
         // Save the date portion so the frontend can group/display properly
-        date: todayStr
+        date: todayStr,
+        topPick: { home: headMatch.home, away: headMatch.away, market: headMatch.market, odds: headMatch.odds },
     });
 
     return {
         status: 'success',
         title,
         generatedLength: content.length,
-        footballPicks: hasFootball ? topPicks.length : 0,
-        basketballPicks: hasBasketball ? topPicks.filter(m => m.sport === 'basketball').length : 0,
+        footballPicks: topPicks.length,
+        basketballPicks: 0,
     };
 };
 
