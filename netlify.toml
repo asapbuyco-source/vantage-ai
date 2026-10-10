@@ -47,12 +47,22 @@
 
 [[redirects]]
   from = "/predictions/*"
-  to = "https://vantage-ai-backend.railway.app/predictions/:splat"
+  to = "https://vantage-ai-production-ed4b.up.railway.app/predictions/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/pronostics/*"
+  to = "https://vantage-ai-production-ed4b.up.railway.app/pronostics/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/match/*"
+  to = "https://vantage-ai-production-ed4b.up.railway.app/match/:splat"
   status = 200
 
 [[redirects]]
   from = "/sitemap.xml"
-  to = "https://vantage-ai-backend.railway.app/sitemap.xml"
+  to = "https://vantage-ai-production-ed4b.up.railway.app/sitemap.xml"
   status = 200
 
 [[redirects]]
