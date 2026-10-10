@@ -43,23 +43,34 @@ async function enrichWithAIAnalysis(predictions) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async function callGroq(messages, temperature = 0.15, retries = 3) {
-        // Free instruct models for 2-sentence tips — Nemotron reasoning leaks "We need to output..."
-        const models = [
-            'google/gemma-4-31b-it:free',
-            'google/gemma-4-26b-a4b-it:free',
-            'nvidia/nemotron-3-super-120b-a12b:free',
+async function callGroq(messages, temperature = 0.15, retries = 3) {
+        // Provider fallback: Groq free tier first (generous limits, no card),
+        // then OpenRouter free models. Both are OpenAI-compatible.
+        const providers = [
+            ...(process.env.GROQ_API_KEY ? [{
+                name: 'groq',
+                url: 'https://api.groq.com/openai/v1/chat/completions',
+                key: process.env.GROQ_API_KEY,
+                models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+            }] : []),
+            ...(process.env.OPENROUTER_API_KEY ? [{
+                name: 'openrouter',
+                url: 'https://openrouter.ai/api/v1/chat/completions',
+                key: process.env.OPENROUTER_API_KEY,
+                models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free'],
+            }] : []),
         ];
-        for (const model of models) {
-            for (let attempt = 0; attempt < retries; attempt++) {
-                let response;
-                try {
-                    response = await fetch(AI_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
+        for (const provider of providers) {
+            for (const model of provider.models) {
+                for (let attempt = 0; attempt < retries; attempt++) {
+                    let response;
+                    try {
+                        response = await fetch(provider.url, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${provider.key}`,
+                                'Content-Type': 'application/json'
+                            },
                         body: JSON.stringify({
                             model,
                             messages,
@@ -116,9 +127,10 @@ async function enrichWithAIAnalysis(predictions) {
                     if (last && last.length > 5) return last;
                 }
                 return '';
+                    }
+                }
             }
-        }
-        throw new Error('AI API error: all models failed');
+        throw new Error('AI API error: all providers failed');
     }
 
     const enriched = [];

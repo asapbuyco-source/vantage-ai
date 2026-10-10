@@ -290,39 +290,70 @@ app.post('/api/gemini/generate', adminAuth, geminiLimiter, async (req, res) => {
 // AI FEATURES ENDPOINT (League Radar, Acca Copilot, Daily Tip)
 // ══════════════════════════════════════════════════════════════════════
 
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
-const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const AI_MODEL = 'google/gemma-4-31b-it:free';
+// AI text generation with provider fallback: Groq free tier first (generous
+// limits, no credit card), then OpenRouter free models. Both speak the
+// OpenAI-compatible chat/completions API.
+const AI_PROVIDERS = [];
+if (process.env.GROQ_API_KEY) {
+    AI_PROVIDERS.push({
+        name: 'groq',
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        key: process.env.GROQ_API_KEY,
+        models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    });
+}
+if (process.env.OPENROUTER_API_KEY) {
+    AI_PROVIDERS.push({
+        name: 'openrouter',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        key: process.env.OPENROUTER_API_KEY,
+        models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free'],
+    });
+}
 
 async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
-    if (!AI_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
-    const response = await fetch(AI_URL, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: AI_MODEL, messages, temperature, max_tokens: maxTokens })
-    });
-    if (!response.ok) throw new Error(`AI error: ${response.status}`);
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content?.trim() || '';
-    // Nemotron/DeepSeek reasoning leak: content may be chain-of-thought starting with "We need to..."
-    if (content && /We need to produce|We need to|The match:/i.test(content)) {
-        const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-        // Last line that doesn't look like reasoning is the tip
-        for (let i = lines.length - 1; i >= 0; i--) {
-            if (!/We need to|The match:/i.test(lines[i]) && lines[i].length > 10) {
-                content = lines[i];
-                break;
+    if (AI_PROVIDERS.length === 0) throw new Error('No AI provider configured (set OPENROUTER_API_KEY or GROQ_API_KEY)');
+    for (const provider of AI_PROVIDERS) {
+        for (const model of provider.models) {
+            try {
+                const response = await fetch(provider.url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${provider.key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+                    signal: AbortSignal.timeout(30000),
+                });
+                // 429 = rate limit: skip to the next model/provider instead of throwing
+                if (!response.ok) {
+                    console.warn(`[AI] ${response.status} on ${provider.name}/${model} — trying next`);
+                    continue;
+                }
+                const data = await response.json();
+                let content = data.choices?.[0]?.message?.content?.trim() || '';
+                // Nemotron/DeepSeek reasoning leak: content may be chain-of-thought starting with "We need to..."
+                if (content && /We need to produce|We need to|The match:/i.test(content)) {
+                    const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+                    // Last line that doesn't look like reasoning is the tip
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        if (!/We need to|The match:/i.test(lines[i]) && lines[i].length > 10) {
+                            content = lines[i];
+                            break;
+                        }
+                    }
+                }
+                if (!content) {
+                    const reasoning = data.choices?.[0]?.message?.reasoning || '';
+                    if (reasoning) {
+                        const lines = String(reasoning).split('\n').filter(Boolean);
+                        content = lines[lines.length - 1]?.trim() || '';
+                    }
+                }
+                if (content) return content;
+            } catch (err) {
+                console.warn(`[AI] ${provider.name}/${model} failed: ${err.message}`);
             }
         }
     }
-    if (!content) {
-        const reasoning = data.choices?.[0]?.message?.reasoning || '';
-        if (reasoning) {
-            const lines = String(reasoning).split('\n').filter(Boolean);
-            content = lines[lines.length - 1]?.trim() || '';
-        }
-    }
-    return content;
+    throw new Error('AI error: all providers/models failed');
 }
 
 // AI feature endpoints (league radar / acca copilot / daily tip / ticket explanation)
