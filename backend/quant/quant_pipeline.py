@@ -836,10 +836,11 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     "probability": round(probs.over15, 4),
                     "reason": "Insurance: if Over 2.5 fails by 1 goal, Over 1.5 still wins"
                 } if (best_bet and "over 2.5" in best_bet.market.lower() and probs.over15 > 0.85) else None,
-                # Corner prediction (xG-correlated, r≈0.65, ~1.2 corners per expected goal)
-                "expected_corners": round((mu_home + mu_away) * 1.2, 1),
-                "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
-                "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
+                # Corner predictions SUSPENDED (audit 2026-10): xG×1.2 heuristic showed
+                # 8-12% real hit vs 75-80% displayed — removed until real odds.
+                # "expected_corners": round((mu_home + mu_away) * 1.2, 1),
+                # "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
+                # "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
             }
             # ── Apply calibration to no-odds predictions ──────────────────────
             # When odds are unavailable, the ev_engine calibration path is skipped.
@@ -1042,9 +1043,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "away_form": p.get("away_form"),
             "expected_goals_home": p.get("expected_goals_home"),
             "expected_goals_away": p.get("expected_goals_away"),
-            "expected_corners": p.get("expected_corners"),
-            "over65_corners_prob": p.get("over65_corners_prob"),
-            "over75_corners_prob": p.get("over75_corners_prob"),
             "fh_over05_prob": p.get("fh_over05_prob"),
             "fh_over15_prob": p.get("fh_over15_prob"),
             "fh_btts_prob": p.get("fh_btts_prob"),
@@ -1106,8 +1104,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "under25_prob": p.get("under25_prob"),
             "under35_prob": p.get("under35_prob"),
             "under45_prob": p.get("under45_prob"),
-            "over65_corners_prob": p.get("over65_corners_prob"),
-            "over75_corners_prob": p.get("over75_corners_prob"),
             # Safest bet
             "_safest_bet": p.get("_safest_bet"),
             "hedge_suggestion": p.get("hedge_suggestion"),

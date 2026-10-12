@@ -70,8 +70,8 @@ _MARKET_KEY_MAP = {
     "Home Win FH": "fh_home_win",
     "Draw FH": "fh_draw",
     "Away Win FH": "fh_away_win",
-    "Over 6.5 Corners": "over65_corners",
-    "Over 7.5 Corners": "over75_corners",
+    # "Over 6.5 Corners": "over65_corners",
+    # "Over 7.5 Corners": "over75_corners",  # SUSPENDED with corner markets (see above)
 }
 
 
@@ -144,9 +144,10 @@ MARKET_TO_PROB = {
     # odds too small to be a real betting market (FH Over 0.5 kept above)
     "Over 4.5 Goals": "over45",
     "Under 4.5 Goals": "under45",
-    # Corner markets
-    "Over 8.5 Corners": "over85_corners",
-    "Over 9.5 Corners": "over95_corners",
+    # OVER 8.5/9.5 CORNERS SUSPENDED (audit 2026-10): corner probabilities were
+    # never actually computed (xG×1.2 heuristic ≠ market odds) — 8-12% real hit
+    # vs 75-80% displayed. Removed until real bookmaker corner odds are wired.
+    # Corner markets:
 }
 
 # Market → odds field in OddsData
@@ -179,9 +180,9 @@ MARKET_TO_ODDS_FIELD = {
     "1H Home Win": "fh_home_odds",
     "1H Draw": "fh_draw_odds",
     "1H Away Win": "fh_away_odds",
-    # Corner odds
-    "Over 8.5 Corners": "corners_over85_odds",
-    "Over 9.5 Corners": "corners_over95_odds",
+    # Corner markets (suspended with Over 8.5/9.5 above):
+    #     "Over 8.5 Corners": "corners_over85_odds",
+    #     "Over 9.5 Corners": "corners_over95_odds",
 }
 
 
@@ -402,7 +403,9 @@ def evaluate_all_markets(
         # AUDIT: Home Win/Away Win have a 21%/14% hit rate and -43% ROI — the model cannot
         # predict winners. Fully DISABLE these markets rather than letting a 10% EV floor
         # occasionally leak a bad pick. Draw is kept (reasonably calibrated, 0.90 factor).
-        DISABLED_WIN_MARKETS = {"Home Win", "Away Win"}
+        # AUDIT 2026-10: DC X2 never reaches breakeven (40-56% vs ~63-69% needed).
+        # Hard-disable alongside Home/Away Win.
+        DISABLED_WIN_MARKETS = {"Home Win", "Away Win", "Double Chance (X2)"}
         if market in DISABLED_WIN_MARKETS:
             continue
         if market in HISTORICALLY_WEAK:

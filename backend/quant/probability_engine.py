@@ -458,6 +458,11 @@ def compute_combined(
     gap = abs(btts - independence_btts)
     btts_confidence = max(0.0, 1.0 - (gap / 0.25))  # 0.25 gap = 0 confidence, 0 gap = 1
 
+    # P5 (audit 2026-10): international fixtures overpredict BTTS — structured
+    # defending produces clean sheets (WC BTTS ~35% vs model ~50%+).
+    btts = round(min(btts * 0.80, 0.95), 4) if is_intl else round(btts, 4)
+    btts_no = round(1.0 - btts, 4)
+
     cp = CombinedProbabilities(
         home_win=round(p_home, 4),
         draw=round(p_draw, 4),
