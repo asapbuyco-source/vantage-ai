@@ -2,8 +2,8 @@
 /.html / 301
 
 # Allow explicit SEO files to passthrough
-/sitemap.xml /sitemap.xml 200
 /robots.txt /robots.txt 200
+# /sitemap.xml is proxied to Railway via netlify.toml (no static file exists)
 
 # SPA fallback
 /* /index.html 200
