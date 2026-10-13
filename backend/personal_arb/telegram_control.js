@@ -28,6 +28,10 @@ const DEFAULT_CONFIG = {
   autobet: 'off',      // 'off' | 'dry' | 'live' — auto-bet mode (betpawa+betfrenzy only)
   autobetTestPending: false, // one-shot: dry-run the next best candidate through the real click path
   autoMaxStake: 0,     // 0 = use per-book bankroll anchor
+  autoDailyLimit: 5,   // max confirmed bets per day — hard kill-switch
+  autoDay: null,       // YYYY-MM-DD of the counter
+  autoPlacedToday: 0,  // confirmed bets placed today
+  autoLimitWarned: false, // only warn once per day when the limit is hit
 };
 
 export function loadConfig() {
@@ -158,7 +162,7 @@ async function initLedgerDb() {
 function statusLines() {
   const lines = [...amountsLines().split('\n')];
   lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
-  lines.push(`🤖 Autobet: ${config.autobet}${config.autobetTestPending ? ' | 🧪 TEST ARMED' : ''} (betfrenzy+betpawa)`);
+  lines.push(`🤖 Autobet: ${config.autobet}${config.autobetTestPending ? ' | 🧪 TEST ARMED' : ''} (betfrenzy+betpawa) | limit ${config.autoDailyLimit}/day${config.autoDay === new Date().toISOString().slice(0, 10) ? `, ${config.autoPlacedToday} placed today` : ''}`);
   lines.push(`👥 Subscribers: ${config.recipients.length ? config.recipients.map(r => `${r.name || r.id} (${r.id})`).join(', ') : 'none'}`);
   if (config.pendingApprovals.length) {
     lines.push(`⏳ Awaiting approval: ${config.pendingApprovals.map(p => `${p.name || p.id} (${p.id})`).join(', ')}`);
@@ -258,7 +262,7 @@ export function handleMessage(text) {
     return `✅ Alert floor = ${pct}% worst-case ROI`;
   }
 
-  m2 = lower.match(/^(?:\/)?autobet\s+(test|live|dry|off|on)(?:\s+([\d.]+))?$/);
+  m2 = lower.match(/^(?:\/)?autobet\s+(test|live|dry|off|on|limit)(?:\s+([\d.]+))?$/);
   if (m2) {
     const mode = m2[1];
     if (mode === 'test') {
@@ -266,10 +270,18 @@ export function handleMessage(text) {
       saveConfig();
       return '🧪 Autobet TEST armed — the next scanned candidate ≥ floor will be dry-run through the REAL click+stake path (no confirm). Watch for the results.';
     }
+    if (mode === 'limit') {
+      const n = parseInt(m2[2], 10);
+      if (!Number.isFinite(n) || n <= 0) return 'Usage: autobet limit <n> — max confirmed bets per day (kill-switch). e.g. "autobet limit 3"';
+      config.autoDailyLimit = n;
+      config.autoLimitWarned = false;
+      saveConfig();
+      return `⛔ Daily auto-bet limit = ${n} bets. Reached → auto-betting stops until tomorrow (or until you raise it).`;
+    }
     config.autobet = mode === 'on' ? 'dry' : mode;
     if (m2[2]) config.autoMaxStake = parseFloat(m2[2]);
     saveConfig();
-    return `🤖 Autobet = ${config.autobet}${m2[2] ? ` | max stake ${m2[2]} XAF` : ''} (books: betfrenzy, betpawa)`;
+    return `🤖 Autobet = ${config.autobet}${m2[2] ? ` | max stake ${m2[2]} XAF` : ''} (books: betfrenzy, betpawa) | daily limit ${config.autoDailyLimit}${config.autoDay === new Date().toISOString().slice(0, 10) ? ` (${config.autoPlacedToday} placed today)` : ''}`;
   }
 
   if (lower === 'ledger' || lower === '/ledger') {

@@ -1276,11 +1276,27 @@ async function scan() {
       await sendTelegram(text);
       console.log(`[AutoBet] dry run done: ${results.map(r => `${r.book}:${r.ok ? 'OK' : 'FAIL'}`).join(' ')}`);
     } else if (botConfig.autobet === 'live' && aligned.length) {
-      for (const leg of best.legs) {
-        if (!['betfrenzy', 'betpawa'].includes(leg.book)) continue;
-        const stake = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
-        const r = await placeLeg({ book: leg.book, leg, c: best, stake, dryRun: false });
-        await sendTelegram(`${r.ok ? '✅' : '❌'} AUTOBET ${leg.book}${r.ok ? ` | ${stake} XAF @ ${r.foundOdds || leg.odds}${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''}` : ` | ${r.why || 'failed'}`}`);
+      const today = new Date().toISOString().slice(0, 10);
+      if (botConfig.autoDay !== today) { botConfig.autoDay = today; botConfig.autoPlacedToday = 0; botConfig.autoLimitWarned = false; saveConfig(); }
+      if (botConfig.autoPlacedToday >= botConfig.autoDailyLimit) {
+        if (!botConfig.autoLimitWarned) {
+          botConfig.autoLimitWarned = true;
+          saveConfig();
+          await sendTelegram(`⛔ Daily auto-bet limit reached (${botConfig.autoDailyLimit}/${botConfig.autoDailyLimit}) — auto-betting PAUSED until tomorrow. Send "autobet limit <n>" to raise it.`);
+        }
+        console.log(`[AutoBet] daily limit reached (${botConfig.autoPlacedToday}) — skipping placement`);
+      } else {
+        for (const leg of best.legs) {
+          if (!['betfrenzy', 'betpawa'].includes(leg.book)) continue;
+          const stake = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
+          const r = await placeLeg({ book: leg.book, leg, c: best, stake, dryRun: false });
+          if (r.ok && r.status === 'placed') {
+            botConfig.autoPlacedToday += 1;
+            saveConfig();
+            console.log(`[AutoBet] placed ${stake} XAF on ${leg.book} (${botConfig.autoPlacedToday}/${botConfig.autoDailyLimit} today)`);
+          }
+          await sendTelegram(`${r.ok ? '✅' : '❌'} AUTOBET ${leg.book}${r.ok ? ` | ${stake} XAF @ ${r.foundOdds || leg.odds}${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''} (${botConfig.autoPlacedToday}/${botConfig.autoDailyLimit} today)` : ` | ${r.why || 'failed'}`}`);
+        }
       }
     }
   }
