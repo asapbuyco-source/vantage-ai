@@ -1049,7 +1049,8 @@ for (const [k, grp] of g) {
 
 // ── O/U grouping (asian lines) — best over & best under must be DIFFERENT books ──
   const ou = new Map();
-  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  // 2026-10-13: betfrenzy Asian (quarter) totals never match the real lines behind the buttons — excluded; classic lines stay; other books unaffected.
+  for (const ev of all) { for (const o of ev.ou || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; if (ev.book === 'betfrenzy' && isQuarterLine(o.hcp)) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ou.get(k) || ou.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
   for (const [k, grp] of ou) {
     if (grp.matches.length < 2) continue;
     const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
@@ -1067,7 +1068,8 @@ for (const [k, grp] of g) {
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
   const cr = new Map();
-  for (const ev of all) { for (const o of ev.corners || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (cr.get(k) || cr.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
+  // 2026-10-13: betfrenzy Asian corners excluded (same invalidity class as their O/U quarter lines)
+  for (const ev of all) { for (const o of ev.corners || []) { if (!o.hcp || !o.over || !o.under) continue; if (o.over < 1.01 || o.over > 20 || o.under < 1.01 || o.under > 20) continue; if (ev.book === 'betfrenzy' && isQuarterLine(o.hcp)) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (cr.get(k) || cr.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, over: o.over, under: o.under, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, kickoff: ev.kickoff }); } }
   for (const [k, grp] of cr) {
     if (grp.matches.length < 2) continue;
     const over = grp.matches.reduce((b, m) => m.over > b.odds ? { book: m.book, odds: m.over, link: m.link, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
@@ -1107,8 +1109,12 @@ for (const [k, grp] of g) {
 // sufficient. Every AH candidate is validated by an outcome-based settlement simulation
 // (see ahWorstCase in arb_engine.mjs): we enumerate every settlement breakpoint and require
 // the WORST-CASE combined return to exceed the total stake by at least MIN_GUARANTEED_ROI.
+  // 2026-10-13: BETFRENZY ASIAN MARKETS DISABLED — betfrenzy AH/Asian lines never match
+// the real lines behind the buttons (mis-mapped rows, wrong direction); their Asian bets
+// cannot be placed as analyzed. AH from other books (betpawa, betwinner, 1xbet, paripesa)
+// stays enabled.
   const ah = new Map();
-  for (const ev of all) { for (const o of ev.ah || []) { if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${o.dir || 'G'}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, dir: o.dir || 'G', kickoff: ev.kickoff }); } }
+  for (const ev of all) { for (const o of ev.ah || []) { if (ev.book === 'betfrenzy') continue; if (!o.hcp) continue; const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${o.hcp}|${o.dir || 'G'}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`; (ah.get(k) || ah.set(k, { matches: [] }).get(k)).matches.push({ book: ev.book, home: o.home, away: o.away, link: ev.link, period: ev.period, scope: o.scope || ev.scope, hcp: o.hcp, dir: o.dir || 'G', kickoff: ev.kickoff }); } }
   for (const [k, grp] of ah) {
     if (grp.matches.length < 2) continue;
     const bHome = grp.matches.reduce((b, m) => m.home > b.odds ? { book: m.book, odds: m.home, link: m.link, period: m.period, scope: m.scope, dir: m.dir } : b, { book: '', odds: 0 });
