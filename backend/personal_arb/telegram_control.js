@@ -25,6 +25,9 @@ const DEFAULT_CONFIG = {
   last_update_id: 0,   // Telegram getUpdates offset (persisted)
   recipients: [],      // [{ id, name, addedAt }] — signal recipients (owner + these)
   pendingApprovals: [],// [{ id, name, at }] — non-owner who messaged the bot, awaiting owner approval
+  autobet: 'off',      // 'off' | 'dry' | 'live' — auto-bet mode (betpawa+betfrenzy only)
+  autobetTestPending: false, // one-shot: dry-run the next best candidate through the real click path
+  autoMaxStake: 0,     // 0 = use per-book bankroll anchor
 };
 
 export function loadConfig() {
@@ -119,9 +122,43 @@ function amountsLines() {
   return lines.join('\n');
 }
 
+async function ledgerLines() {
+  const db = await initLedgerDb();
+  if (!db) return '🧾 Ledger: Firestore unavailable (FIREBASE_SERVICE_ACCOUNT not set).';
+  try {
+    const snap = await db.collection('arb_bets').orderBy('ts', 'desc').limit(8).get();
+    if (snap.empty) return '🧾 Ledger empty — no auto-bet attempts yet. Send "autobet test" to force a dry-run.';
+    const lines = ['🧾 Recent auto-bet attempts:'];
+    snap.docs.forEach(d => {
+      const b = d.data() || {};
+      const tag = b.dryRun ? '🧪 DRY' : b.status === 'placed' ? '✅ PLACED' : b.status === 'dryrun_passed' ? '🧪 PASS' : '❌ FAIL';
+      lines.push(`${tag} ${(b.book || '?').padEnd(9)} ${(b.event || '').slice(0, 28)} | ${b.leg?.bet || '?'} @ ${b.leg?.odds} | ${b.ok ? 'ok' : b.why || '?'}`);
+    });
+    return lines.join('\n');
+  } catch (e) {
+    return `🧾 Ledger error: ${e.message.slice(0, 80)}`;
+  }
+}
+
+let _ledgerDb = null;
+async function initLedgerDb() {
+  if (_ledgerDb) return _ledgerDb;
+  const { default: admin } = await import('firebase-admin');
+  try {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!raw) return null;
+    const sa = JSON.parse(raw);
+    if (sa.private_key) sa.private_key = sa.private_key.replace(/\\n/g, '\n');
+    if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(sa) });
+    _ledgerDb = admin.firestore();
+    return _ledgerDb;
+  } catch (e) { console.log(`[BotCtl] ledger db init: ${e.message.slice(0, 80)}`); return null; }
+}
+
 function statusLines() {
   const lines = [...amountsLines().split('\n')];
   lines.push(`📉 Alert floor: ${(config.min_roi * 100).toFixed(1)}% worst-case ROI`);
+  lines.push(`🤖 Autobet: ${config.autobet}${config.autobetTestPending ? ' | 🧪 TEST ARMED' : ''} (betfrenzy+betpawa)`);
   lines.push(`👥 Subscribers: ${config.recipients.length ? config.recipients.map(r => `${r.name || r.id} (${r.id})`).join(', ') : 'none'}`);
   if (config.pendingApprovals.length) {
     lines.push(`⏳ Awaiting approval: ${config.pendingApprovals.map(p => `${p.name || p.id} (${p.id})`).join(', ')}`);
@@ -145,6 +182,9 @@ const HELP = [
   '    e.g. "amount betpawa 30000"',
   'amounts — show all anchors',
   'minroi <pct> — alert floor (e.g. "minroi 2" = 2% worst-case)',
+  'autobet test — dry-run the next candidate through the REAL click path',
+  'autobet dry — dry-run mode (default) | autobet live — actually confirm bets',
+  'autobet off — stop betting | ledger — last auto-bet attempts',
   'status — full status',
   'Alerts show real stakes scaled from the anchor book amount.',
 ].join('\n');
@@ -216,6 +256,27 @@ export function handleMessage(text) {
     config.min_roi = pct / 100;
     saveConfig();
     return `✅ Alert floor = ${pct}% worst-case ROI`;
+  }
+
+  m2 = lower.match(/^(?:\/)?autobet\s+(test|live|dry|off|on)(?:\s+([\d.]+))?$/);
+  if (m2) {
+    const mode = m2[1];
+    if (mode === 'test') {
+      config.autobetTestPending = true;
+      saveConfig();
+      return '🧪 Autobet TEST armed — the next scanned candidate ≥ floor will be dry-run through the REAL click+stake path (no confirm). Watch for the results.';
+    }
+    config.autobet = mode === 'on' ? 'dry' : mode;
+    if (m2[2]) config.autoMaxStake = parseFloat(m2[2]);
+    saveConfig();
+    return `🤖 Autobet = ${config.autobet}${m2[2] ? ` | max stake ${m2[2]} XAF` : ''} (books: betfrenzy, betpawa)`;
+  }
+
+  if (lower === 'ledger' || lower === '/ledger') {
+    return ledgerLines();
+  }
+  if (lower === 'balance' || lower === '/balance') {
+    return '💳 Use the ledger — balances are attached to each bet record (arb_balances collection).';
   }
 
   if (lower.includes('amounts') || lower === 'status' || lower === '/status') return statusLines();

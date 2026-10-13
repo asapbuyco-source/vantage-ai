@@ -10,7 +10,7 @@
  */
 import { calcArb } from './arb_calc.js';
 import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, asianSplitDisplay } from './arb_engine.mjs';
-import { config as botConfig, startTelegramControl, scaleStakes, totalStake, broadcastSignal } from './telegram_control.js';
+import { config as botConfig, startTelegramControl, scaleStakes, totalStake, broadcastSignal, saveConfig } from './telegram_control.js';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -1256,6 +1256,34 @@ async function scan() {
   }
   console.log(`[Verify] aligned-snapshot confirmed ${aligned.length}/${confirmed.length}.`);
   for (const c of aligned) if (shouldReport(c)) await report(c);
+  // ── AUTO-BET HOOK (2026-10-13) ─────────────────────────────────────────────
+  // 'autobet test' (Telegram) → one-shot dry-run of the best candidate through the
+  // REAL click→slip→stake path on betfrenzy/betpawa (no confirm pressed). Runs even
+  // on near-miss pairs — the goal is proving the click path, not the arb math.
+  // 'autobet live' → actually place bets on supported books, each recorded to the
+  // P&L ledger (arb_bets) with the account balance read from the page.
+  const pool = aligned.length ? aligned : (confirmed.length ? confirmed : first);
+  if (pool.length && (botConfig.autobet !== 'off' || botConfig.autobetTestPending)) {
+    const { dryRunCandidate, placeLeg } = await import('./auto_bet.js');
+    const best = pool.find(c => c.legs.some(l => ['betfrenzy', 'betpawa'].includes(l.book))) || pool[0];
+    if (botConfig.autobetTestPending) {
+      botConfig.autobetTestPending = false;
+      saveConfig();
+      const results = await dryRunCandidate(best, { stakePerLeg: 100 });
+      const text = ['🧪 AUTO-BET DRY RUN (no confirm pressed)', `${best.kind} ${best.teams.join(' vs ')} | ${best.pct.toFixed(2)}%`, ...results.map(r => r.skipped
+        ? `▪ ${r.book}: skipped (${r.skipped})`
+        : `▪ ${r.book}: ${r.ok ? `OK @ ${r.foundOdds} | slip+balance: ${r.balanceSeen || 'n/a'}` : `FAIL — ${r.why || '?'}`}`)].join('\n');
+      await sendTelegram(text);
+      console.log(`[AutoBet] dry run done: ${results.map(r => `${r.book}:${r.ok ? 'OK' : 'FAIL'}`).join(' ')}`);
+    } else if (botConfig.autobet === 'live' && aligned.length) {
+      for (const leg of best.legs) {
+        if (!['betfrenzy', 'betpawa'].includes(leg.book)) continue;
+        const stake = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
+        const r = await placeLeg({ book: leg.book, leg, c: best, stake, dryRun: false });
+        await sendTelegram(`${r.ok ? '✅' : '❌'} AUTOBET ${leg.book}${r.ok ? ` | ${stake} XAF @ ${r.foundOdds || leg.odds}${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''}` : ` | ${r.why || 'failed'}`}`);
+      }
+    }
+  }
   for (const c of confirmed) if (!aligned.some(x => x.key === c.key)) console.log(`[Verify] dropped: ${c.kind} ${c.teams.join(' vs ')}`);
 }
 
