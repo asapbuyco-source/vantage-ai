@@ -137,6 +137,28 @@ async function fetchBetfrenzy() {
             return [{ hcp: line.toFixed(2), over: parseFloat(o['1_4'].over_od), under: parseFloat(o['1_4'].under_od), scope: 'MATCH' }];
           })() });
       }
+      // ── OTHER SPORTS (2026-10-13): tennis (SportId=13) + boxing (SportId=9) ──
+      // 2-way "match winner": odds key `${SportId}_1` carries home_od/away_od only
+      // (no draw market). Verified live against the feed: 46 tennis events.
+      for (const [sid, sname] of [[13, 'tennis'], [9, 'boxing']]) {
+        try {
+          const r2 = await fetch(`https://betfrenzy.cm/api/v1/sports/matchs?SportId=${sid}&EventStatus=PRE`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+          if (!r2.ok) continue;
+          const j2 = await r2.json();
+          for (const lg of j2) for (const ev of lg.events || []) {
+            const o = ev.odds || {};
+            const m = o[`${sid}_1`];
+            if (!m || !ev.home?.name || !ev.away?.name) continue;
+            const h = parseFloat(m.home_od), a = parseFloat(m.away_od);
+            if (!(h > 1) || !(a > 1)) continue;
+            out.push({ book: 'betfrenzy', sport: sname, home: ev.home.name, away: ev.away.name,
+              league: ev.league?.name || lg.LeagueName || '', kickoff: ev.time ? ev.time * 1000 : null,
+              link: ev.id ? `https://betfrenzy.cm/event/${ev.id}` : null,
+              period: 'FULL_MATCH', scope: 'MATCH', periodSource: `betfrenzy SportId=${sid} 2-way winner market`,
+              h, d: null, a, dc: null, ah: [], ou: [], corners: [] });
+          }
+        } catch (_) { /* other sports are best-effort */ }
+      }
       if (out.length > 0) return out;
       await new Promise(r => setTimeout(r, 3000));
     } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
@@ -639,6 +661,7 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           : market === 'dc' ? /double\s*chance/i
           : market === 'btts' ? /both\s*teams/i
           : market === 'dnb' ? /draw\s*no\s*bet/i
+          : market === 'mw' ? /match\s*winner|winner|vainqueur|to\s*win|moneyline|1x2|résultat|result/i
           : market === '1x2' ? /full\s*time\s*(?:result|1x2)?/i
           : /over\s*\/?\s*under/i;
         const lineOf = (t) => {
@@ -801,6 +824,10 @@ function howToFindLeg(leg, c) {
   const head = cap(leg.book);
   // Per-book section names as displayed on the site
   const sectionFor = () => {
+    if (c.kind === 'MW') {
+      const isHomeSide = b.toLowerCase().startsWith(String(c.teams[0]).toLowerCase());
+      return `Match Winner section — tap ${isHomeSide ? '"' + c.teams[0] + '"' : '"' + c.teams[1] + '"'}`;
+    }
     const asian = b.match(/\(Asian ([^)]+)\)/);
     const market = kind.toLowerCase();
     if (asian) {
@@ -832,6 +859,8 @@ function howToFindLeg(leg, c) {
 function screenshotHintForLeg(leg, c) {
   const b = leg.bet || '';
   const home = c.teams[0], away = c.teams[1];
+  // Non-football 2-way winner (tennis/basketball/...): the page section is "Match Winner"/"Winner"
+  if (c.kind === 'MW') return { market: 'mw', index: /to win \(1\)/i.test(b) ? 0 : 1 };
   const lineFromBet = () => {
     const asian = b.match(/\(Asian ([^)]+)\)/);
     if (asian) { const parts = asian[1].split(',').map(parseFloat).filter(v => !isNaN(v)); return parts.length ? parts.reduce((a, x) => a + x, 0) / parts.length : null; }
@@ -1021,7 +1050,7 @@ function findCandidates(all) {
   // were NEAR-MISS (within 2% of an arb). Logged each cycle so "arbs are scarce"
   // is diagnosable: pairs≈0 = coverage/matching; pairs>0 near=0 = efficient market
   // or floor too high; near>0 = arbs are close, latency/floor is the gate.
-  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0] };
+  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0], 'MW': [0, 0] };
   const note = (m, inv) => { diagStats[m][0]++; if (inv < 1.02) diagStats[m][1]++; };
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
@@ -1190,7 +1219,28 @@ for (const [k, grp] of g) {
       [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
        { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
   }
-  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB).`);
+  // ── MW grouping (2-way "Match Winner" for non-football sports) ──
+  // Tennis / basketball / volleyball etc. have NO draw and no handicap: the 2-way
+  // math is exact (worst = 100/inv). Books: betfrenzy (SportId=13/9) + 1xbet-family
+  // feeds (all sports parsed as h/a). Sport is part of the key so names never
+  // collide across disciplines.
+  const MW_SPORTS = ['tennis', 'basketball', 'volleyball', 'handball', 'table tennis', 'boxing'];
+  const mw = new Map();
+  for (const ev of all) { if (ev.sport && MW_SPORTS.includes(String(ev.sport).toLowerCase()) && ev.h && ev.a) { const k = `${String(ev.sport).toLowerCase()}|${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${dayOf(ev.kickoff)}`; (mw.get(k) || mw.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  for (const [k, grp] of mw) {
+    if (grp.matches.length < 2) continue;
+    const sportName = k.split('|')[0];
+    const bHome = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    const bAway = grp.matches.reduce((b, m) => m.a > b.odds ? { book: m.book, odds: m.a, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
+    if (!bHome.book || bHome.book === bAway.book) continue;
+    const inv = 1/bHome.odds + 1/bAway.odds;
+    note('MW', inv);
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const worst = 100 / inv; const label = sportName.charAt(0).toUpperCase() + sportName.slice(1);
+      cand(`MW|${k}`, `Match Winner — ${label}`, [bHome.home || k.split('|')[1], bAway.away || k.split('|')[2]],
+        [{ book: bHome.book, bet: (bHome.home || k.split('|')[1]) + ' to win (1)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
+         { book: bAway.book, bet: (bAway.away || k.split('|')[2]) + ' to win (2)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, 'FULL_MATCH', worst, 'MATCH'); }
+  }
+  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB, ${mw.size} MW).`);
   // WHY-SCARCE diagnostic: "pairs" = cross-book pairs considered; "near" = within 2% of an arb.
   // pairs≈0 → coverage/matching problem; pairs>0 near=0 → market efficient or floor too high.
   const fmtStat = (m) => `${m} ${diagStats[m][0]}${diagStats[m][1] ? `(near ${diagStats[m][1]})` : ''}`;

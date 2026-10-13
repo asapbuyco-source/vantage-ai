@@ -109,7 +109,7 @@ function locateAndClickInPage({ want, wantLine, index, market, titleRe, target }
 // Derive the locator params from the leg + candidate (mirrors screenshotHintForLeg).
 function locatorParams(leg, c) {
   const b = leg.bet || '';
-  const market = c.kind === 'CR' || /corner/i.test(b) ? 'ou' : c.kind === 'OU' || /over|under/i.test(b) ? 'ou' : c.kind === 'AH' ? 'ah' : c.kind === 'DC' ? 'dc' : c.kind === 'BTTS' ? 'btts' : c.kind === 'DNB' ? 'dnb' : '1x2';
+  const market = c.kind === 'MW' ? 'mw' : c.kind === 'CR' || /corner/i.test(b) ? 'ou' : c.kind === 'OU' || /over|under/i.test(b) ? 'ou' : c.kind === 'AH' ? 'ah' : c.kind === 'DC' ? 'dc' : c.kind === 'BTTS' ? 'btts' : c.kind === 'DNB' ? 'dnb' : '1x2';
   let wantLine = null, index = 0, target = 'goals';
   const lineFromBet = () => {
     const asian = b.match(/\(Asian ([^)]+)\)/);
@@ -124,13 +124,13 @@ function locatorParams(leg, c) {
   else if (/both/i.test(b)) index = /\(Yes\)/i.test(b) ? 0 : 1;
   else if (/to win \(1\)/i.test(b)) index = 0;
   else if (/Draw \(X\)/i.test(b)) index = 1;
-  else if (/to win \(2\)/i.test(b)) index = 2;
+  else if (/to win \(2\)/i.test(b)) index = c.kind === 'MW' ? 1 : 2;
   if (c.kind === 'AH') {
     const m = b.match(/([+-]\d+(?:\.\d+)?)\s*$/);
     wantLine = m ? Math.abs(parseFloat(m[1])) : null;
     index = new RegExp('^' + c.teams[0], 'i').test(b) ? 0 : 1;
   }
-  const titleRe = market === 'btts' ? /both\s*teams/i : market === 'dnb' ? /draw\s*no\s*bet/i : market === '1x2' ? /full\s*time\s*(?:result|1x2)?/i : market === 'ah' ? /asian\s*handicap/i : market === 'dc' ? /double\s*chance/i : /over\s*\/?\s*under/i;
+  const titleRe = market === 'btts' ? /both\s*teams/i : market === 'dnb' ? /draw\s*no\s*bet/i : market === 'mw' ? /match\s*winner|winner|vainqueur|to\s*win|moneyline|1x2|résultat|result/i : market === '1x2' ? /full\s*time\s*(?:result|1x2)?/i : market === 'ah' ? /asian\s*handicap/i : market === 'dc' ? /double\s*chance/i : /over\s*\/?\s*under/i;
   return { market, wantLine, index, target, titleRe, want: leg.odds };
 }
 
