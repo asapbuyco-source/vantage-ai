@@ -1769,7 +1769,7 @@ app.use(async (req, res, next) => {
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
                 const postsSnap = await admin.firestore()
                     .collection('daily_blogs')
-                    .orderBy('createdAt', 'desc')
+                    .orderBy('generatedAt', 'desc')
                     .limit(15)
                     .get();
                 const listHtml = postsSnap.docs.map((doc) => {
