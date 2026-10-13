@@ -1058,7 +1058,8 @@ function findCandidates(all) {
   // sport is part of the identity so team names can never collide across sports
   // (e.g. baseball vs basketball clubs with the same name).
   const g = new Map();
-  for (const ev of all) { if (ev.h) { const k = `${(ev.sport || 'football').toLowerCase()}|${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || 'MATCH'}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
+  // Football only — non-football sports have no draw and are handled by the MW pairing.
+  for (const ev of all) { if (ev.h && (!ev.sport || String(ev.sport).toLowerCase() === 'football')) { const k = `${(ev.sport || 'football').toLowerCase()}|${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || 'MATCH'}|${dayOf(ev.kickoff)}`; (g.get(k) || g.set(k, { matches: [] }).get(k)).matches.push(ev); } }
 for (const [k, grp] of g) {
     if (grp.matches.length < 2) continue;
     const h = grp.matches.reduce((b, m) => m.h > b.odds ? { book: m.book, odds: m.h, link: m.link, home: m.home, away: m.away, period: m.period, scope: m.scope } : b, { book: '', odds: 0 });
