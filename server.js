@@ -1751,6 +1751,58 @@ app.use(async (req, res, next) => {
             }
         }
 
+        // ── SPECIFIC ROUTE: /blog (listing page — GSC flagged as duplicate) ──
+        if (req.path === '/blog' || req.path === '/blog/') {
+            try {
+                const blogUrl = `${baseUrl}/blog`;
+                const title = `Blog Pronostics Football & Analyses | Vantage AI`;
+                const description = `Analyses, pronostics et explanations de modèles de paris par Vantage AI. Retrouvez nos articles quotidiens pour chaque match analysé.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${blogUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${blogUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+                const postsSnap = await admin.firestore()
+                    .collection('daily_blogs')
+                    .orderBy('createdAt', 'desc')
+                    .limit(15)
+                    .get();
+                const listHtml = postsSnap.docs.map((doc) => {
+                    const d = doc.data() || {};
+                    const t = String(d.title || doc.id).replace(/</g, '&lt;');
+                    return `<li><a href="${blogUrl}/${encodeURIComponent(doc.id)}">${t}</a></li>`;
+                }).join('\n');
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${title}</h1><ul>${listHtml}</ul></div>\n<!-- REACT_ROOT -->`);
+            } catch (listErr) {
+                console.warn('[SSR] Blog listing SSR error:', listErr.message);
+            }
+        }
+
+        // ── SPECIFIC ROUTE: /privacy-policy (distinct static page) ──
+        if (req.path === '/privacy-policy' || req.path === '/privacy-policy/') {
+            try {
+                const ppUrl = `${baseUrl}/privacy-policy`;
+                const title = `Politique de Confidentialité | Vantage AI`;
+                const description = `Politique de confidentialité de Vantage AI : quelles données nous collectons, comment nous les utilisons et vos droits.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${ppUrl}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:url" content="${ppUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+            } catch (ppErr) {
+                console.warn('[SSR] Privacy policy SSR error:', ppErr.message);
+            }
+        }
+
         // Canonical fallback for every page (home, blog, guide, stats, VIP…).
         // Prevents ?tab= / ?lang= / trailing-slash duplicates from all pointing
         // at the same shell. Query strings are dropped so variants collapse to one URL.
