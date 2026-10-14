@@ -1362,7 +1362,14 @@ async function scan() {
   // P&L ledger (arb_bets) with the account balance read from the page.
   const pool = aligned.length ? aligned : (confirmed.length ? confirmed : first);
   if (pool.length && (botConfig.autobet !== 'off' || botConfig.autobetTestPending)) {
-    const { dryRunCandidate, executeArb } = await import('./auto_bet.js');
+    let dryRunCandidate, executeArb;
+    try {
+      ({ dryRunCandidate, executeArb } = await import('./auto_bet.js'));
+    } catch (impErr) {
+      console.error(`[AutoBet] module unavailable (${impErr.message.slice(0, 120)}) — skipping`);
+      if (botConfig.autobetTestPending) { botConfig.autobetTestPending = false; saveConfig(); await sendTelegram(`⚠️ Autobet module failed to load: ${impErr.message.slice(0, 120)}`); }
+      return;
+    }
     const best = pool.find(c => c.legs.some(l => ['betfrenzy', 'betpawa'].includes(l.book))) || pool[0];
     if (botConfig.autobetTestPending) {
       botConfig.autobetTestPending = false;
