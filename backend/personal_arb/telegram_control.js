@@ -32,6 +32,9 @@ const DEFAULT_CONFIG = {
   autoDay: null,       // YYYY-MM-DD of the counter
   autoPlacedToday: 0,  // confirmed bets placed today
   autoLimitWarned: false, // only warn once per day when the limit is hit
+  logins: {},          // book -> { user, pass, setAt } — NO-OTP books only (betfrenzy/betpawa)
+  loginPending: null,  // book name — scanner performs a credential login on next cycle
+  checkPending: false, // scanner checks logged-in state + balance for betfrenzy+betpawa
 };
 
 export function loadConfig() {
@@ -41,6 +44,7 @@ export function loadConfig() {
       return {
         ...DEFAULT_CONFIG, ...saved,
         bankrolls: { ...(saved.bankrolls || {}) },
+        logins: { ...(saved.logins || {}) },
         recipients: Array.isArray(saved.recipients) ? saved.recipients : [],
         pendingApprovals: Array.isArray(saved.pendingApprovals) ? saved.pendingApprovals : [],
       };
@@ -187,6 +191,9 @@ const HELP = [
   'amounts — show all anchors',
   'minroi <pct> — alert floor (e.g. "minroi 2" = 2% worst-case)',
   'autobet test — dry-run the next candidate through the REAL click path',
+  'autobet check — login status + balances for betfrenzy/betpawa',
+  'setlogin <book> <phone> <password> — store creds (no-OTP books; msg auto-deleted)',
+  'login <book> — log in with stored creds | clearlogin <book> — forget them',
   'autobet dry — dry-run mode (default) | autobet live — actually confirm bets',
   'autobet off — stop betting | ledger — last auto-bet attempts',
   'status — full status',
@@ -262,13 +269,43 @@ export function handleMessage(text) {
     return `✅ Alert floor = ${pct}% worst-case ROI`;
   }
 
-  m2 = lower.match(/^(?:\/)?autobet\s+(test|live|dry|off|on|limit)(?:\s+([\d.]+))?$/);
+  // ── Credential login commands (raw text — passwords are case-sensitive) ──
+  m2 = String(text).match(/^(?:\/)?setlogin\s+(\S+)\s+(\S+)\s+(.+)$/i);
+  if (m2) {
+    const book = BOOK_ALIASES[m2[1].toLowerCase()] || m2[1].toLowerCase();
+    if (!['betfrenzy', 'betpawa'].includes(book)) return 'setlogin supports only betfrenzy and betpawa (the no-OTP books).';
+    config.logins[book] = { user: m2[2].trim(), pass: m2[3].trim(), setAt: new Date().toISOString() };
+    saveConfig();
+    return `🔐 Credentials stored for ${book} (user ${m2[2].trim().slice(0, 4)}****).\nSend "login ${book}" to log in now.\nThis message will be deleted from the chat.`;
+  }
+  m2 = lower.match(/^(?:\/)?login\s+(\S+)$/);
+  if (m2) {
+    const book = BOOK_ALIASES[m2[1]] || m2[1];
+    if (!['betfrenzy', 'betpawa'].includes(book)) return 'login supports only betfrenzy and betpawa.';
+    if (!config.logins[book]) return `No credentials stored for ${book}. Use: setlogin ${book} <phone> <password>`;
+    config.loginPending = book;
+    saveConfig();
+    return `🔐 Login for ${book} queued — the scanner will run it on the next cycle and report back.`;
+  }
+  m2 = lower.match(/^(?:\/)?clearlogin\s+(\S+)$/);
+  if (m2) {
+    const book = BOOK_ALIASES[m2[1]] || m2[1];
+    if (config.logins[book]) { delete config.logins[book]; saveConfig(); return `🗑️ Credentials for ${book} deleted.`; }
+    return `Nothing stored for ${book}.`;
+  }
+
+  m2 = lower.match(/^(?:\/)?autobet\s+(test|check|live|dry|off|on|limit)(?:\s+([\d.]+))?$/);
   if (m2) {
     const mode = m2[1];
     if (mode === 'test') {
       config.autobetTestPending = true;
       saveConfig();
       return '🧪 Autobet TEST armed — the next scanned candidate ≥ floor will be dry-run through the REAL click+stake path (no confirm). Watch for the results.';
+    }
+    if (mode === 'check') {
+      config.checkPending = true;
+      saveConfig();
+      return '🔍 Session check queued — the scanner will report login state + balances for betfrenzy and betpawa on the next cycle.';
     }
     if (mode === 'limit') {
       const n = parseInt(m2[2], 10);
@@ -590,6 +627,10 @@ export function startTelegramControl() {
             pendingInput.type = null; // stale prompt — drop it, treat as command
             const reply = handleMessage(msg.text);
             if (reply) res = { text: reply, keyboard: MENU_KEYBOARD };
+            // Security: delete setlogin messages from the chat (they contain a password).
+            if (msg.text && /^(?:\/)?setlogin\s/i.test(msg.text) && msg.message_id) {
+              try { await fetch(`${API}/deleteMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, message_id: msg.message_id }) }); } catch (_) {}
+            }
           }
           if (res?.text) await send(res.text, res.keyboard);
         }

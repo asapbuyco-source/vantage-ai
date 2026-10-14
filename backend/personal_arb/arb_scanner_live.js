@@ -1266,6 +1266,28 @@ function shouldReport(c) {
 }
 
 async function scan() {
+  // ── Pending owner requests: session check / credential login (owner-only Telegram) ──
+  // Runs BEFORE the scan so it works even when there are no candidates.
+  if (botConfig.checkPending || botConfig.loginPending) {
+    const { checkBook, loginBook } = await import('./book_login.js');
+    if (botConfig.checkPending) {
+      botConfig.checkPending = false;
+      saveConfig();
+      const results = [];
+      for (const b of ['betfrenzy', 'betpawa']) results.push(await checkBook(b));
+      await sendTelegram(['🔍 SESSION CHECK', ...results.map(r => `▪ ${r.book}: ${r.ok ? (r.loggedIn ? `✅ logged in${r.balance ? ` | balance ${r.balance}` : ''}` : '❌ NOT logged in — send "login ' + r.book + '" (after setlogin)') : `⚠️ ${r.reason || 'error'}`}`)].join('\n'));
+      console.log(`[Login] check: ${results.map(r => `${r.book}:${r.loggedIn ? 'in' : 'OUT'}`).join(' ')}`);
+    }
+    if (botConfig.loginPending) {
+      const b = botConfig.loginPending;
+      botConfig.loginPending = null;
+      saveConfig();
+      const cred = (botConfig.logins || {})[b];
+      const r = await loginBook(b, { user: cred?.user, pass: cred?.pass });
+      await sendTelegram(r.ok ? `✅ ${b}: LOGGED IN${r.balance ? ` | balance ${r.balance}` : ''}` : `❌ ${b}: login failed — ${r.reason}`);
+      console.log(`[Login] ${b}: ${r.ok ? 'OK' : 'FAIL ' + (r.reason || '')}`);
+    }
+  }
   const first = await collectCandidates();
   if (first.length === 0) { console.log('[Verify] 0 candidates — nothing to verify.'); return; }
   // Two-pass verification: wait 20s, re-fetch, only report arbs that PERSIST with stable odds

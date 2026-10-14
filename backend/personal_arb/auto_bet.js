@@ -37,7 +37,7 @@ async function initFirebase() {
 }
 
 async function launchBook(profileName) {
-  const launchOpts = { headless: true, viewport: { width: 1280, height: 800 } };
+  const launchOpts = { headless: true, viewport: { width: 390, height: 844, isMobile: true } };
   if (ARB_PROXY && process.env.SCREENSHOT_PROXY === '1') {
     const u = new URL(ARB_PROXY);
     launchOpts.proxy = {
