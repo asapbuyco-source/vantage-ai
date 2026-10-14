@@ -96,6 +96,9 @@ export async function loginBook(book, { user, pass } = {}) {
     await userInput.click().catch(() => {});
     await userInput.fill(finalUser);
     const passInput = page.locator(site.passSel).first();
+    const maxLenAttr = await passInput.getAttribute('maxlength').catch(() => null);
+    const maxLen = maxLenAttr ? parseInt(maxLenAttr, 10) : null;
+    if (maxLen && finalPass.length > maxLen) { out.reason = `${book} expects a ${maxLen}-character ${book === 'betpawa' ? 'PIN' : 'password'} but the stored value has ${finalPass.length} — fix it on Railway (${book.toUpperCase()}_PASS) or with "setlogin ${book} <phone> <pin>"`; return out; }
     await passInput.fill(finalPass);
     await page.waitForTimeout(400);
 
