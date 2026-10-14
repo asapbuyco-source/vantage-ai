@@ -56,6 +56,13 @@ async function readBalance(page) {
   for (const sel of ['[class*="balance" i]', '[class*="wallet" i]', '[class*="solde" i]', '[class*="amount" i]']) {
     try { const t = ((await page.locator(sel).first().textContent({ timeout: 1200 })) || '').trim(); if (t && t.length < 40 && /\d/.test(t)) return t; } catch (_) {}
   }
+  // Fallback: currency pattern in page text (betfrenzy renders "16,019.00 XAF" as plain text).
+  try {
+    const raw = await page.evaluate(() => document.body.innerText);
+    const body = String(raw).replace(/[|]/g, ' ');
+    const m = body.match(/(?:XAF|FCFA)\s*([\d][\d\s.,]*)|([\d][\d\s.,]{2,})\s*(?:XAF|FCFA)/i);
+    if (m) return (m[1] || m[2]).trim();
+  } catch (_) {}
   return null;
 }
 
