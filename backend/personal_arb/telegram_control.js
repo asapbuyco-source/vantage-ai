@@ -15,7 +15,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_PATH = process.env.ARB_BOT_CONFIG || path.join(__dirname, 'bot_config.json');
+// Persist config on the Railway VOLUME (inside .playwright_profile) so logins,
+// stake anchors and limits survive deploys. Legacy path kept as fallback read.
+const VOLUME_CONFIG_PATH = path.join(__dirname, '../../.playwright_profile', 'bot_config.json');
+const LEGACY_CONFIG_PATH = path.join(__dirname, 'bot_config.json');
+const CONFIG_PATH = process.env.ARB_BOT_CONFIG || VOLUME_CONFIG_PATH;
 
 export const DEFAULT_BANKROLL = 10000;
 
@@ -39,8 +43,12 @@ const DEFAULT_CONFIG = {
 
 export function loadConfig() {
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    // Migrate: prefer the volume copy; fall back to the legacy (ephemeral) one once.
+    const pathToUse = fs.existsSync(CONFIG_PATH) ? CONFIG_PATH : (fs.existsSync(LEGACY_CONFIG_PATH) ? LEGACY_CONFIG_PATH : null);
+    if (pathToUse) {
+      const saved = JSON.parse(fs.readFileSync(pathToUse, 'utf8'));
+      // Ensure the config directory exists on the volume for future saves
+      try { fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true }); if (pathToUse === LEGACY_CONFIG_PATH) fs.copyFileSync(pathToUse, CONFIG_PATH); } catch (_) {}
       return {
         ...DEFAULT_CONFIG, ...saved,
         bankrolls: { ...(saved.bankrolls || {}) },
