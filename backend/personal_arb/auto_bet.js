@@ -318,9 +318,13 @@ function computeStakes(legs, caps, balances, maxTotal, balancePct) {
   for (let i = 0; i < legs.length; i++) T = Math.min(T, limits[i] / norm[i]);
   if (!(T > 0) || !Number.isFinite(T)) return { ok: false, reason: 'no capacity — could not read balances (or 0). Set a cap with "amount <book> <XAF>"' };
   if (T < 200) return { ok: false, reason: `computed total too small (${Math.round(T)} XAF) — increase balancepct or the cap` };
+  const MIN_STAKE = 200; // book minimums are commonly ≥100–200 XAF
   const step = 50;
-  const stakes = legs.map((l, i) => Math.max(step, Math.floor((norm[i] * T) / step) * step));
-  for (let i = 0; i < legs.length; i++) if (stakes[i] > limits[i]) return { ok: false, reason: `rounding exceeded the limit on ${legs[i].book}` };
+  const stakes = legs.map((l, i) => Math.max(MIN_STAKE, Math.floor((norm[i] * T) / step) * step));
+  for (let i = 0; i < legs.length; i++) {
+    if (stakes[i] > limits[i]) return { ok: false, reason: `rounding exceeded the limit on ${legs[i].book}` };
+    if (stakes[i] < MIN_STAKE) return { ok: false, reason: `stake on ${legs[i].book} (${stakes[i]}) is below the ${MIN_STAKE} XAF minimum` };
+  }
   return { ok: true, stakes, total: stakes.reduce((a, b) => a + b, 0) };
 }
 
@@ -365,5 +369,19 @@ export async function executeArb(c, { stakes = null, caps = {}, maxTotal = 0, ba
     if (cf.afterBalance || p.balance) await db?.collection('arb_balances').add({ book: p.book, ts: new Date().toISOString(), balance: cf.afterBalance || p.balance });
   }
   const allPlaced = confirms.every(cf => cf.ok);
+  // P&L record (arb position): locked profit is known at placement because both
+  // outcomes pay the same (worst-case payout from the candidate).
+  try {
+    const totalStake = Object.values(stakeMap).reduce((a, b) => a + b, 0);
+    const guaranteed = c.worst ? Math.round((totalStake * c.worst) / 100) : null;
+    await db?.collection('arb_positions').add({
+      ts: new Date().toISOString(), dryRun,
+      event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, pct: c.pct,
+      status: allPlaced ? 'placed' : (confirms.some(x => x.ok) ? 'partial' : 'failed'),
+      legs: supported.map(l => ({ book: l.book, bet: l.bet, odds: l.odds, stake: stakeMap[l.book] })),
+      totalStake, guaranteedPayout: guaranteed, lockedProfit: guaranteed != null ? guaranteed - totalStake : null,
+      balances,
+    });
+  } catch (e) { console.log(`[AutoBet] position record failed: ${e.message.slice(0, 90)}`); }
   return { ok: allPlaced, partial: confirms.some(cf => cf.ok) && !allPlaced, results: confirms, balances, stakes: stakeMap, preps: prepList.map(p => ({ book: p.book, accepted: p.accepted, balance: p.balance, foundOdds: p.foundOdds })) };
 }

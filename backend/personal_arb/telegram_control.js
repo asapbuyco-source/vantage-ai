@@ -162,6 +162,37 @@ async function ledgerLines() {
   }
 }
 
+async function pnlLines() {
+  const db = await initLedgerDb();
+  if (!db) return '📈 P&L: Firestore unavailable (FIREBASE_SERVICE_ACCOUNT not set).';
+  try {
+    const snap = await db.collection('arb_positions').orderBy('ts', 'desc').limit(50).get();
+    if (snap.empty) return '📈 P&L: no arb positions yet. They appear here after auto-bet acts.';
+    let staked = 0, locked = 0, placed = 0, partial = 0, failed = 0;
+    const rows = [];
+    snap.docs.forEach(d => {
+      const p = d.data() || {};
+      if (p.status === 'placed') { placed++; staked += p.totalStake || 0; locked += p.lockedProfit || 0; }
+      else if (p.status === 'partial') partial++;
+      else failed++;
+    });
+    const roi = staked > 0 ? (locked / staked) * 100 : 0;
+    const lines = [
+      '📈 AUTO-BET P&L (last 50 positions)',
+      `✅ placed: ${placed}   ⚠️ partial: ${partial}   ❌ failed: ${failed}`,
+      `💰 total staked: ${Math.round(staked).toLocaleString()} XAF`,
+      `🔒 locked profit: ${Math.round(locked).toLocaleString()} XAF (${roi.toFixed(2)}% on turnover)`,
+      '',
+    ];
+    snap.docs.slice(0, 6).forEach(d => {
+      const p = d.data() || {};
+      const icon = p.status === 'placed' ? '✅' : p.status === 'partial' ? '⚠️' : '❌';
+      lines.push(`${icon} ${String(p.event || '').slice(0, 24)} · ${p.kind || ''} · ${Math.round(p.totalStake || 0)} XAF → +${Math.round(p.lockedProfit || 0)}`);
+    });
+    return lines.join('\n');
+  } catch (e) { return `📈 P&L error: ${e.message.slice(0, 80)}`; }
+}
+
 let _ledgerDb = null;
 async function initLedgerDb() {
   if (_ledgerDb) return _ledgerDb;
@@ -225,6 +256,7 @@ const HELP = [
   '',
   '🧾  HISTORY',
   'ledger  last auto-bet attempts',
+  'pnl  profit & loss summary',
   'status  full status',
   'help  this menu',
 ].join('\n');
@@ -379,6 +411,9 @@ export function handleMessage(text) {
 
   if (lower === 'ledger' || lower === '/ledger') {
     return ledgerLines();
+  }
+  if (lower === 'pnl' || lower === '/pnl' || lower === 'profit') {
+    return pnlLines();
   }
   if (lower === 'balance' || lower === '/balance') {
     return '💳 Use the ledger — balances are attached to each bet record (arb_balances collection).';

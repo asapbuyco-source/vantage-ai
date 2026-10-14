@@ -267,45 +267,8 @@ async function fetchBetpawa() {
   return events;
 }
 
-async function fetchPmuc() {
-  // PMUC via raw fetch through the residential proxy (ARB_PROXY).
-  // Requires Origin + Referer headers (their CDN 403s otherwise) + proxy.
-  const events = [];
-  try {
-    const proxyUrl = new URL(ARB_PROXY);
-    const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
-    const r = await fetch('https://hg-event-api-prod.sporty-tech.net/api/events/sports/popular?take=50&entryPointId=101&betTypeId=10001&l=fr', { headers: {
-      'Proxy-Authorization': auth,
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-      'Origin': 'https://www.pmuc.cm',
-      'Referer': 'https://www.pmuc.cm/sports',
-      'Accept': 'application/json', 'Accept-Encoding': 'identity',
-    } });
-    if (!r.ok) { console.log(`[pmuc] HTTP ${r.status}`); return []; }
-    const j = await r.json();
-    for (const ev of Array.isArray(j) ? j : []) {
-      for (const bt of ev.eventBetTypes || []) {
-        if (bt.name === 'Résultat du match' || bt.name.includes('match')) {
-          const o1 = bt.eventBetTypeItems?.find(i => i.shortName === '1')?.odds,
-                ox = bt.eventBetTypeItems?.find(i => i.shortName === 'X')?.odds,
-                o2 = bt.eventBetTypeItems?.find(i => i.shortName === '2')?.odds;
-          if (o1) events.push({ book: 'pmuc', sport: 'football', home: ev.homeTeamName, away: ev.awayTeamName, h: o1, d: ox, a: o2,
-            // 'Résultat du match' = full-match 1X2 by contract (whole match)
-            period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'endpoint_contract: Résultat du match (full match)' });
-        }
-      }
-    }
-    console.log(`[pmuc] ${events.length} events via proxy`);
-  } catch (e) {
-    console.log(`[pmuc] fetch fail: ${e.message.slice(0, 90)}`);
-  }
-  return events;
-}
-
-async function fetchSportybet() {
-  // DISABLED: SportyBet WAF blocks scripted fetches to the odds API (SyntaxError anti-injection).
-  return [];
-}
+// ── REMOVED 2026-10-14: fetchPmuc / fetchSportybet ──
+// Focused book set is now betfrenzy + betpawa + 1xbet only (see collectCandidates).
 
 // 1xbet-family books share the same platform API (main-line-feed). betwinner.cm and
 // paripesa.cm are the same software family with their OWN brand odds — each brand is a
@@ -411,80 +374,8 @@ async function fetch1xFamily(book, host) {
 }
 
 const fetch1xbet = () => fetch1xFamily('1xbet', '1xbet.cm');
-const fetchBetwinner = () => fetch1xFamily('betwinner', 'betwinner.cm');
-const fetchParipesa = () => fetch1xFamily('paripesa', 'paripesa.cm');
 
-async function fetchPremierbet() {
-  // PremierBet via raw fetch through the residential proxy (ARB_PROXY) — no browser/session.
-  // The `upcoming` endpoint returns events with 1X2 (and more) markets inline.
-  const events = [];
-try {
-    const proxyUrl = new URL(ARB_PROXY);
-    const auth = 'Basic ' + Buffer.from(`${proxyUrl.username}:${proxyUrl.password}`).toString('base64');
-    const today = new Date().toISOString().slice(0, 10);
-    // Football (1), Basketball (2), Tennis (5) — 1X2 markets from each
-    const sportNames = { 1: 'football', 2: 'basketball', 5: 'tennis' };
-    for (const [sportId, sportName] of Object.entries(sportNames)) {
-      const url = `https://sports-api.premierbet.com/cm/v1/events/upcoming?country=CM&group=g1&platform=desktop&locale=fr&timeOffset=-60&sportId=${sportId}&pageId=6465c8bfec1ecc07f3a373e9&date=${today}`;
-      const r = await fetch(url, { headers: {
-        'Proxy-Authorization': auth,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-        'Accept': 'application/json', 'Accept-Encoding': 'identity',
-      } });
-      if (!r.ok) { console.log(`[premierbet ${sportName}] HTTP ${r.status}`); continue; }
-      const j = await r.json();
-      const before = events.length;
-      for (const cat of j.data?.categories || []) for (const comp of cat.competitions || []) for (const ev of comp.events || []) {
-        if (!ev.eventNames?.[0]) continue;
-        const home = ev.eventNames[0], away = ev.eventNames[1];
-        // Runtime label verifier (French): only accept market names that are unambiguously
-        // whole-match AND full-time. Any name containing half/team indicators is rejected.
-        const labelOk = (name) => {
-          if (!name) return false;
-          const period = normalizePeriod(name);
-          const scope = normalizeScope(name, { home, away });
-          // French full-match labels often omit "FT" ("Total de Buts") — accept only when the
-          // name carries NO half marker and NO team marker, i.e. period is FT or unknown-blank,
-          // scope is MATCH, and the label is not a team market.
-          if (period === 'FIRST_HALF' || period === 'SECOND_HALF') return false;
-          if (scope !== 'MATCH') return false;
-          return true;
-        };
-        const o12 = (ev.markets || []).find(m => m.name === '1X2');
-        const o = (mm) => { const x = {}; for (const oc of mm?.outcomes || []) x[oc.name] = parseFloat(oc.value); return x; };
-        const evObj = { book: 'premierbet', sport: sportName, home, away, league: `${sportName}:${comp.name}`, kickoff: ev.startTime,
-          // upcoming events endpoint = full-match whole-match markets, label-verified
-          period: 'FULL_MATCH', scope: 'MATCH', periodSource: 'runtime label verifier (no half/team markers)',
-          link: `https://www.premierbet.com/cm/event/${ev.id}` };
-        if (o12) { const O = o(o12); evObj.h = O['1']; evObj.d = O['X']; evObj.a = O['2']; }
-        // O/U from Total de Buts (football only — basketball/tennis totals differ)
-        if (sportName === 'football') {
-          const ouMkt = (ev.markets || []).find(m => m.name === 'Total de Buts' && labelOk(m.name));
-          if (ouMkt) {
-            const byHcp = {};
-            for (const oc of ouMkt.outcomes || []) {
-              if (!oc.handicap || !oc.value) continue;
-              byHcp[oc.handicap] = byHcp[oc.handicap] || {};
-              if (oc.name === 'Plus de') byHcp[oc.handicap].over = parseFloat(oc.value);
-              if (oc.name === 'Moins de') byHcp[oc.handicap].under = parseFloat(oc.value);
-            }
-            const lines = Object.entries(byHcp).filter(([h, v]) => v.over && v.under).map(([h, v]) => ({ hcp: h, over: v.over, under: v.under, scope: 'MATCH' }));
-            if (lines.length) evObj.ou = lines;
-          }
-        }
-        const dc = (ev.markets || []).find(m => m.name === 'Double Chance' && labelOk(m.name));
-        if (dc) { const D = o(dc); evObj.dc = { '1x': D['1X'], 'x2': D['X2'], '12': D['12'], scope: 'MATCH' }; }
-        const btts = (ev.markets || []).find(m => (m.name === 'Les Deux Equipes Marquent' || m.name === 'Les Deux Équipes Marquent') && labelOk(m.name));
-        if (btts) { const B = o(btts); evObj.btts = { yes: B['Oui'], no: B['Non'], scope: 'MATCH' }; }
-        if (evObj.h) events.push(evObj);
-      }
-      console.log(`[premierbet ${sportName}] +${events.length - before} events via proxy`);
-    }
-  } catch (e) {
-    console.log(`[premierbet] fetch fail: ${e.message.slice(0, 90)}`);
-  }
-  return events;
-}
+// ── REMOVED 2026-10-14: fetchPremierbet (book dropped from the focused set) ──
 
 async function sendTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
@@ -950,10 +841,16 @@ async function report(c) {
   };
 
   // Owner version: stakes scaled to the per-book anchors (Telegram "amount").
-  const ownerLegs = scaleStakes(c.legs);
-  const ownerText = build(ownerLegs, true);
+  // If NO anchor is configured, fall back to the share view + a note that the
+  // auto-bot sizes from live balances (balancepct) at execution time.
+  const hasAnchor = c.legs.some(l => botConfig.bankrolls[l.book]);
+  const ownerLegs = hasAnchor ? scaleStakes(c.legs) : c.legs;
+  let ownerText = build(ownerLegs, hasAnchor);
+  if (!hasAnchor) {
+    ownerText += `\n\nℹ️ No fixed amount set — autobet sizes each leg from your LIVE balance (${botConfig.balancePct || 10}% per account). Set "amount <book> <XAF>" for a hard cap.`;
+  }
   // Subscriber version: same alert, share ratios instead of personal XAF.
-  const subText = ownerLegs === c.legs ? ownerText : build(c.legs, false);
+  const subText = hasAnchor ? build(c.legs, false) : ownerText;
   console.log(ownerText);
   const waState = await notify(ownerText, subText);
   // WhatsApp is disabled unless WHATSAPP_ENABLED=1; the template fallback only
@@ -1014,14 +911,12 @@ async function collectCandidates() {
 }
 
 // Fetch only the involved books SIMULTANEOUSLY (aligned snapshot). Focused set:
-// betfrenzy + betpawa + 1xbet (+ the 1x-family brands only if explicitly requested).
+// betfrenzy + betpawa + 1xbet.
 async function collectBooksParallel(books) {
   const fns = [];
   if (books.has('betfrenzy')) fns.push(fetchBetfrenzy().catch(() => []));
   if (books.has('betpawa')) fns.push(fetchBetpawa().catch(() => []));
   if (books.has('1xbet')) fns.push(fetch1xbet().catch(() => []));
-  if (books.has('betwinner')) fns.push(fetchBetwinner().catch(() => []));
-  if (books.has('paripesa')) fns.push(fetchParipesa().catch(() => []));
   const results = await Promise.all(fns);
   return results.flat();
 }
@@ -1447,6 +1342,20 @@ function startHealthServer() {
   });
   server.listen(port, () => console.log(`[Health] status server on :${port}`));
 }
+
+// Heartbeat: alert the owner if scans stop completing (hung browser / stuck loop).
+let heartbeatWarned = false;
+setInterval(async () => {
+  if (!lastScanAt) return;
+  const ageMin = (Date.now() - new Date(lastScanAt).getTime()) / 60000;
+  if (ageMin > 12 && !heartbeatWarned) {
+    heartbeatWarned = true;
+    console.log(`[Heartbeat] stalled ${Math.round(ageMin)} min — alerting`);
+    try { await sendTelegram(`⚠️ Scanner heartbeat: no completed scan in ${Math.round(ageMin)} min. The service may be stuck — check Railway.`); } catch (_) {}
+  } else if (ageMin < 5 && heartbeatWarned) {
+    heartbeatWarned = false;
+  }
+}, 60000);
 
 // Modes
 startHealthServer();
