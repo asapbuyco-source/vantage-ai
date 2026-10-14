@@ -293,10 +293,11 @@ export function handleMessage(text) {
   if (m2) {
     const book = BOOK_ALIASES[m2[1]] || m2[1];
     if (!['betfrenzy', 'betpawa'].includes(book)) return 'login supports only betfrenzy and betpawa.';
-    if (!config.logins[book]) return `No credentials stored for ${book}. Use: setlogin ${book} <phone> <password>`;
+    const hasEnv = !!(process.env[`${book.toUpperCase()}_USER`] && process.env[`${book.toUpperCase()}_PASS`]);
+    if (!config.logins[book] && !hasEnv) return `No credentials stored for ${book}. Use: setlogin ${book} <phone> <password> (or set ${book.toUpperCase()}_USER/_PASS on Railway)`;
     config.loginPending = book;
     saveConfig();
-    return `🔐 Login for ${book} queued — the scanner will run it on the next cycle and report back.`;
+    return `🔐 Login for ${book} queued (${hasEnv ? 'Railway env credentials' : 'stored credentials'}) — the scanner will run it on the next cycle and report back.`;
   }
   m2 = lower.match(/^(?:\/)?clearlogin\s+(\S+)$/);
   if (m2) {

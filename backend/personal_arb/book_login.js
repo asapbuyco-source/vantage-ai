@@ -72,7 +72,12 @@ async function isLoggedIn(page, site) {
 export async function loginBook(book, { user, pass, sendPhoto } = {}) {
   const site = SITES[book];
   if (!site) return { ok: false, reason: `unsupported book ${book}` };
-  if (!user || !pass) return { ok: false, reason: `no credentials stored for ${book} — use "setlogin ${book} <phone> <password>" first` };
+  // Credentials: explicit args -> stored config (bot_config.json) -> Railway env vars
+  // (BETPAWA_USER/BETPAWA_PASS, BETFRENZY_USER/BETFRENZY_PASS).
+  const envKey = book.toUpperCase();
+  const finalUser = user || process.env[`${envKey}_USER`];
+  const finalPass = pass || process.env[`${envKey}_PASS`];
+  if (!finalUser || !finalPass) return { ok: false, reason: `no credentials for ${book} — set ${envKey}_USER/${envKey}_PASS on Railway or use "setlogin ${book} <phone> <password>"` };
   const out = { ok: false, book };
   let ctx;
   try {
@@ -108,10 +113,10 @@ export async function loginBook(book, { user, pass, sendPhoto } = {}) {
     if (sendPhoto) { try { await sendPhoto(await page.screenshot(), `🔐 ${book}: login page as I see it`); } catch (_) {} }
     if (!userInput) { out.reason = 'could not find the login form'; return out; }
 
-    await userInput.fill(String(user));
+    await userInput.fill(String(finalUser));
     const passInput = await findFirst(page, site.passSel);
     if (!passInput) { out.reason = 'login form found but no password field'; return out; }
-    await passInput.fill(String(pass));
+    await passInput.fill(String(finalPass));
 
     // Submit
     let clicked = false;
