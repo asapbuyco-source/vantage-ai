@@ -9,7 +9,7 @@
  * Telegram alert on arb if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID set
  */
 import { calcArb } from './arb_calc.js';
-import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, asianSplitDisplay } from './arb_engine.mjs';
+import { PERIOD, SCOPE, periodLabel, periodShort, normalizePeriod, normalizeScope, scopeLabel, pairEligible, ahWorstCase, worstPayoutFor2Way, ahSignedPair, ahLegLabel, isQuarterLine, isIntegerLine, asianSplitDisplay } from './arb_engine.mjs';
 import { config as botConfig, startTelegramControl, scaleStakes, totalStake, broadcastSignal, saveConfig } from './telegram_control.js';
 import { chromium } from 'playwright';
 import fs from 'fs';
@@ -805,6 +805,7 @@ async function report(c) {
     const scopeStr = c.scope && c.scope !== 'MATCH' ? `  |  Scope: ${scopeLabel(c.scope)}` : '';
     lines.push(`Market: ${c.kind}  |  Period: ${periodLabel(c.period || PERIOD.UNKNOWN)}${scopeStr}`);
     lines.push(`Guaranteed ROI: ${pct.toFixed(2)}%`);
+    if (c.pushProtected) lines.push('🛡️ NO-LOSE — if it lands exactly on the line both legs REFUND (break-even); otherwise you profit. Downside is zero.');
     lines.push(`Prices checked at ${new Date().toISOString().slice(11, 19)} UTC — verify on site NOW`);
     // Kickoff countdown — user decides if they have time to place both legs
     if (c.kickoff) {
@@ -940,12 +941,16 @@ function findCandidates(all) {
   const found = [];
   // pct is ALWAYS worst-case-based: pct = (worst/100 - 1) * 100. For binary markets
   // worst = 100/inv (exact); for quarter-line markets worst = 50 + 50/inv or the AH sim.
-  const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope) => {
+  const cand = (key, kind, teams, legs, inv, kickoff, period, worst, scope, opts = {}) => {
     // MIN_GUARANTEED_ROI floor: refuse anything below the live-tunable worst-case
     // floor (Telegram "minroi"). A sub-floor arb is not worth the latency risk.
     const worstRoi = worst / 100 - 1;
-    if (worstRoi < MIN_GUARANTEED_ROI()) return;
-    found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope });
+    // PUSH-PROTECTED / NO-LOSE: integer O/U lines and Draw-No-Bet refund on the exact
+    // outcome, so the downside is capped at break-even (0%). Still positive-EV when
+    // inv < 1 → accept below the normal floor and flag it (downside is zero).
+    const pushProtected = !!opts.pushProtected && inv < 1;
+    if (worstRoi < MIN_GUARANTEED_ROI() && !pushProtected) return;
+    found.push({ key, kind, teams, legs, pct: (1 - inv) * 100, kickoff, period, worst, scope, pushProtected });
   };
   const invDisplay = (worst) => 2 - worst / 100;
 
@@ -994,9 +999,9 @@ for (const [k, grp] of g) {
     const inv = 1/over.odds + 1/under.odds;
     note('OU', inv);
     if (diag && inv < 1.02) { const hcpd = grp.matches[0].hcp; const worstD = worstPayoutFor2Way(hcpd, inv); diagRows.push({ m: 'OU', teams: `${k.split('|')[0]} vs ${k.split('|')[1]}`, line: hcpd, scope: pair.scope, naive: (1 - inv) * 100, worst: (worstD / 100 - 1) * 100, overFloor: worstD / 100 - 1 > MIN_GUARANTEED_ROI, legs: `${over.book} ${over.odds} | ${under.book} ${under.odds}` }); }
-    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`OU|${k}`, `Over/Under ${hcp} Goals${asian}`, [k.split('|')[0], k.split('|')[1]],
+    if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; const intSuffix = isIntegerLine(hcp) ? ' 🛡️no-lose' : ''; cand(`OU|${k}`, `Over/Under ${hcp} Goals${asian}${intSuffix}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} goals${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
+       { book: under.book, bet: `Under ${hcp} goals${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope, { pushProtected: isIntegerLine(hcp) }); }
   }
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
@@ -1014,7 +1019,7 @@ for (const [k, grp] of g) {
     note('CR', inv);
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; cand(`CR|${k}`, `Corners Over/Under ${hcp}${asian}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} corners${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
-       { book: under.book, bet: `Under ${hcp} corners${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
+       { book: under.book, bet: `Under ${hcp} corners${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope, { pushProtected: isIntegerLine(hcp) }); }
   }
 
 // ── Double Chance grouping (3-way: 1X/X2/12) ──
@@ -1119,9 +1124,9 @@ for (const [k, grp] of g) {
     if (!pair.ok) { rejectLog(`DNB|${k}`, bHome, bAway, pair.reason, pair.detail); continue; }
     const inv = 1/bHome.odds + 1/bAway.odds;
     note('DNB', inv);
-    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const worst = 100 / inv; cand(`DNB|${k}`, 'Draw No Bet', [k.split('|')[0], k.split('|')[1]],
+    if (inv < 1) { const r = calcArb([{ book: bHome.book, odds: bHome.odds }, { book: bAway.book, odds: bAway.odds }]); const worst = 100; cand(`DNB|${k}`, 'Draw No Bet 🛡️no-lose', [k.split('|')[0], k.split('|')[1]],
       [{ book: bHome.book, bet: k.split('|')[0] + ' to win (draw refunds)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
-       { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope); }
+       { book: bAway.book, bet: k.split('|')[1] + ' to win (draw refunds)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope, { pushProtected: true }); }
   }
   // ── MW grouping (2-way "Match Winner" for non-football sports) ──
   // Tennis / basketball / volleyball etc. have NO draw and no handicap: the 2-way

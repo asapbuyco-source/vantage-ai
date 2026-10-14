@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {
   PERIOD, periodLabel, periodShort, normalizePeriod,
   pairEligible, splitAsianLine, settleAsianHandicap, ahWorstCase,
-  isQuarterLine, worstPayoutFor2Way, asianSplitDisplay,
+  isQuarterLine, isIntegerLine, worstPayoutFor2Way, asianSplitDisplay,
   SCOPE, scopeLabel, normalizeScope,
   ahSignedPair, ahLegLabel,
 } from '../arb_engine.mjs';
@@ -311,11 +311,11 @@ test('isQuarterLine detection', () => {
   assert.equal(isQuarterLine('10.25'), true);
 });
 
-test('worstPayoutFor2Way: binary/half lines => exact 100/inv', () => {
+test('worstPayoutFor2Way: half lines => exact 100/inv; integer lines => push break-even', () => {
   const inv = 1 / 2.0 + 1 / 2.1; // 0.9762
-  assert.equal(worstPayoutFor2Way('2.5', inv), 100 / inv);
-  assert.equal(worstPayoutFor2Way('1', inv), 100 / inv);
-  assert.equal(worstPayoutFor2Way('0', inv), 100 / inv);
+  assert.equal(worstPayoutFor2Way('2.5', inv), 100 / inv); // half line: fully settled
+  assert.equal(worstPayoutFor2Way('3', inv), 100);         // integer line: PUSH => refund => break-even
+  assert.equal(worstPayoutFor2Way('2', inv), 100);
 });
 
 test('worstPayoutFor2Way: quarter lines => honest 50 + 50/inv (below naive)', () => {

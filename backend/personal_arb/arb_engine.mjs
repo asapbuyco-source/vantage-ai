@@ -212,6 +212,15 @@ export function isQuarterLine(line) {
 }
 
 /**
+ * isIntegerLine — a WHOLE-number line (3, 4, 2 …). These have a PUSH: if the total
+ * lands exactly on the line, the stake is refunded (void). Half lines (3.5) never push.
+ */
+export function isIntegerLine(line) {
+  const v = Math.abs(parseFloat(line));
+  return Number.isFinite(v) && v > 0 && v % 1 === 0;
+}
+
+/**
  * asianSplitDisplay — how a quarter (asian) line appears on bookmaker pages:
  * 2.75 -> "2.5,3.0", 2.25 -> "2.0,2.5", 1.75 -> "1.5,2.0".
  * Helps the user find the right row (books display the split, not "2.75").
@@ -266,6 +275,7 @@ export function ahLegLabel(home, away, hcp, dir, side) {
  * Returns the worst-case payout for a 100 XAF total stake.
  */
 export function worstPayoutFor2Way(line, inv) {
-  if (!isQuarterLine(line)) return 100 / inv;
-  return 50 + 50 / inv;
+  if (isQuarterLine(line)) return 50 + 50 / inv;   // split-stake boundary outcome
+  if (isIntegerLine(line)) return 100;              // PUSH on the exact line => refund => break-even worst case
+  return 100 / inv;                                 // half line: fully settled either way
 }
