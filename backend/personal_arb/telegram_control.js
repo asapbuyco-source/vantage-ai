@@ -45,6 +45,7 @@ const DEFAULT_CONFIG = {
   loginPending: null,  // book name — scanner performs a credential login on next cycle
   checkPending: false, // scanner checks logged-in state + balance for betfrenzy+betpawa
   diagPending: null,   // book name — scanner dumps the login page (fields+buttons+screenshot)
+  lastBalances: {},    // book -> last live balance (cached by the scanner for display)
 };
 
 export function loadConfig() {
@@ -116,11 +117,9 @@ function removeKeyboard() {
 function bookKeyboard() {
   return {
     inline_keyboard: [
-      [btn('💰 Current amounts', 'amounts')],
-      [btn('All books', 'amount:all')],
+      [btn('💰 Amounts / balances', 'amounts')],
       [btn('BetFrenzy', 'amount:betfrenzy'), btn('BetPawa', 'amount:betpawa')],
-      [btn('PMUC', 'amount:pmuc'), btn('PremierBet', 'amount:premierbet')],
-      [btn('1xBet', 'amount:1xbet'), btn('BetWinner', 'amount:betwinner'), btn('PariPesa', 'amount:paripesa')],
+      [btn('1xBet (signal stake)', 'amount:1xbet')],
       [btn('↩️ Menu', 'menu')],
     ],
   };
@@ -136,11 +135,21 @@ const MENU_TEXT = [
   '"amount betpawa 30000" | "minroi 2" | "amounts" | "list"',
 ].join('\n');
 
+// Books still in use. betfrenzy+betpawa = signals + auto-bet (sized from LIVE balance).
+// 1xbet = signals only; its "amount" is the custom stake shown on 1xbet legs.
+export const ACTIVE_BOOKS = ['betfrenzy', 'betpawa', '1xbet'];
+
 function amountsLines() {
-  const lines = ['💰 Current stake anchors (per leg, per book):'];
-  for (const b of KNOWN_BOOKS.sort()) {
-    lines.push(`  ${b}: ${(config.bankrolls[b] ?? DEFAULT_BANKROLL).toLocaleString()} XAF`);
-  }
+  const pct = config.balancePct || 10;
+  const bal = config.lastBalances || {};
+  const fmt = (n) => (n != null ? Math.round(n).toLocaleString() + ' XAF' : 'reading…');
+  const lines = ['💰 Stake sizing'];
+  lines.push(`  BetFrenzy: ${fmt(bal.betfrenzy)}  (live balance · autobet uses ${pct}%)`);
+  lines.push(`  BetPawa:   ${fmt(bal.betpawa)}  (live balance · autobet uses ${pct}%)`);
+  lines.push(`  1xBet:     ${(config.bankrolls['1xbet'] ?? 0).toLocaleString()} XAF  (signal stake only)`);
+  lines.push('');
+  lines.push(`Now: minROI ${(config.min_roi * 100).toFixed(1)}% · autobet ${config.autobet} · limit ${config.autoDailyLimit}/day`);
+  lines.push('Balances refresh when the scanner runs (autobet check / test / live).');
   return lines.join('\n');
 }
 
@@ -312,13 +321,15 @@ export function handleMessage(text) {
     const amount = parseAmount(m2[2]);
     if (!book || !amount) return 'Usage: amount <book|all> <XAF> — e.g. "amount betpawa 30000"';
     if (book === 'all') {
-      for (const b of KNOWN_BOOKS) config.bankrolls[b] = amount;
+      for (const b of ACTIVE_BOOKS) config.bankrolls[b] = amount;
       saveConfig();
       return `✅ All books stake anchor = ${amount.toLocaleString()} XAF`;
     }
     config.bankrolls[book] = amount;
     saveConfig();
-    return `✅ ${book} stake anchor = ${amount.toLocaleString()} XAF — next ${book} alerts use it`;
+    return book === '1xbet'
+      ? `✅ 1xBet signal stake = ${amount.toLocaleString()} XAF`
+      : `✅ ${book} cap = ${amount.toLocaleString()} XAF (optional; autobet otherwise sizes from live balance)`;
   }
 
   m2 = lower.match(/^(?:\/)?(?:set\s+)?minroi\s+([\d.,]+)$/);
@@ -547,7 +558,7 @@ export function handlePendingInput(msg) {
     if (!amount) return { text: 'Invalid amount — send a number (e.g. 30000):', keyboard: backKeyboard() };
     const book = pendingInput.book;
     if (book === 'all') {
-      for (const b of KNOWN_BOOKS) config.bankrolls[b] = amount;
+      for (const b of ACTIVE_BOOKS) config.bankrolls[b] = amount;
       saveConfig();
       pendingInput.type = null;
       return { text: `✅ All books stake anchor = ${amount.toLocaleString()} XAF`, keyboard: MENU_KEYBOARD };

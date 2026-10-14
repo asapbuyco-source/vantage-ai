@@ -1195,6 +1195,11 @@ async function scan() {
       saveConfig();
       const results = [];
       for (const b of ['betfrenzy', 'betpawa']) results.push(await checkBook(b));
+      // Cache parsed balances for the Telegram display (amounts / status).
+      for (const r of results) {
+        if (r && r.balance) { const m = String(r.balance).replace(/\s/g, '').match(/(\d[\d.,]*)/); if (m) botConfig.lastBalances[r.book] = parseFloat(m[1].replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.')); }
+      }
+      saveConfig();
       await sendTelegram(['🔍 SESSION CHECK', ...results.map(r => `▪ ${r.book}: ${r.ok ? (r.loggedIn ? `✅ logged in${r.balance ? ` | balance ${r.balance}` : ''}` : '❌ NOT logged in — send "login ' + r.book + '" (after setlogin)') : `⚠️ ${r.reason || 'error'}`}`)].join('\n'));
       console.log(`[Login] check: ${results.map(r => `${r.book}:${r.loggedIn ? 'in' : 'OUT'}`).join(' ')}`);
     }
@@ -1290,6 +1295,8 @@ async function scan() {
 // sizes each stake from the ARB RATIO (bounded by per-book caps + max total),
 // prepares both slips, and only confirms when BOTH are ready (no naked bet).
         const exec = await executeArb(best, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, balancePct: botConfig.balancePct || 10, dryRun: false });
+        // Cache the live balances for the Telegram display.
+        if (exec.balances && Object.keys(exec.balances).length) { Object.assign(botConfig.lastBalances, exec.balances); saveConfig(); }
         for (const r of exec.results) {
           if (r.skipped) continue;
           const stake = exec.stakes?.[r.book] || 100;
