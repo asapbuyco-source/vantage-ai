@@ -1,13 +1,16 @@
 /**
  * book_login.js — credential login for betpawa + betfrenzy (NO OTP on these books).
  *
- * Flow: open the book with the persisted browser profile → find the login form
- * (generic, multi-fallback selectors) → fill phone/username + password → submit →
- * verify we're logged in (balance visible / login form gone) → the cookie session
- * is saved in the profile automatically (persistent context).
+ * Selectors were captured from the LIVE login pages (2026-10-14):
+ *   betfrenzy: https://betfrenzy.cm/login  → input[name=phone] + input[name=password]
+ *              + button[type=submit] "Sign in"   (country code +237 is a static button,
+ *              the phone field takes the NATIONAL number only, e.g. 6XXXXXXXX)
+ *   betpawa:   https://www.betpawa.cm/login → input[name=username] (#phoneNumber)
+ *              + input[name=password] + button[type=submit] "Log In"
  *
- * Credentials live in bot_config.json (Railway volume, gitignored, owner-only bot).
- * Nothing is ever echoed back to chat; reports show status + balance only.
+ * Credentials: explicit args -> bot_config.json -> Railway env (BETPAWA_USER/PASS,
+ * BETFRENZY_USER/PASS). The session cookie lands in the persisted browser profile,
+ * so the scanner/auto-bettor stay authenticated.
  */
 import { chromium } from 'playwright';
 import fs from 'fs';
@@ -20,7 +23,6 @@ const PROFILE_ROOT = process.env.ARB_PROFILE_ROOT
 const ARB_PROXY = process.env.ARB_PROXY || '';
 
 async function launchBook(profileName) {
-  // Mobile viewport — the same layout the scanner's locators/screenshots use.
   const launchOpts = { headless: true, viewport: { width: 390, height: 844, isMobile: true } };
   if (ARB_PROXY && process.env.SCREENSHOT_PROXY === '1') {
     const u = new URL(ARB_PROXY);
@@ -34,110 +36,94 @@ async function launchBook(profileName) {
 const SITES = {
   betfrenzy: {
     home: 'https://betfrenzy.cm/',
-    loginPaths: ['', 'auth/login', 'login', 'connexion'],
-    loginWords: /connexion|se connecter|login|sign in/i,
-    userSel: ['input[type="tel"]', 'input[type="email"]', 'input[type="text"]', 'input[name*="phone" i]', 'input[name*="user" i]', 'input[placeholder*="téléphone" i]', 'input[placeholder*="phone" i]'],
-    passSel: ['input[type="password"]'],
-    submitWords: /connexion|se connecter|login|sign in|valider|submit/i,
+    loginUrl: 'https://betfrenzy.cm/login',
+    userSel: 'input[name="phone"]',
+    passSel: 'input[name="password"]',
+    submitSel: 'button[type="submit"]',
+    loginWords: /^(log ?in|connexion|se connecter|sign in)$/i,
   },
   betpawa: {
     home: 'https://www.betpawa.cm/',
-    loginPaths: ['', 'en/login', 'login'],
-    loginWords: /log ?in|sign in|connexion/i,
-    userSel: ['input[type="tel"]', 'input[type="email"]', 'input[type="text"]', 'input[name*="phone" i]', 'input[name*="user" i]', 'input[name*="msisdn" i]', 'input[placeholder*="phone" i]'],
-    passSel: ['input[type="password"]'],
-    submitWords: /log ?in|sign in|connexion|continue|suivant|submit/i,
+    loginUrl: 'https://www.betpawa.cm/login',
+    userSel: 'input[name="username"], #phoneNumber',
+    passSel: 'input[name="password"]',
+    submitSel: 'button[type="submit"]:has-text("Log In"), button:has-text("Log In")',
+    loginWords: /^(log ?in|connexion|se connecter|sign in)$/i,
   },
 };
 
-async function findFirst(page, selectors, { visible = true } = {}) {
-  for (const sel of selectors) {
-    const loc = page.locator(sel).first();
-    try { if (await loc.isVisible({ timeout: 800 })) return loc; } catch (_) { if (!visible) return loc; }
+async function readBalance(page) {
+  for (const sel of ['[class*="balance" i]', '[class*="wallet" i]', '[class*="solde" i]', '[class*="amount" i]']) {
+    try { const t = ((await page.locator(sel).first().textContent({ timeout: 1200 })) || '').trim(); if (t && t.length < 40 && /\d/.test(t)) return t; } catch (_) {}
   }
   return null;
 }
 
 async function isLoggedIn(page, site) {
-  // Logged in = a balance-ish element is visible OR no password field & no login link
-  const balSelectors = ['[class*="balance" i]', '[class*="wallet" i]', '[class*="solde" i]'];
-  const bal = await findFirst(page, balSelectors);
-  if (bal) { const t = (await bal.textContent().catch(() => '')) || ''; if (/\d/.test(t) && /XAF|FCFA/i.test(t)) return { loggedIn: true, balance: t.trim() }; }
+  const bal = await readBalance(page);
+  if (bal && /XAF|FCFA|\d[\d\s.,]{2,}/i.test(bal)) return { loggedIn: true, balance: bal };
   const pwd = await page.locator('input[type="password"]').count().catch(() => 0);
-  const loginLink = await page.getByText(site.loginWords).count().catch(() => 0);
-  if (pwd === 0 && loginLink === 0) return { loggedIn: true, balance: null };
-  return { loggedIn: false, balance: null };
+  let loginLinks = 0;
+  try { loginLinks = await page.getByText(site.loginWords).count(); } catch (_) {}
+  if (pwd === 0 && loginLinks === 0) return { loggedIn: true, balance: bal };
+  return { loggedIn: false, balance: bal };
 }
 
-export async function loginBook(book, { user, pass, sendPhoto } = {}) {
+export async function loginBook(book, { user, pass } = {}) {
   const site = SITES[book];
   if (!site) return { ok: false, reason: `unsupported book ${book}` };
-  // Credentials: explicit args -> stored config (bot_config.json) -> Railway env vars
-  // (BETPAWA_USER/BETPAWA_PASS, BETFRENZY_USER/BETFRENZY_PASS).
   const envKey = book.toUpperCase();
-  const finalUser = user || process.env[`${envKey}_USER`];
-  const finalPass = pass || process.env[`${envKey}_PASS`];
-  if (!finalUser || !finalPass) return { ok: false, reason: `no credentials for ${book} — set ${envKey}_USER/${envKey}_PASS on Railway or use "setlogin ${book} <phone> <password>"` };
+  const finalUser = String(user || process.env[`${envKey}_USER`] || '').trim();
+  const finalPass = String(pass || process.env[`${envKey}_PASS`] || '').trim();
+  if (!finalUser || !finalPass) return { ok: false, reason: `no credentials — set ${envKey}_USER/${envKey}_PASS on Railway or "setlogin ${book} <phone> <password>"` };
   const out = { ok: false, book };
   let ctx;
   try {
     ctx = await launchBook(book);
     const page = await ctx.newPage();
     await page.goto(site.home, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(3500);
 
-    // Already logged in? Then nothing to do.
     let state = await isLoggedIn(page, site);
     if (state.loggedIn) { out.ok = true; out.reason = 'already logged in'; out.balance = state.balance; return out; }
 
-    // Find the login form — open the login page if not on it.
-    let userInput = await findFirst(page, site.userSel);
-    if (!userInput) {
-      for (const lp of site.loginPaths.filter(Boolean)) {
+    // Go straight to the known login URL.
+    await page.goto(site.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(3500);
+
+    const userInput = page.locator(site.userSel).first();
+    try { await userInput.waitFor({ state: 'visible', timeout: 8000 }); } catch (_) { out.reason = `login form not found (selector ${site.userSel}) — page may have changed`; return out; }
+    await userInput.click().catch(() => {});
+    await userInput.fill(finalUser);
+    const passInput = page.locator(site.passSel).first();
+    await passInput.fill(finalPass);
+    await page.waitForTimeout(400);
+
+    let submitted = false;
+    try {
+      const btns = page.locator(site.submitSel);
+      const n = await btns.count();
+      for (let i = 0; i < n; i++) {
+        const btn = btns.nth(i);
         try {
-          await page.goto(`${site.home}${lp}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await page.waitForTimeout(2500);
-          userInput = await findFirst(page, site.userSel);
-          if (userInput) break;
+          if (await btn.isVisible({ timeout: 1500 })) { await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ timeout: 6000 }); submitted = true; break; }
         } catch (_) {}
       }
-    }
-    if (!userInput) {
-      // try clicking a login link/button
-      try {
-        const link = page.getByText(site.loginWords).first();
-        if (await link.isVisible({ timeout: 1200 })) { await link.click().catch(() => {}); await page.waitForTimeout(2500); }
-      } catch (_) {}
-      userInput = await findFirst(page, site.userSel);
-    }
-    if (sendPhoto) { try { await sendPhoto(await page.screenshot(), `🔐 ${book}: login page as I see it`); } catch (_) {} }
-    if (!userInput) { out.reason = 'could not find the login form'; return out; }
+    } catch (_) {}
+    if (!submitted) { try { await passInput.press('Enter'); submitted = true; } catch (_) {} }
+    if (!submitted) { out.reason = 'could not submit the login form (no visible submit button)'; return out; }
 
-    await userInput.fill(String(finalUser));
-    const passInput = await findFirst(page, site.passSel);
-    if (!passInput) { out.reason = 'login form found but no password field'; return out; }
-    await passInput.fill(String(finalPass));
-
-    // Submit
-    let clicked = false;
-    for (const w of [/connexion/i, /se connecter/i, /log ?in/i, /sign in/i, /valider/i, /submit/i]) {
-      try {
-        const b = page.getByRole('button', { name: w }).first();
-        if (await b.isVisible({ timeout: 600 })) { await b.click(); clicked = true; break; }
-      } catch (_) {}
-    }
-    if (!clicked) {
-      try { await passInput.press('Enter'); clicked = true; } catch (_) {}
-    }
-    await page.waitForTimeout(6000);
-
+    await page.waitForTimeout(7000);
+    // Some SPAs show a transient "welcome" then redirect; give it one more beat.
     state = await isLoggedIn(page, site);
+    if (!state.loggedIn) {
+      await page.waitForTimeout(4000);
+      state = await isLoggedIn(page, site);
+    }
     out.ok = state.loggedIn;
     out.balance = state.balance;
-    if (!state.loggedIn) {
-      out.reason = 'submitted but still not logged in (wrong credentials, or a validation step appeared)';
-      if (sendPhoto) { try { await sendPhoto(await page.screenshot(), `⚠️ ${book}: still not logged in after submit`); } catch (_) {} }
-    }
+    out.url = page.url();
+    if (!state.loggedIn) out.reason = 'submitted but not logged in — wrong password, or a verification/step appeared';
     return out;
   } catch (e) {
     out.reason = e.message.slice(0, 160);
@@ -147,7 +133,6 @@ export async function loginBook(book, { user, pass, sendPhoto } = {}) {
   }
 }
 
-// Light check: logged-in state + balance, no form interaction.
 export async function checkBook(book) {
   const site = SITES[book];
   if (!site) return { ok: false, reason: `unsupported ${book}` };
@@ -156,7 +141,7 @@ export async function checkBook(book) {
     ctx = await launchBook(book);
     const page = await ctx.newPage();
     await page.goto(site.home, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(3500);
     const state = await isLoggedIn(page, site);
     return { ok: true, loggedIn: state.loggedIn, balance: state.balance, book };
   } catch (e) {
@@ -167,8 +152,6 @@ export async function checkBook(book) {
 }
 
 // ── DIAGNOSTIC: open the site and dump what the browser actually sees ─────────
-// Returns a structured description of every interactive element + a screenshot,
-// so login selectors can be fixed from real page data instead of guesswork.
 export async function diagnoseLogin(book) {
   const site = SITES[book];
   if (!site) return { ok: false, reason: `unsupported ${book}` };
@@ -176,13 +159,13 @@ export async function diagnoseLogin(book) {
   try {
     ctx = await launchBook(book);
     const page = await ctx.newPage();
-    await page.goto(site.home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.goto(site.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(4000);
     const dump = await page.evaluate(() => {
       const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
-      const inputs = Array.from(document.querySelectorAll('input, select, textarea')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '', name: el.name || '', id: el.id || '', placeholder: el.placeholder || '', ariaLabel: el.getAttribute('aria-label') || '' }));
-      const clickables = Array.from(document.querySelectorAll('button, a, [role="button"], [role="tab"], [class*="login" i], [class*="connex" i], [class*="account" i], [class*="user" i]')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), text: (el.textContent || '').trim().slice(0, 40), ariaLabel: el.getAttribute('aria-label') || '', href: el.getAttribute('href') || '' })).filter(x => x.text || x.ariaLabel).slice(0, 40);
-      return { url: location.href, title: document.title, inputs, clickables, hasPassword: !!document.querySelector('input[type=password]') };
+      const inputs = Array.from(document.querySelectorAll('input, select, textarea')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '', name: el.name || '', id: el.id || '', placeholder: el.placeholder || '' }));
+      const clickables = Array.from(document.querySelectorAll('button, a, [role="button"]')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), type: el.getAttribute('type') || '', text: (el.textContent || '').trim().slice(0, 30) })).filter(x => x.text).slice(0, 25);
+      return { url: location.href, title: document.title, hasPassword: !!document.querySelector('input[type=password]'), inputs, clickables };
     });
     const png = await page.screenshot({ fullPage: false });
     return { ok: true, book, dump, screenshot: png.toString('base64') };
