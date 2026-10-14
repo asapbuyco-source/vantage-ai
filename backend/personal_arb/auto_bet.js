@@ -280,32 +280,44 @@ async function confirmLeg(p, { dryRun }) {
 }
 
 // Quick balance read for one book (loads the home page with the saved session).
+// Tries labelled elements first, then falls back to a currency pattern in the page text
+// (betfrenzy shows "... XAF", betpawa shows "FCFA ...").
 export async function readBookBalance(book) {
   let ctx;
   try {
     ctx = await launchBook(book);
     const page = await ctx.newPage();
     await page.goto(`https://www.${book === 'betfrenzy' ? 'betfrenzy.cm' : 'betpawa.cm'}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(3500);
-    return parseMoney(await readBalanceText(page));
+    await page.waitForTimeout(4000);
+    let bal = parseMoney(await readBalanceText(page));
+    if (bal == null) {
+      const raw = await page.evaluate(() => document.body.innerText).catch(() => '');
+      const body = String(raw).replace(/[|]/g, ' ');
+      const m = body.match(/(?:XAF|FCFA)\s*([\d][\d\s.,]*)|([\d][\d\s.,]{2,})\s*(?:XAF|FCFA)/i);
+      if (m) bal = parseMoney(m[1] || m[2]);
+    }
+    return bal;
   } catch (_) { return null; } finally { if (ctx) await ctx.close().catch(() => {}); }
 }
 
-// Compute the exact arb-ratio stakes, bounded by per-book caps, live balances
-// and an optional global max total. Returns stakes that guarantee equal payout.
-function computeStakes(legs, caps, balances, maxTotal) {
+// Compute the exact arb-ratio stakes, bounded by LIVE balances (a % of each account),
+// optional per-book hard caps, and an optional global max total.
+function computeStakes(legs, caps, balances, maxTotal, balancePct) {
+  const pct = (balancePct > 0 ? balancePct : 10) / 100;
   const shares = legs.map(l => (parseFloat(l.stake) || 0) / 100);
   const sum = shares.reduce((a, b) => a + b, 0);
   if (!(sum > 0)) return { ok: false, reason: 'candidate has no stake ratios' };
   const norm = shares.map(s => s / sum);
   const limits = legs.map(l => {
-    const cap = caps[l.book] > 0 ? caps[l.book] : Infinity;
     const bal = (balances[l.book] != null) ? balances[l.book] : Infinity;
-    return Math.min(cap, bal);
+    const byBalance = bal * pct;                        // primary driver: live balance
+    const cap = caps[l.book] > 0 ? caps[l.book] : Infinity; // optional hard cap (amount <book>)
+    return Math.min(byBalance, cap);
   });
   let T = maxTotal > 0 ? maxTotal : Infinity;
   for (let i = 0; i < legs.length; i++) T = Math.min(T, limits[i] / norm[i]);
-  if (!(T > 0) || !Number.isFinite(T)) return { ok: false, reason: 'no capacity — set "amount <book> <XAF>" or check balances' };
+  if (!(T > 0) || !Number.isFinite(T)) return { ok: false, reason: 'no capacity — could not read balances (or 0). Set a cap with "amount <book> <XAF>"' };
+  if (T < 200) return { ok: false, reason: `computed total too small (${Math.round(T)} XAF) — increase balancepct or the cap` };
   const step = 50;
   const stakes = legs.map((l, i) => Math.max(step, Math.floor((norm[i] * T) / step) * step));
   for (let i = 0; i < legs.length; i++) if (stakes[i] > limits[i]) return { ok: false, reason: `rounding exceeded the limit on ${legs[i].book}` };
@@ -313,8 +325,8 @@ function computeStakes(legs, caps, balances, maxTotal) {
 }
 
 // stakes = explicit override map (optional). Otherwise computed from the arb ratio,
-// bounded by { caps, maxTotal } and the LIVE balances of both accounts.
-export async function executeArb(c, { stakes = null, caps = {}, maxTotal = 0, dryRun = false } = {}) {
+// bounded by the LIVE balances of both accounts × balancePct (default 10%).
+export async function executeArb(c, { stakes = null, caps = {}, maxTotal = 0, balancePct = 10, dryRun = false } = {}) {
   const db = await initFirebase();
   const supported = c.legs.filter(l => ['betfrenzy', 'betpawa'].includes(l.book));
   if (supported.length < 2) {
@@ -323,9 +335,8 @@ export async function executeArb(c, { stakes = null, caps = {}, maxTotal = 0, dr
   let stakeMap = stakes;
   let balances = {};
   if (!stakeMap) {
-    // Read live balances for both books, then size from the arb ratio.
     for (const l of supported) { balances[l.book] = await readBookBalance(l.book); }
-    const comp = computeStakes(supported, caps, balances, maxTotal);
+    const comp = computeStakes(supported, caps, balances, maxTotal, balancePct);
     if (!comp.ok) {
       for (const l of supported) await db?.collection('arb_bets').add({ ts: new Date().toISOString(), status: 'aborted', book: l.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, why: comp.reason });
       return { ok: false, reason: `SIZING FAILED — ${comp.reason} — nothing placed`, results: supported.map(l => ({ book: l.book, ok: false, why: comp.reason })), balances };

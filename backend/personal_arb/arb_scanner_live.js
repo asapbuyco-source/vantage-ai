@@ -996,38 +996,32 @@ async function collectCandidates() {
   console.log(`[Arb] Fetch ${new Date().toISOString()}`);
   // Fetch all books IN PARALLEL so the discovery pass is one aligned snapshot (the old
   // sequential loop mixed odds that never coexisted; the aligned pass-3 still confirms).
-  const [bf, bp, pm, pb, xb, bw, pp, sb] = await Promise.all([
+  // FOCUSED BOOKS (2026-10-14): betfrenzy + betpawa + 1xbet only.
+  // pmuc/premierbet/betwinner/paripesa/sportybet removed — their coverage was thin and
+  // they diluted compute. 1xbet = signals only; betfrenzy/betpawa = signals + auto-bet.
+  const [bf, bp, xb] = await Promise.all([
     fetchBetfrenzy().catch(() => []),
     fetchBetpawa().catch(() => []),
-    fetchPmuc().catch(() => []),
-    fetchPremierbet().catch(() => []),
     fetch1xbet().catch(() => []),
-    fetchBetwinner().catch(() => []),
-    fetchParipesa().catch(() => []),
-    fetchSportybet().catch(() => []),
   ]);
-  Object.assign(lastCounts, { betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
+  Object.assign(lastCounts, { betfrenzy: bf.length, betpawa: bp.length, '1xbet': xb.length });
   lastScanAt = new Date().toISOString();
-  lastScanOk = (bf.length + bp.length + pm.length + pb.length + xb.length + bw.length + pp.length) > 0;
-console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, pmuc ${pm.length}, premierbet ${pb.length}, 1xbet ${xb.length}, betwinner ${bw.length}, paripesa ${pp.length}, sportybet ${sb.length}`);
-  await alertBookFailure({ betfrenzy: bf.length, betpawa: bp.length, pmuc: pm.length, premierbet: pb.length, '1xbet': xb.length, betwinner: bw.length, paripesa: pp.length });
-  // Keep all events — kickoff is tagged per candidate so alerts show a countdown
-  // (user decides; near-kickoff arbs are valid if placed fast)
-  const all = [...bf, ...bp, ...pm, ...pb, ...xb, ...bw, ...pp, ...sb];
+  lastScanOk = (bf.length + bp.length + xb.length) > 0;
+  console.log(`[Arb] betfrenzy ${bf.length}, betpawa ${bp.length}, 1xbet ${xb.length}`);
+  await alertBookFailure({ betfrenzy: bf.length, betpawa: bp.length, '1xbet': xb.length });
+  const all = [...bf, ...bp, ...xb];
   return findCandidates(all);
 }
 
-// Fetch only the involved books SIMULTANEOUSLY (aligned snapshot)
+// Fetch only the involved books SIMULTANEOUSLY (aligned snapshot). Focused set:
+// betfrenzy + betpawa + 1xbet (+ the 1x-family brands only if explicitly requested).
 async function collectBooksParallel(books) {
   const fns = [];
   if (books.has('betfrenzy')) fns.push(fetchBetfrenzy().catch(() => []));
   if (books.has('betpawa')) fns.push(fetchBetpawa().catch(() => []));
-  if (books.has('pmuc')) fns.push(fetchPmuc().catch(() => []));
-  if (books.has('premierbet')) fns.push(fetchPremierbet().catch(() => []));
   if (books.has('1xbet')) fns.push(fetch1xbet().catch(() => []));
   if (books.has('betwinner')) fns.push(fetchBetwinner().catch(() => []));
   if (books.has('paripesa')) fns.push(fetchParipesa().catch(() => []));
-  if (books.has('sportybet')) fns.push(fetchSportybet().catch(() => []));
   const results = await Promise.all(fns);
   return results.flat();
 }
@@ -1393,7 +1387,7 @@ async function scan() {
         // Both legs must be on betfrenzy/betpawa; executeArb reads live balances and
 // sizes each stake from the ARB RATIO (bounded by per-book caps + max total),
 // prepares both slips, and only confirms when BOTH are ready (no naked bet).
-        const exec = await executeArb(best, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, dryRun: false });
+        const exec = await executeArb(best, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, balancePct: botConfig.balancePct || 10, dryRun: false });
         for (const r of exec.results) {
           if (r.skipped) continue;
           const stake = exec.stakes?.[r.book] || 100;

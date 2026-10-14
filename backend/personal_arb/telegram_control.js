@@ -36,6 +36,7 @@ const DEFAULT_CONFIG = {
   autobetTestPending: false, // one-shot: dry-run the next best candidate through the real click path
   autoMaxStake: 0,     // 0 = use per-book bankroll anchor (per-book cap)
   autoMaxTotal: 0,     // 0 = no global cap; else max TOTAL staked per arb
+  balancePct: 10,      // % of each live balance used when sizing auto-bets
   autoDailyLimit: 5,   // max confirmed bets per day — hard kill-switch
   autoDay: null,       // YYYY-MM-DD of the counter
   autoPlacedToday: 0,  // confirmed bets placed today
@@ -203,6 +204,7 @@ const HELP = [
   'amount <book|all> <XAF>  set stake anchor',
   'amounts  show all anchors',
   'maxtotal <XAF>  max total per arb',
+  'balancepct <n>  % of live balance per arb',
   '',
   '📉  ALERTS',
   'minroi <pct>  alert floor (e.g. minroi 2)',
@@ -303,6 +305,15 @@ export function handleMessage(text) {
     config.autoMaxTotal = amt;
     saveConfig();
     return amt === 0 ? '✅ No global total cap — each arb is capped only by the per-book amounts.' : `✅ Max total per arb = ${amt.toLocaleString()} XAF (split across both legs by the arb ratio).`;
+  }
+
+  m2 = lower.match(/^(?:\/)?(?:balancepct|balpct)\s+([\d.,]+)$/);
+  if (m2) {
+    const pct = parseFloat(m2[1].replace(',', '.'));
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return 'Usage: balancepct <1-100> — % of each live balance used per arb. e.g. "balancepct 10"';
+    config.balancePct = pct;
+    saveConfig();
+    return `✅ Auto-bet sizing = ${pct}% of each live balance (betfrenzy + betpawa).`;
   }
 
   // ── Credential login commands (raw text — passwords are case-sensitive) ──
