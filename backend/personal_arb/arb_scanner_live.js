@@ -492,6 +492,19 @@ async function sendTelegram(text) {
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }) });
 }
 
+// Send a PNG screenshot to Telegram (used by the login diagnostics).
+async function sendTelegramPhoto(pngBuffer, caption) {
+  const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chat) return;
+  try {
+    const form = new FormData();
+    form.append('chat_id', chat);
+    form.append('caption', String(caption || '').slice(0, 900));
+    form.append('photo', new Blob([pngBuffer], { type: 'image/png' }), 'diag.png');
+    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form });
+  } catch (e) { console.log(`[Diag] photo send failed: ${e.message.slice(0, 80)}`); }
+}
+
 // ── WhatsApp Cloud API (Meta official) — DISABLED by default ──
 // Set WHATSAPP_ENABLED=1 to re-enable. Until then every WhatsApp function is a no-op
 // (Telegram is the only alert channel).
@@ -1269,8 +1282,25 @@ function shouldReport(c) {
 async function scan() {
   // ── Pending owner requests: session check / credential login (owner-only Telegram) ──
   // Runs BEFORE the scan so it works even when there are no candidates.
-  if (botConfig.checkPending || botConfig.loginPending) {
-    const { checkBook, loginBook } = await import('./book_login.js');
+  if (botConfig.checkPending || botConfig.loginPending || botConfig.diagPending) {
+    const { checkBook, loginBook, diagnoseLogin } = await import('./book_login.js');
+    if (botConfig.diagPending) {
+      const b = botConfig.diagPending;
+      botConfig.diagPending = null;
+      saveConfig();
+      const d = await diagnoseLogin(b);
+      if (!d.ok) {
+        await sendTelegram(`🔬 ${b} login diagnosis FAILED: ${d.reason}`);
+      } else {
+        const lines = [`🔬 ${b} login page as the browser sees it`, `URL: ${d.dump.url}`, `Title: ${d.dump.title}`, `Password field present: ${d.dump.hasPassword}`, '', `INPUTS (${d.dump.inputs.length}):`];
+        d.dump.inputs.forEach(i => lines.push(`  <${i.tag} type=${i.type} name=${i.name} id=${i.id} placeholder="${i.placeholder}" aria="${i.ariaLabel}">`));
+        lines.push('', `CLICKABLE (${d.dump.clickables.length}):`);
+        d.dump.clickables.forEach(c => lines.push(`  <${c.tag}> "${c.text}"${c.ariaLabel ? ` aria="${c.ariaLabel}"` : ''}${c.href ? ` href=${c.href.slice(0, 40)}` : ''}`));
+        await sendTelegram(lines.join('\n').slice(0, 3900));
+        if (d.screenshot) await sendTelegramPhoto(Buffer.from(d.screenshot, 'base64'), `🔬 ${b} — as the server sees it`);
+      }
+      console.log(`[Diag] ${b}: ${d.ok ? 'sent' : d.reason}`);
+    }
     if (botConfig.checkPending) {
       botConfig.checkPending = false;
       saveConfig();

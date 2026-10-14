@@ -165,3 +165,30 @@ export async function checkBook(book) {
     if (ctx) await ctx.close().catch(() => {});
   }
 }
+
+// ── DIAGNOSTIC: open the site and dump what the browser actually sees ─────────
+// Returns a structured description of every interactive element + a screenshot,
+// so login selectors can be fixed from real page data instead of guesswork.
+export async function diagnoseLogin(book) {
+  const site = SITES[book];
+  if (!site) return { ok: false, reason: `unsupported ${book}` };
+  let ctx;
+  try {
+    ctx = await launchBook(book);
+    const page = await ctx.newPage();
+    await page.goto(site.home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(4000);
+    const dump = await page.evaluate(() => {
+      const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none'; };
+      const inputs = Array.from(document.querySelectorAll('input, select, textarea')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), type: el.type || '', name: el.name || '', id: el.id || '', placeholder: el.placeholder || '', ariaLabel: el.getAttribute('aria-label') || '' }));
+      const clickables = Array.from(document.querySelectorAll('button, a, [role="button"], [role="tab"], [class*="login" i], [class*="connex" i], [class*="account" i], [class*="user" i]')).filter(vis).map(el => ({ tag: el.tagName.toLowerCase(), text: (el.textContent || '').trim().slice(0, 40), ariaLabel: el.getAttribute('aria-label') || '', href: el.getAttribute('href') || '' })).filter(x => x.text || x.ariaLabel).slice(0, 40);
+      return { url: location.href, title: document.title, inputs, clickables, hasPassword: !!document.querySelector('input[type=password]') };
+    });
+    const png = await page.screenshot({ fullPage: false });
+    return { ok: true, book, dump, screenshot: png.toString('base64') };
+  } catch (e) {
+    return { ok: false, book, reason: e.message.slice(0, 160) };
+  } finally {
+    if (ctx) await ctx.close().catch(() => {});
+  }
+}

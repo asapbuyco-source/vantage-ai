@@ -42,6 +42,7 @@ const DEFAULT_CONFIG = {
   logins: {},          // book -> { user, pass, setAt } — NO-OTP books only (betfrenzy/betpawa)
   loginPending: null,  // book name — scanner performs a credential login on next cycle
   checkPending: false, // scanner checks logged-in state + balance for betfrenzy+betpawa
+  diagPending: null,   // book name — scanner dumps the login page (fields+buttons+screenshot)
 };
 
 export function loadConfig() {
@@ -304,6 +305,14 @@ export function handleMessage(text) {
     const book = BOOK_ALIASES[m2[1]] || m2[1];
     if (config.logins[book]) { delete config.logins[book]; saveConfig(); return `🗑️ Credentials for ${book} deleted.`; }
     return `Nothing stored for ${book}.`;
+  }
+  m2 = lower.match(/^(?:\/)?diaglogin\s+(\S+)$/);
+  if (m2) {
+    const book = BOOK_ALIASES[m2[1]] || m2[1];
+    if (!['betfrenzy', 'betpawa'].includes(book)) return 'diaglogin supports only betfrenzy and betpawa.';
+    config.diagPending = book;
+    saveConfig();
+    return `🔬 Diagnosing ${book} login page — the scanner will open it and send you a screenshot + the exact fields/buttons it sees on the next cycle.`;
   }
 
   m2 = lower.match(/^(?:\/)?autobet\s+(test|check|live|dry|off|on|limit)(?:\s+([\d.]+))?$/);
