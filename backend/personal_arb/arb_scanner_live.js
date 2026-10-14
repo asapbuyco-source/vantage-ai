@@ -49,7 +49,8 @@ async function launchBook(profileName, opts = {}) {
   }
   return chromium.launchPersistentContext(prof(profileName), launchOpts);
 }
-const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
+const PROFILE_ROOT = process.env.ARB_PROFILE_ROOT
+  || (fs.existsSync('/app/.playwright_profile') ? '/app/.playwright_profile' : path.join(__dirname, '../../.playwright_profile'));
 const prof = name => { const p = path.join(PROFILE_ROOT, name); if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); return p; };
 // Real cross-book arbs are ~1-5%. >15% means a stale/wrong line — flag but don't trust.
 const MAX_PLAUSIBLE_ARB = 15;

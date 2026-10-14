@@ -15,9 +15,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Persist config on the Railway VOLUME (inside .playwright_profile) so logins,
-// stake anchors and limits survive deploys. Legacy path kept as fallback read.
-const VOLUME_CONFIG_PATH = path.join(__dirname, '../../.playwright_profile', 'bot_config.json');
+// Persist config on the Railway VOLUME. The volume is mounted at /app/.playwright_profile;
+// the repo-relative path (../../.playwright_profile) only matches when running from
+// backend/personal_arb. Resolve layout-proof: env override → container volume → relative.
+const VOLUME_DIR = process.env.ARB_PROFILE_ROOT
+  || (fs.existsSync('/app/.playwright_profile') ? '/app/.playwright_profile' : path.join(__dirname, '../../.playwright_profile'));
+const VOLUME_CONFIG_PATH = path.join(VOLUME_DIR, 'bot_config.json');
 const LEGACY_CONFIG_PATH = path.join(__dirname, 'bot_config.json');
 const CONFIG_PATH = process.env.ARB_BOT_CONFIG || VOLUME_CONFIG_PATH;
 

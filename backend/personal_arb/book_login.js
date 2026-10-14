@@ -15,7 +15,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROFILE_ROOT = path.join(__dirname, '../../.playwright_profile');
+const PROFILE_ROOT = process.env.ARB_PROFILE_ROOT
+  || (fs.existsSync('/app/.playwright_profile') ? '/app/.playwright_profile' : path.join(__dirname, '../../.playwright_profile'));
 const ARB_PROXY = process.env.ARB_PROXY || '';
 
 async function launchBook(profileName) {
