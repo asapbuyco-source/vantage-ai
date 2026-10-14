@@ -279,32 +279,80 @@ async function confirmLeg(p, { dryRun }) {
   } catch (e) { return { book: p.book, ok: false, status: 'confirm_failed', why: e.message.slice(0, 140) }; }
 }
 
-export async function executeArb(c, { stakes = {}, dryRun = false } = {}) {
+// Quick balance read for one book (loads the home page with the saved session).
+export async function readBookBalance(book) {
+  let ctx;
+  try {
+    ctx = await launchBook(book);
+    const page = await ctx.newPage();
+    await page.goto(`https://www.${book === 'betfrenzy' ? 'betfrenzy.cm' : 'betpawa.cm'}/`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(3500);
+    return parseMoney(await readBalanceText(page));
+  } catch (_) { return null; } finally { if (ctx) await ctx.close().catch(() => {}); }
+}
+
+// Compute the exact arb-ratio stakes, bounded by per-book caps, live balances
+// and an optional global max total. Returns stakes that guarantee equal payout.
+function computeStakes(legs, caps, balances, maxTotal) {
+  const shares = legs.map(l => (parseFloat(l.stake) || 0) / 100);
+  const sum = shares.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return { ok: false, reason: 'candidate has no stake ratios' };
+  const norm = shares.map(s => s / sum);
+  const limits = legs.map(l => {
+    const cap = caps[l.book] > 0 ? caps[l.book] : Infinity;
+    const bal = (balances[l.book] != null) ? balances[l.book] : Infinity;
+    return Math.min(cap, bal);
+  });
+  let T = maxTotal > 0 ? maxTotal : Infinity;
+  for (let i = 0; i < legs.length; i++) T = Math.min(T, limits[i] / norm[i]);
+  if (!(T > 0) || !Number.isFinite(T)) return { ok: false, reason: 'no capacity — set "amount <book> <XAF>" or check balances' };
+  const step = 50;
+  const stakes = legs.map((l, i) => Math.max(step, Math.floor((norm[i] * T) / step) * step));
+  for (let i = 0; i < legs.length; i++) if (stakes[i] > limits[i]) return { ok: false, reason: `rounding exceeded the limit on ${legs[i].book}` };
+  return { ok: true, stakes, total: stakes.reduce((a, b) => a + b, 0) };
+}
+
+// stakes = explicit override map (optional). Otherwise computed from the arb ratio,
+// bounded by { caps, maxTotal } and the LIVE balances of both accounts.
+export async function executeArb(c, { stakes = null, caps = {}, maxTotal = 0, dryRun = false } = {}) {
   const db = await initFirebase();
   const supported = c.legs.filter(l => ['betfrenzy', 'betpawa'].includes(l.book));
   if (supported.length < 2) {
     return { ok: false, reason: 'both legs must be on betfrenzy/betpawa for a safe auto-arb (one-leg auto-betting is refused)', results: supported.map(l => ({ book: l.book, skipped: 'unsupported' })) };
   }
+  let stakeMap = stakes;
+  let balances = {};
+  if (!stakeMap) {
+    // Read live balances for both books, then size from the arb ratio.
+    for (const l of supported) { balances[l.book] = await readBookBalance(l.book); }
+    const comp = computeStakes(supported, caps, balances, maxTotal);
+    if (!comp.ok) {
+      for (const l of supported) await db?.collection('arb_bets').add({ ts: new Date().toISOString(), status: 'aborted', book: l.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, why: comp.reason });
+      return { ok: false, reason: `SIZING FAILED — ${comp.reason} — nothing placed`, results: supported.map(l => ({ book: l.book, ok: false, why: comp.reason })), balances };
+    }
+    stakeMap = {};
+    supported.forEach((l, i) => { stakeMap[l.book] = comp.stakes[i]; });
+  }
   // PHASE 1 — prepare both in parallel; ABORT unless BOTH are ready.
   const prepList = await Promise.all(supported.map(async (leg) => {
     const ctx = await launchBook(leg.book);
-    const p = await prepareLeg({ book: leg.book, ctx, leg, c, stake: stakes[leg.book] || 100 });
+    const p = await prepareLeg({ book: leg.book, ctx, leg, c, stake: stakeMap[leg.book] || 100 });
     return { ...p, ctx, leg };
   }));
   const bad = prepList.filter(p => !p.ok);
   if (bad.length) {
     await Promise.all(prepList.map(p => p.ctx?.close().catch(() => {})));
-    for (const p of prepList) await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: 'aborted', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, stake: stakes[p.book] || 100, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: p.ok, why: p.why, foundOdds: p.foundOdds });
-    return { ok: false, reason: `PREPARE FAILED on ${bad.map(b => `${b.book}: ${b.why}`).join(' | ')} — ABORTED, nothing placed`, results: prepList.map(p => ({ book: p.book, ok: false, why: p.why })) };
+    for (const p of prepList) await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: 'aborted', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, stake: stakeMap[p.book] || 100, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: p.ok, why: p.why, foundOdds: p.foundOdds });
+    return { ok: false, reason: `PREPARE FAILED on ${bad.map(b => `${b.book}: ${b.why}`).join(' | ')} — ABORTED, nothing placed`, results: prepList.map(p => ({ book: p.book, ok: false, why: p.why })), balances, stakes: stakeMap };
   }
   // PHASE 2 — confirm both back-to-back (parallel clicks = tightest possible window).
   const confirms = await Promise.all(prepList.map(p => confirmLeg(p, { dryRun })));
   await Promise.all(prepList.map(p => p.ctx?.close().catch(() => {})));
   for (let i = 0; i < prepList.length; i++) {
     const p = prepList[i], cf = confirms[i];
-    await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: cf.ok ? cf.status : 'failed', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, pct: c.pct, stake: stakes[p.book] || 100, accepted: p.accepted, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: cf.ok, why: p.why || cf.why, foundOdds: p.foundOdds, balanceBefore: p.balance, balanceAfter: cf.afterBalance });
+    await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: cf.ok ? cf.status : 'failed', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, pct: c.pct, stake: stakeMap[p.book] || 100, accepted: p.accepted, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: cf.ok, why: p.why || cf.why, foundOdds: p.foundOdds, balanceBefore: p.balance, balanceAfter: cf.afterBalance });
     if (cf.afterBalance || p.balance) await db?.collection('arb_balances').add({ book: p.book, ts: new Date().toISOString(), balance: cf.afterBalance || p.balance });
   }
   const allPlaced = confirms.every(cf => cf.ok);
-  return { ok: allPlaced, partial: confirms.some(cf => cf.ok) && !allPlaced, results: confirms, preps: prepList.map(p => ({ book: p.book, accepted: p.accepted, balance: p.balance, foundOdds: p.foundOdds })) };
+  return { ok: allPlaced, partial: confirms.some(cf => cf.ok) && !allPlaced, results: confirms, balances, stakes: stakeMap, preps: prepList.map(p => ({ book: p.book, accepted: p.accepted, balance: p.balance, foundOdds: p.foundOdds })) };
 }

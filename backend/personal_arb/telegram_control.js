@@ -34,7 +34,8 @@ const DEFAULT_CONFIG = {
   pendingApprovals: [],// [{ id, name, at }] — non-owner who messaged the bot, awaiting owner approval
   autobet: 'off',      // 'off' | 'dry' | 'live' — auto-bet mode (betpawa+betfrenzy only)
   autobetTestPending: false, // one-shot: dry-run the next best candidate through the real click path
-  autoMaxStake: 0,     // 0 = use per-book bankroll anchor
+  autoMaxStake: 0,     // 0 = use per-book bankroll anchor (per-book cap)
+  autoMaxTotal: 0,     // 0 = no global cap; else max TOTAL staked per arb
   autoDailyLimit: 5,   // max confirmed bets per day — hard kill-switch
   autoDay: null,       // YYYY-MM-DD of the counter
   autoPlacedToday: 0,  // confirmed bets placed today
@@ -201,6 +202,7 @@ const HELP = [
   '💰  STAKES',
   'amount <book|all> <XAF>  set stake anchor',
   'amounts  show all anchors',
+  'maxtotal <XAF>  max total per arb',
   '',
   '📉  ALERTS',
   'minroi <pct>  alert floor (e.g. minroi 2)',
@@ -292,6 +294,15 @@ export function handleMessage(text) {
     config.min_roi = pct / 100;
     saveConfig();
     return `✅ Alert floor = ${pct}% worst-case ROI`;
+  }
+
+  m2 = lower.match(/^(?:\/)?(?:maxtotal|maxstake)\s+([\d.,]+)$/);
+  if (m2) {
+    const amt = parseFloat(m2[1].replace(',', '.'));
+    if (!Number.isFinite(amt) || amt < 0) return 'Usage: maxtotal <XAF> — max TOTAL staked per arb (0 = no cap). e.g. "maxtotal 30000"';
+    config.autoMaxTotal = amt;
+    saveConfig();
+    return amt === 0 ? '✅ No global total cap — each arb is capped only by the per-book amounts.' : `✅ Max total per arb = ${amt.toLocaleString()} XAF (split across both legs by the arb ratio).`;
   }
 
   // ── Credential login commands (raw text — passwords are case-sensitive) ──

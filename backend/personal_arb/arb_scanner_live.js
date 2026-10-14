@@ -1390,14 +1390,13 @@ async function scan() {
         }
         console.log(`[AutoBet] daily limit reached (${botConfig.autoPlacedToday}) — skipping placement`);
       } else {
-        // Both legs must be on betfrenzy/betpawa; executeArb prepares both slips first
-        // and only confirms when BOTH are ready (aborts to avoid a naked single bet).
-        const stakes = {};
-        for (const leg of best.legs) stakes[leg.book] = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
-        const exec = await executeArb(best, { stakes, dryRun: false });
+        // Both legs must be on betfrenzy/betpawa; executeArb reads live balances and
+// sizes each stake from the ARB RATIO (bounded by per-book caps + max total),
+// prepares both slips, and only confirms when BOTH are ready (no naked bet).
+        const exec = await executeArb(best, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, dryRun: false });
         for (const r of exec.results) {
           if (r.skipped) continue;
-          const stake = stakes[r.book] || 100;
+          const stake = exec.stakes?.[r.book] || 100;
           await sendTelegram(r.ok
             ? `✅ AUTOBET ${r.book} | ${stake} XAF${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''} (${botConfig.autoPlacedToday + 1}/${botConfig.autoDailyLimit} today)`
             : `❌ AUTOBET ${r.book} | ${r.why || r.status || 'failed'}`);
