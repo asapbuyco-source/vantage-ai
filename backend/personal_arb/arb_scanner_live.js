@@ -1338,7 +1338,7 @@ async function scan() {
   // P&L ledger (arb_bets) with the account balance read from the page.
   const pool = aligned.length ? aligned : (confirmed.length ? confirmed : first);
   if (pool.length && (botConfig.autobet !== 'off' || botConfig.autobetTestPending)) {
-    const { dryRunCandidate, placeLeg } = await import('./auto_bet.js');
+    const { dryRunCandidate, executeArb } = await import('./auto_bet.js');
     const best = pool.find(c => c.legs.some(l => ['betfrenzy', 'betpawa'].includes(l.book))) || pool[0];
     if (botConfig.autobetTestPending) {
       botConfig.autobetTestPending = false;
@@ -1360,16 +1360,28 @@ async function scan() {
         }
         console.log(`[AutoBet] daily limit reached (${botConfig.autoPlacedToday}) — skipping placement`);
       } else {
-        for (const leg of best.legs) {
-          if (!['betfrenzy', 'betpawa'].includes(leg.book)) continue;
-          const stake = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
-          const r = await placeLeg({ book: leg.book, leg, c: best, stake, dryRun: false });
-          if (r.ok && r.status === 'placed') {
-            botConfig.autoPlacedToday += 1;
-            saveConfig();
-            console.log(`[AutoBet] placed ${stake} XAF on ${leg.book} (${botConfig.autoPlacedToday}/${botConfig.autoDailyLimit} today)`);
-          }
-          await sendTelegram(`${r.ok ? '✅' : '❌'} AUTOBET ${leg.book}${r.ok ? ` | ${stake} XAF @ ${r.foundOdds || leg.odds}${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''} (${botConfig.autoPlacedToday}/${botConfig.autoDailyLimit} today)` : ` | ${r.why || 'failed'}`}`);
+        // Both legs must be on betfrenzy/betpawa; executeArb prepares both slips first
+        // and only confirms when BOTH are ready (aborts to avoid a naked single bet).
+        const stakes = {};
+        for (const leg of best.legs) stakes[leg.book] = botConfig.autoMaxStake || botConfig.bankrolls[leg.book] || 100;
+        const exec = await executeArb(best, { stakes, dryRun: false });
+        for (const r of exec.results) {
+          if (r.skipped) continue;
+          const stake = stakes[r.book] || 100;
+          await sendTelegram(r.ok
+            ? `✅ AUTOBET ${r.book} | ${stake} XAF${r.afterBalance ? ` | balance: ${r.afterBalance}` : ''} (${botConfig.autoPlacedToday + 1}/${botConfig.autoDailyLimit} today)`
+            : `❌ AUTOBET ${r.book} | ${r.why || r.status || 'failed'}`);
+        }
+        if (exec.ok) {
+          botConfig.autoPlacedToday += 1;
+          saveConfig();
+          console.log(`[AutoBet] arb placed on both books (${botConfig.autoPlacedToday}/${botConfig.autoDailyLimit} today)`);
+        } else if (exec.partial) {
+          await sendTelegram(`🚨 PARTIAL FILL — one leg placed, the other FAILED.\n${exec.reason || ''}\nHEDGE NOW: place the missing leg manually at current odds, or lay it off. Check "ledger".`);
+          console.log('[AutoBet] PARTIAL fill — alert sent');
+        } else {
+          await sendTelegram(`⏭️ AUTO-ARB SKIPPED — ${exec.reason || 'not executed'} (nothing placed)`);
+          console.log(`[AutoBet] skipped: ${exec.reason}`);
         }
       }
     }

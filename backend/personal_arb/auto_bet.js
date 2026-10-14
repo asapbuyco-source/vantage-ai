@@ -217,3 +217,94 @@ export async function dryRunCandidate(c, { stakePerLeg = 100 } = {}) {
   }
   return results;
 }
+
+// ── SAFE 2-LEG EXECUTION (live) ─────────────────────────────────────────────
+// Two sites can never confirm atomically, but we minimise the window:
+//   PHASE 1 prepare both legs in parallel (open → locate → click into slip →
+//     fill stake → READ BACK accepted stake + balance on each)
+//   PHASE 2 confirm both back-to-back within milliseconds (parallel clicks)
+// If ANY leg fails phase 1 → ABORT: nothing is placed (no naked exposure).
+function parseMoney(t) {
+  if (!t) return null;
+  const m = String(t).replace(/\s/g, '').match(/(\d[\d.,]*)/);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+async function readSlipStake(page) {
+  try { const v = await page.locator('input[type="number"], input[type="tel"]').first().inputValue({ timeout: 1200 }); const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; } catch (_) { return null; }
+}
+
+async function prepareLeg({ book, ctx, leg, c, stake }) {
+  const out = { book, ok: false };
+  let page;
+  try {
+    page = await ctx.newPage();
+    const fallback = `https://www.${book === 'betfrenzy' ? 'betfrenzy.cm' : 'betpawa.cm'}/`;
+    await page.goto(leg.link || fallback, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(2500);
+    const located = await page.evaluate(locateAndClickInPage, locatorParams(leg, c));
+    if (!located.ok) { out.why = located.why; return out; }
+    out.foundOdds = located.found;
+    if (Math.abs(located.found - leg.odds) > 0.5) { out.why = `odds moved ${leg.odds} -> ${located.found}`; return out; }
+    await page.waitForTimeout(1500);
+    const slip = await fillSlip(page, book, stake);
+    if (!slip.filled) { out.why = 'stake input not found on slip'; return out; }
+    await page.waitForTimeout(1200);
+    out.accepted = await readSlipStake(page); // null = custom keypad (unverified but allowed)
+    out.balance = slip.balanceSeen;
+    const bal = parseMoney(out.balance);
+    if (bal != null && bal + 1 < stake) { out.why = `insufficient balance (${out.balance}) for stake ${stake}`; return out; }
+    out.page = page;
+    out.ok = true;
+    return out;
+  } catch (e) { out.why = e.message.slice(0, 140); return out; }
+}
+
+async function confirmLeg(p, { dryRun }) {
+  if (dryRun) return { book: p.book, ok: true, status: 'dryrun_passed' };
+  try {
+    const words = p.book === 'betfrenzy'
+      ? [/placer/i, /confirmer/i, /valider/i, /miser/i, /^bet$/i]
+      : [/^bet$/i, /place/i, /confirm/i, /placer/i, /valider/i];
+    let clicked = false;
+    for (const w of words) {
+      try { const b = p.page.getByRole('button', { name: w }).first(); if (await b.isVisible({ timeout: 500 })) { await b.click({ timeout: 2500 }); clicked = true; break; } } catch (_) {}
+    }
+    if (!clicked) return { book: p.book, ok: false, status: 'confirm_button_not_found', why: 'no place/confirm button found on the slip' };
+    await p.page.waitForTimeout(2500);
+    const after = await readBalanceText(p.page);
+    return { book: p.book, ok: true, status: 'placed', afterBalance: after };
+  } catch (e) { return { book: p.book, ok: false, status: 'confirm_failed', why: e.message.slice(0, 140) }; }
+}
+
+export async function executeArb(c, { stakes = {}, dryRun = false } = {}) {
+  const db = await initFirebase();
+  const supported = c.legs.filter(l => ['betfrenzy', 'betpawa'].includes(l.book));
+  if (supported.length < 2) {
+    return { ok: false, reason: 'both legs must be on betfrenzy/betpawa for a safe auto-arb (one-leg auto-betting is refused)', results: supported.map(l => ({ book: l.book, skipped: 'unsupported' })) };
+  }
+  // PHASE 1 — prepare both in parallel; ABORT unless BOTH are ready.
+  const prepList = await Promise.all(supported.map(async (leg) => {
+    const ctx = await launchBook(leg.book);
+    const p = await prepareLeg({ book: leg.book, ctx, leg, c, stake: stakes[leg.book] || 100 });
+    return { ...p, ctx, leg };
+  }));
+  const bad = prepList.filter(p => !p.ok);
+  if (bad.length) {
+    await Promise.all(prepList.map(p => p.ctx?.close().catch(() => {})));
+    for (const p of prepList) await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: 'aborted', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, stake: stakes[p.book] || 100, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: p.ok, why: p.why, foundOdds: p.foundOdds });
+    return { ok: false, reason: `PREPARE FAILED on ${bad.map(b => `${b.book}: ${b.why}`).join(' | ')} — ABORTED, nothing placed`, results: prepList.map(p => ({ book: p.book, ok: false, why: p.why })) };
+  }
+  // PHASE 2 — confirm both back-to-back (parallel clicks = tightest possible window).
+  const confirms = await Promise.all(prepList.map(p => confirmLeg(p, { dryRun })));
+  await Promise.all(prepList.map(p => p.ctx?.close().catch(() => {})));
+  for (let i = 0; i < prepList.length; i++) {
+    const p = prepList[i], cf = confirms[i];
+    await db?.collection('arb_bets').add({ ts: new Date().toISOString(), dryRun, status: cf.ok ? cf.status : 'failed', book: p.book, event: `${c.teams[0]} vs ${c.teams[1]}`, kind: c.kind, pct: c.pct, stake: stakes[p.book] || 100, accepted: p.accepted, leg: { bet: p.leg?.bet, odds: p.leg?.odds }, ok: cf.ok, why: p.why || cf.why, foundOdds: p.foundOdds, balanceBefore: p.balance, balanceAfter: cf.afterBalance });
+    if (cf.afterBalance || p.balance) await db?.collection('arb_balances').add({ book: p.book, ts: new Date().toISOString(), balance: cf.afterBalance || p.balance });
+  }
+  const allPlaced = confirms.every(cf => cf.ok);
+  return { ok: allPlaced, partial: confirms.some(cf => cf.ok) && !allPlaced, results: confirms, preps: prepList.map(p => ({ book: p.book, accepted: p.accepted, balance: p.balance, foundOdds: p.foundOdds })) };
+}
