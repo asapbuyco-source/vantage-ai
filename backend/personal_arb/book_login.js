@@ -47,7 +47,7 @@ const SITES = {
     loginUrl: 'https://www.betpawa.cm/login',
     userSel: 'input[name="username"], #phoneNumber',
     passSel: 'input[name="password"]',
-    submitSel: 'button[type="submit"]:has-text("Log In"), button:has-text("Log In")',
+    submitSel: 'button[type="submit"]:has-text("Log In")',
     loginWords: /^(log ?in|connexion|se connecter|sign in)$/i,
   },
 };
