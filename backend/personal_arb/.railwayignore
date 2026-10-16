@@ -1,0 +1,8 @@
+node_modules
+.playwright_profile
+.railway_profile
+arb_screenshots
+bot_config.json
+.env
+.env.local
+*.log
