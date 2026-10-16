@@ -1059,14 +1059,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "fh_home_win_prob": p.get("fh_home_win_prob"),
             "fh_draw_prob": p.get("fh_draw_prob"),
             "fh_away_win_prob": p.get("fh_away_win_prob"),
-            # Vault / EV fields
-            "ev_pct": p.get("ev_pct"),
-            "expected_value": p.get("expected_value"),
-            "kelly_stake": p.get("kelly_stake"),
-            "inefficiency": p.get("inefficiency"),
+            # Data quality and fresh odds
             "data_quality": p.get("data_quality"),
             "odds_fresh": p.get("odds_fresh"),
-            "vault_eligible": p.get("vault_eligible"),
             "calibration_tier": p.get("calibration_tier"),
             "calibrated_probability": p.get("calibrated_probability"),
             "calibration_tag": p.get("calibration_tag"),

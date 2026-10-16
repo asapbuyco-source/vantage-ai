@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ArrowLeft, Activity, Scale, ShieldAlert, Zap, Loader2, Trophy, Crosshair, Target, BarChart3, Newspaper, Users, CheckCircle2, ChevronRight, Crown, Clock, MapPin, Home as HomeIcon, CloudSun, Copy, AlertTriangle } from 'lucide-react';
+import { X, ArrowLeft, Activity, Scale, ShieldAlert, Zap, Loader2, Trophy, Crosshair, Target, BarChart3, Newspaper, Users, CheckCircle2, ChevronRight, Crown, Clock, MapPin, Home as HomeIcon, CloudSun, Copy, AlertTriangle, Lock } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { NavigationTab, Match, MatchNews } from '../types';
 import { getLiveOddsFromDB, getH2HFromDB, getMatchNewsFromDB, getFixtureLineupsFromDB, getMatchStatsFromDB, getMatchFactsFromDB, LineupPlayer, H2HRecord, MatchOdds, MatchStatsData, MatchFact } from '../services/sportsData';
@@ -192,19 +192,7 @@ fetchDetails();
     const bankroll = userProfile?.portfolioBankroll || 0;
     const recommendedStake = bankroll > 0 ? Math.round(bankroll * (kelly / 100) * riskMult) : 0;
     
-    const isFreeMatchCheck = () => {
-        const sorted = [...predictions].sort((a, b) => {
-            const probA = Math.max(a.home_win_prob||0, a.away_win_prob||0, a.draw_prob||0, a.over25_prob||0, a.btts_prob||0);
-            const probB = Math.max(b.home_win_prob||0, b.away_win_prob||0, b.draw_prob||0, b.over25_prob||0, b.btts_prob||0);
-            return probB - probA;
-        });
-        const topPicks = sorted.filter(m => m.category === 'safe');
-        const freeablePicks = topPicks.length > 0 ? topPicks : sorted.filter(m => m.category === 'value');
-        const freeIds = new Set(freeablePicks.slice(0, 3).map(m => m.id));
-        return freeIds.has(match.id);
-    };
     
-    const isUnlocked = isVipUser || isFreeMatchCheck();
 
     return (
         <div className="min-h-screen bg-vantage-bg pb-20 font-sans text-white">
@@ -294,30 +282,7 @@ fetchDetails();
                 </div>
             </div>
 
-            {/* VIP Lock Check */}
-            {!isUnlocked ? (
-                <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-4 max-w-md mx-auto">
-                    <div className="w-16 h-16 bg-vantage-purple/20 rounded-full flex items-center justify-center mb-2">
-                        <Target size={32} className="text-vantage-purple" />
-                    </div>
-                    <h3 className="text-lg font-bold">
-                        {language === 'fr' ? 'Prédiction VIP Exclusive' : 'Exclusive VIP Prediction'}
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                        {language === 'fr'
-                            ? 'Débloquez cette analyse IA complète, la probabilité de réussite et notre pronostic exact en devenant membre VIP.'
-                            : 'Unlock this comprehensive AI analysis, the exact success probability, and our precise prediction by becoming a VIP member.'}
-                    </p>
-                    <button
-                        onClick={() => navigate('/vip')}
-                        className="mt-4 flex items-center justify-center gap-2 px-6 py-3 bg-vantage-purple hover:bg-purple-600 active:scale-95 transition-all text-white w-full rounded-xl font-bold shadow-lg shadow-vantage-purple/20"
-                    >
-                        <Zap size={18} className="text-yellow-400 fill-yellow-400" />
-                        {language === 'fr' ? 'DEVENIR ALPHA' : 'BECOME ALPHA'}
-                    </button>
-                </div>
-            ) : (
-                <div className="max-w-7xl mx-auto px-4 mt-4">
+            <div className="max-w-7xl mx-auto px-4 mt-4">
                   {secondaryTab === 'Prediction' && (<>
                     {/* Safest Pick Banner */}
                     {/* Safest Pick Banner — compact strip */}
@@ -408,21 +373,50 @@ fetchDetails();
                                     {language === 'fr' ? 'AUTRES BONS MARCHÉS' : 'OTHER GOOD MARKETS'}
                                 </span>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {markets.map((m, i) => (
-                                        <div key={i} className="rounded-lg bg-white/5 px-2.5 py-2">
-                                            <div className="flex items-center justify-between gap-1 mb-1">
-                                                <span className="text-[10px] font-semibold text-gray-300 truncate">{m.l}</span>
-                                                <span className="text-[8px] font-black text-gray-500 shrink-0">{m.code}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between gap-1">
-                                                <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-                                                    <div className="h-full bg-emerald-400/80 rounded-full" style={{ width: `${m.p}%` }} />
+                                    {markets.map((m, i) => {
+                                        const isLocked = !isVipUser && i > 0;
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`relative rounded-lg bg-white/5 px-2.5 py-2 overflow-hidden transition-all ${isLocked ? 'cursor-pointer hover:bg-white/10' : ''}`}
+                                                onClick={isLocked ? () => navigate('/vip') : undefined}
+                                            >
+                                                <div className={`flex items-center justify-between gap-1 mb-1 ${isLocked ? 'blur-[3px] select-none opacity-40' : ''}`}>
+                                                    <span className="text-[10px] font-semibold text-gray-300 truncate">{m.l}</span>
+                                                    <span className="text-[8px] font-black text-gray-500 shrink-0">{m.code}</span>
                                                 </div>
-                                                <span className="text-[11px] font-black font-mono text-emerald-400 ml-1.5 shrink-0">{m.p.toFixed(0)}%</span>
+                                                <div className={`flex items-center justify-between gap-1 ${isLocked ? 'blur-[3px] select-none opacity-40' : ''}`}>
+                                                    <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                                                        <div className="h-full bg-emerald-400/80 rounded-full" style={{ width: `${m.p}%` }} />
+                                                    </div>
+                                                    <span className="text-[11px] font-black font-mono text-emerald-400 ml-1.5 shrink-0">{m.p.toFixed(0)}%</span>
+                                                </div>
+                                                {isLocked && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+                                                        <span className="text-[9px] font-black text-vantage-purple flex items-center gap-1 bg-vantage-purple/20 px-2 py-0.5 rounded-full border border-vantage-purple/40">
+                                                            <Lock size={8} /> VIP
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
+                                {!isVipUser && markets.length > 1 && (
+                                    <div className="mt-2.5 pt-2 border-t border-vantage-cyan/15 flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5 text-[10px] text-vantage-cyan font-bold">
+                                            <Crown size={12} className="text-yellow-400 shrink-0" />
+                                            <span>{language === 'fr' ? `${markets.length - 1} marchés alternatifs réservés VIP` : `${markets.length - 1} alternative markets reserved for VIP`}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => navigate('/vip')}
+                                            className="px-2.5 py-1 rounded-lg bg-vantage-purple text-white text-[10px] font-black hover:bg-purple-600 transition-colors flex items-center gap-1 shadow-sm shadow-vantage-purple/30"
+                                        >
+                                            <Lock size={9} />
+                                            {language === 'fr' ? 'Débloquer' : 'Unlock'}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         );
                     })()}
@@ -1112,7 +1106,7 @@ fetchDetails();
                         </div>
                     )}
                 </div>
-            )}
+
 
             {/* Team detail bottom sheet (crest tap) */}
             {match && (

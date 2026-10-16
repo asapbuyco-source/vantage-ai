@@ -15,6 +15,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import pino from 'pino';
+import { generateAnalysis } from './analysisTemplates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const QUANT_SCRIPT = path.join(__dirname, 'quant', 'quant_pipeline.py');
@@ -30,10 +31,24 @@ const logger = pino({
 // ── AI Analysis via OpenRouter (Nemotron free model) ────────────────────────
 async function enrichWithAIAnalysis(predictions) {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
-    if (!apiKey) {
-        logger.warn('[QuantService] OPENROUTER_API_KEY not set, skipping AI analysis');
-        return predictions;
+    // ── FAST PATH (default) ──────────────────────────────────────────────────
+    // Deterministic bilingual template engine: instant, free, no rate limits,
+    // thousands of combinations. This replaces the old per-match AI (2 network
+    // calls + delays each → minutes/day). Opt back into AI with USE_AI_ANALYSIS=1.
+    const useAI = process.env.USE_AI_ANALYSIS === '1';
+    if (!useAI || !apiKey) {
+        logger.info(`[QuantService] Template analysis for ${predictions.length} predictions (fast path)`);
+        return predictions.map(pred => {
+            try {
+                const { en, fr } = generateAnalysis(pred);
+                return { ...pred, analysis_en: en, analysis_fr: fr };
+            } catch (e) {
+                const fb = pred.prediction || pred.prediction_en || `${pred.home_team} vs ${pred.away_team}`;
+                return { ...pred, analysis_en: fb, analysis_fr: fb };
+            }
+        });
     }
+    logger.warn('[QuantService] USE_AI_ANALYSIS=1 — using the slow AI path');
 
     const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
     const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';

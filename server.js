@@ -509,6 +509,20 @@ function adminAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized — valid x-admin-token or Bearer JWT required' });
 }
 
+// GET /api/admin/sofascore-test — proves the SofaScore scraper works from the
+// backend (headless Chromium + residential proxy). Admin-only. Read-only.
+app.get('/api/admin/sofascore-test', adminAuth, async (req, res) => {
+    try {
+        const { fetchLivescore } = await import('./backend/sofascore_scraper.js');
+        const proxy = process.env.SOFASCORE_PROXY || process.env.ARB_PROXY || '';
+        const sport = String(req.query.sport || 'football');
+        const matches = await fetchLivescore({ sport, proxy, timeoutMs: 80000 });
+        return res.json({ ok: matches.length > 0, count: matches.length, proxy: !!proxy, sport, sample: matches.slice(0, 8) });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: String(e).slice(0, 200) });
+    }
+});
+
 // GET /api/admin/token — exchange a Firebase ID token for a short-lived admin JWT.
 // The caller must be authenticated with Firebase and have isAdmin:true in Firestore.
 // This removes the need for any admin secret in the browser bundle.
