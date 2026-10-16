@@ -958,7 +958,7 @@ function findCandidates(all) {
   // were NEAR-MISS (within 2% of an arb). Logged each cycle so "arbs are scarce"
   // is diagnosable: pairs≈0 = coverage/matching; pairs>0 near=0 = efficient market
   // or floor too high; near>0 = arbs are close, latency/floor is the gate.
-  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0], 'MW': [0, 0], 'MID': [0, 0] };
+  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0], 'MW': [0, 0], 'MID': [0, 0], 'XM': [0, 0], 'AHM': [0, 0] };
   const note = (m, inv) => { diagStats[m][0]++; if (inv < 1.02) diagStats[m][1]++; };
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
@@ -1036,6 +1036,85 @@ for (const [k, grp] of g) {
       [{ book: best.ov.book, bet: `Over ${best.ov.line} goals`, odds: best.ov.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: best.ov.link },
        { book: best.un.book, bet: `Under ${best.un.line} goals`, odds: best.un.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: best.un.link }],
       invDisplay(worst), g.kickoff, g.period, worst, g.scope);
+  }
+
+// ── CROSS-MARKET result arbs (1X2 ↔ DC ↔ AH±0.5) ──
+  // Equivalent selections, so their COMPLEMENTS form risk-free 2-way arbs that the
+  // same-market scan never sees:
+  //   HOME (1X2 "1", AH home −0.5)  ⟷  NOT_HOME (DC X2, AH away +0.5)
+  //   AWAY (1X2 "2", AH away −0.5)  ⟷  NOT_AWAY (DC 1X, AH home +0.5)
+  const xm = new Map();
+  const addSide = (ev, side, odds) => {
+    if (!(odds > 1) || !ev.home || !ev.away) return;
+    const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}${youthMark(ev.home + ev.away) ? '|youth' : ''}|${ev.period || PERIOD.UNKNOWN}|${ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}|${side}`;
+    const g = xm.get(k) || xm.set(k, { side, matches: [], home: ev.home, away: ev.away, kickoff: ev.kickoff, period: ev.period, scope: ev.scope }).get(k);
+    g.matches.push({ book: ev.book, odds, link: ev.link });
+  };
+  for (const ev of all) {
+    if (!ev.sport || String(ev.sport).toLowerCase() === 'football') { if (ev.h) addSide(ev, 'H', ev.h); if (ev.a) addSide(ev, 'A', ev.a); }
+    if (ev.dc) { if (ev.dc['1x']) addSide(ev, 'NA', ev.dc['1x']); if (ev.dc['x2']) addSide(ev, 'NH', ev.dc['x2']); }
+    for (const a of ev.ah || []) {
+      if (Math.abs(Math.abs(parseFloat(a.hcp)) - 0.5) > 1e-6) continue; // only ±0.5 AH maps cleanly to a result side
+      if (a.dir === 'G') { addSide(ev, 'H', a.home); addSide(ev, 'NH', a.away); }
+      else if (a.dir === 'R') { addSide(ev, 'NA', a.home); addSide(ev, 'A', a.away); }
+    }
+  }
+  const XM_COMP = { H: 'NH', A: 'NA' };
+  const XM_LABEL = { H: 'Home win (or home -0.5)', A: 'Away win (or away -0.5)', NH: 'Not home win (X2 / away +0.5)', NA: 'Not away win (1X / home +0.5)' };
+  const seenXm = new Set();
+  for (const [k, g] of xm) {
+    const comp = XM_COMP[g.side];
+    if (!comp) continue;
+    const ck = k.slice(0, k.lastIndexOf('|') + 1) + comp;
+    const gc = xm.get(ck);
+    if (!gc) continue;
+    const pairKey = [k, ck].sort().join('~');
+    if (seenXm.has(pairKey)) continue;
+    seenXm.add(pairKey);
+    const b1 = g.matches.reduce((b, m) => m.odds > b.odds ? m : b, { odds: 0 });
+    const b2 = gc.matches.reduce((b, m) => m.odds > b.odds ? m : b, { odds: 0 });
+    if (!b1.book || !b2.book || b1.book === b2.book) continue;
+    const inv = 1 / b1.odds + 1 / b2.odds;
+    note('XM', inv);
+    if (inv < 1) { const worst = 100 / inv; const r = calcArb([{ book: b1.book, odds: b1.odds }, { book: b2.book, odds: b2.odds }]);
+      cand(`XM|${k}`, `Cross-market: ${XM_LABEL[g.side]} + ${XM_LABEL[comp]}`, [g.home, g.away],
+        [{ book: b1.book, bet: XM_LABEL[g.side], odds: b1.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: b1.link },
+         { book: b2.book, bet: XM_LABEL[comp], odds: b2.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: b2.link }],
+        invDisplay(worst), g.kickoff, g.period, worst, g.scope); }
+  }
+
+  // ── AH cross-line middles (home line vs away line, different books) ──
+  // Home bet with signed handicap h1 wins iff margin > -h1; away bet with h2 wins iff
+  // margin < h2. Both win in the band (-h1, h2) — a middle. When inv < 1 the outside
+  // outcomes at worst break even (pushes) → no-lose + bonus band.
+  const ahm = new Map();
+  for (const ev of all) for (const a of ev.ah || []) {
+    const hcp = Math.abs(parseFloat(a.hcp)); if (!a.home || !a.away || !(hcp > 0)) continue;
+    const h1 = a.dir === 'R' ? hcp : -hcp; // signed from home's view
+    const h2 = a.dir === 'R' ? -hcp : hcp; // signed from away's view
+    const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}|${ev.period || PERIOD.UNKNOWN}|${a.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`;
+    const g = ahm.get(k) || ahm.set(k, { homes: [], aways: [], home: ev.home, away: ev.away, kickoff: ev.kickoff, period: ev.period, scope: a.scope || ev.scope }).get(k);
+    g.homes.push({ book: ev.book, h1, odds: a.home, link: ev.link });
+    g.aways.push({ book: ev.book, h2, odds: a.away, link: ev.link });
+  }
+  for (const [k, g] of ahm) {
+    let best = null;
+    for (const hm of g.homes) for (const aw of g.aways) {
+      if (hm.book === aw.book) continue;
+      const lo = -hm.h1, hi = aw.h2;
+      if (!(Math.floor(hi - 1e-9) > lo)) continue; // needs an integer margin inside the band
+      const inv = 1 / hm.odds + 1 / aw.odds;
+      if (inv < 1 && (!best || inv < best.inv)) best = { hm, aw, inv };
+    }
+    if (!best) continue;
+    note('AHM', best.inv);
+    const worst = 100; // outside outcomes settle or push → no-lose
+    const r = calcArb([{ book: best.hm.book, odds: best.hm.odds }, { book: best.aw.book, odds: best.aw.odds }]);
+    const sgn = (x) => (x >= 0 ? '+' : '') + x;
+    cand(`AHM|${k}`, `AH Middle (${g.home} ${sgn(best.hm.h1)} / ${g.away} ${sgn(best.aw.h2)})`, [g.home, g.away],
+      [{ book: best.hm.book, bet: `${g.home} ${sgn(best.hm.h1)}`, odds: best.hm.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: best.hm.link },
+       { book: best.aw.book, bet: `${g.away} ${sgn(best.aw.h2)}`, odds: best.aw.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: best.aw.link }],
+      invDisplay(worst), g.kickoff, g.period, worst, g.scope, { pushProtected: true });
   }
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
@@ -1183,7 +1262,7 @@ for (const [k, grp] of g) {
         [{ book: bHome.book, bet: (bHome.home || k.split('|')[1]) + ' to win (1)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
          { book: bAway.book, bet: (bAway.away || k.split('|')[2]) + ' to win (2)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, 'FULL_MATCH', worst, 'MATCH'); }
   }
-  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB, ${mw.size} MW, ${mid.size} MID).`);
+  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB, ${mw.size} MW, ${mid.size} MID, ${xm.size} XM, ${ahm.size} AHM).`);
   // WHY-SCARCE diagnostic: "pairs" = cross-book pairs considered; "near" = within 2% of an arb.
   // pairs≈0 → coverage/matching problem; pairs>0 near=0 → market efficient or floor too high.
   const fmtStat = (m) => `${m} ${diagStats[m][0]}${diagStats[m][1] ? `(near ${diagStats[m][1]})` : ''}`;
