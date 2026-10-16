@@ -958,7 +958,7 @@ function findCandidates(all) {
   // were NEAR-MISS (within 2% of an arb). Logged each cycle so "arbs are scarce"
   // is diagnosable: pairs≈0 = coverage/matching; pairs>0 near=0 = efficient market
   // or floor too high; near>0 = arbs are close, latency/floor is the gate.
-  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0], 'MW': [0, 0] };
+  const diagStats = { '1X2': [0, 0], 'OU': [0, 0], 'CR': [0, 0], 'DC': [0, 0], 'AH': [0, 0], 'BTTS': [0, 0], 'DNB': [0, 0], 'MW': [0, 0], 'MID': [0, 0] };
   const note = (m, inv) => { diagStats[m][0]++; if (inv < 1.02) diagStats[m][1]++; };
 
   // 1X2 grouping — league + youth/senior aware key so same-name matches in
@@ -1002,6 +1002,40 @@ for (const [k, grp] of g) {
     if (inv < 1) { const r = calcArb([{ book: over.book, odds: over.odds }, { book: under.book, odds: under.odds }]); const hcp = grp.matches[0].hcp; const worst = worstPayoutFor2Way(hcp, inv); const asian = isQuarterLine(hcp) ? ` (Asian ${asianSplitDisplay(hcp)})` : ''; const intSuffix = isIntegerLine(hcp) ? ' 🛡️no-lose' : ''; cand(`OU|${k}`, `Over/Under ${hcp} Goals${asian}${intSuffix}`, [k.split('|')[0], k.split('|')[1]],
       [{ book: over.book, bet: `Over ${hcp} goals${asian}`, odds: over.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: over.link },
        { book: under.book, bet: `Under ${hcp} goals${asian}`, odds: under.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: under.link }], invDisplay(worst), grp.matches[0].kickoff, pair.period, worst, pair.scope, { pushProtected: isIntegerLine(hcp) }); }
+   }
+
+  // ── MIDDLE finder: Over L1 (book A) + Under L2 (book B) with L1 < L2 ──
+  // The SAME-LINE detector above never sees these. When the two lines differ there is a
+  // band (L1 < total < L2) where BOTH legs win. If inv = 1/overA + 1/underB < 1, the two
+  // OUTSIDE outcomes already break even or better → risk-free profit, PLUS the middle
+  // band pays both legs (a bonus). This is a strictly-dominant arb the same-line scan misses.
+  const mid = new Map();
+  for (const ev of all) {
+    for (const o of ev.ou || []) {
+      if (!o.hcp || !o.over || !o.under) continue;
+      if (ev.book === 'betfrenzy' && isQuarterLine(o.hcp)) continue;
+      const k = `${norm(ev.home)}|${norm(ev.away)}|${canonLeague(ev.league)}|${ev.period || PERIOD.UNKNOWN}|${o.scope || ev.scope || SCOPE.UNKNOWN}|${dayOf(ev.kickoff)}`;
+      const g = mid.get(k) || mid.set(k, { overs: [], unders: [], home: ev.home, away: ev.away, kickoff: ev.kickoff, period: ev.period, scope: o.scope || ev.scope }).get(k);
+      g.overs.push({ book: ev.book, line: parseFloat(o.hcp), odds: o.over, link: ev.link });
+      g.unders.push({ book: ev.book, line: parseFloat(o.hcp), odds: o.under, link: ev.link });
+    }
+  }
+  for (const [k, g] of mid) {
+    let best = null;
+    for (const ov of g.overs) for (const un of g.unders) {
+      if (ov.book === un.book) continue;
+      if (!(ov.line < un.line)) continue;           // need a gap → a middle band
+      const inv = 1 / ov.odds + 1 / un.odds;
+      if (inv < 1 && (!best || inv < best.inv)) best = { ov, un, inv };
+    }
+    if (!best) continue;
+    note('MID', best.inv);
+    const worst = 100 / best.inv;                   // outside outcomes settle fully (>100)
+    const r = calcArb([{ book: best.ov.book, odds: best.ov.odds }, { book: best.un.book, odds: best.un.odds }]);
+    cand(`MID|${k}`, `🜂 Middle — Over ${best.ov.line} / Under ${best.un.line}`, [g.home, g.away],
+      [{ book: best.ov.book, bet: `Over ${best.ov.line} goals`, odds: best.ov.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: best.ov.link },
+       { book: best.un.book, bet: `Under ${best.un.line} goals`, odds: best.un.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: best.un.link }],
+      invDisplay(worst), g.kickoff, g.period, worst, g.scope);
   }
 
 // ── Corners grouping (2-way over/under corners) — cross-book ──
@@ -1149,7 +1183,7 @@ for (const [k, grp] of g) {
         [{ book: bHome.book, bet: (bHome.home || k.split('|')[1]) + ' to win (1)', odds: bHome.odds, stake: r.stakes[0].stake, payout: r.stakes[0].payout, link: bHome.link },
          { book: bAway.book, bet: (bAway.away || k.split('|')[2]) + ' to win (2)', odds: bAway.odds, stake: r.stakes[1].stake, payout: r.stakes[1].payout, link: bAway.link }], invDisplay(worst), grp.matches[0].kickoff, 'FULL_MATCH', worst, 'MATCH'); }
   }
-  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB, ${mw.size} MW).`);
+  console.log(`[Arb] Candidates: ${found.length} (${g.size} 1X2, ${ou.size} O/U, ${cr.size} Corners, ${dc.size} DC, ${ah.size} AH, ${bts.size} BTTS, ${dnb.size} DNB, ${mw.size} MW, ${mid.size} MID).`);
   // WHY-SCARCE diagnostic: "pairs" = cross-book pairs considered; "near" = within 2% of an arb.
   // pairs≈0 → coverage/matching problem; pairs>0 near=0 → market efficient or floor too high.
   const fmtStat = (m) => `${m} ${diagStats[m][0]}${diagStats[m][1] ? `(near ${diagStats[m][1]})` : ''}`;
