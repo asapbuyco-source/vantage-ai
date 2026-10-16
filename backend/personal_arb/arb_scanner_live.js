@@ -1296,10 +1296,18 @@ async function scan() {
         }
         console.log(`[AutoBet] daily limit reached (${botConfig.autoPlacedToday}) — skipping placement`);
       } else {
-        // Both legs must be on betfrenzy/betpawa; executeArb reads live balances and
-// sizes each stake from the ARB RATIO (bounded by per-book caps + max total),
-// prepares both slips, and only confirms when BOTH are ready (no naked bet).
-        const exec = await executeArb(best, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, balancePct: botConfig.balancePct || 10, dryRun: false });
+        // AUTO-BET eligibility: BOTH legs must be on betfrenzy/betpawa. 🛡️ push-protected
+        // (no-lose) opportunities are auto-bet ONLY when pushmode=auto, else alert-only.
+        const eligible = aligned.filter(c =>
+          c.legs.every(l => ['betfrenzy', 'betpawa'].includes(l.book)) &&
+          (!c.pushProtected || botConfig.pushMode === 'auto'));
+        if (!eligible.length) {
+          if (aligned.some(c => c.pushProtected)) console.log('[AutoBet] no auto-eligible candidate (push-protected = alert-only)');
+        } else {
+        const cand = eligible[0];
+        // 🛡️ no-lose positions size from pushpct; normal arbs from balancepct.
+        const pct = cand.pushProtected ? (botConfig.pushPct || 40) : (botConfig.balancePct || 10);
+        const exec = await executeArb(cand, { caps: botConfig.bankrolls, maxTotal: botConfig.autoMaxTotal || 0, balancePct: pct, dryRun: false });
         // Cache the live balances for the Telegram display.
         if (exec.balances && Object.keys(exec.balances).length) { Object.assign(botConfig.lastBalances, exec.balances); saveConfig(); }
         for (const r of exec.results) {
@@ -1319,6 +1327,7 @@ async function scan() {
         } else {
           await sendTelegram(`⏭️ AUTO-ARB SKIPPED — ${exec.reason || 'not executed'} (nothing placed)`);
           console.log(`[AutoBet] skipped: ${exec.reason}`);
+        }
         }
       }
     }

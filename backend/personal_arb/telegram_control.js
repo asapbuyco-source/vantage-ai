@@ -37,6 +37,8 @@ const DEFAULT_CONFIG = {
   autoMaxStake: 0,     // 0 = use per-book bankroll anchor (per-book cap)
   autoMaxTotal: 0,     // 0 = no global cap; else max TOTAL staked per arb
   balancePct: 10,      // % of each live balance used when sizing auto-bets
+  pushMode: 'alert',   // 'alert' = 🛡️ no-lose opportunities are ALERT-ONLY; 'auto' = also auto-bet
+  pushPct: 40,         // % of live balance used for 🛡️ no-lose when pushMode = auto
   autoDailyLimit: 5,   // max confirmed bets per day — hard kill-switch
   autoDay: null,       // YYYY-MM-DD of the counter
   autoPlacedToday: 0,  // confirmed bets placed today
@@ -245,6 +247,8 @@ const HELP = [
   'amounts  show all anchors',
   'maxtotal <XAF>  max total per arb',
   'balancepct <n>  % of live balance per arb',
+  'pushmode alert|auto  🛡️ no-lose: alert-only or also auto-bet',
+  'pushpct <n>  sizing for 🛡️ no-lose arbs',
   '',
   '📉  ALERTS',
   'minroi <pct>  alert floor (e.g. minroi 2)',
@@ -357,6 +361,23 @@ export function handleMessage(text) {
     config.balancePct = pct;
     saveConfig();
     return `✅ Auto-bet sizing = ${pct}% of each live balance (betfrenzy + betpawa).`;
+  }
+
+  m2 = lower.match(/^(?:\/)?pushmode\s+(alert|auto)$/);
+  if (m2) {
+    config.pushMode = m2[1];
+    saveConfig();
+    return m2[1] === 'alert'
+      ? '🛡️ No-lose (push-protected) opportunities = ALERT ONLY — you place them yourself.'
+      : '🛡️ No-lose opportunities will ALSO be auto-bet (sized at pushpct%).';
+  }
+  m2 = lower.match(/^(?:\/)?pushpct\s+([\d.,]+)$/);
+  if (m2) {
+    const pct = parseFloat(m2[1].replace(',', '.'));
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return 'Usage: pushpct <1-100> — sizing for 🛡️ no-lose arbs when pushmode=auto. e.g. "pushpct 40"';
+    config.pushPct = pct;
+    saveConfig();
+    return `✅ 🛡️ no-lose sizing = ${pct}% of live balance (when pushmode=auto).`;
   }
 
   // ── Credential login commands (raw text — passwords are case-sensitive) ──
