@@ -628,6 +628,15 @@ export const initScheduler = () => {
             } catch (e) {
                 logger.error({ error: e }, '[Scheduler] Lineup sync error');
             }
+            // ESPN supplement: fill lineups/{fixtureId} the paid source left empty.
+            try {
+                const { syncEspnLineups } = await import('./espn_lineups.js');
+                const lagos = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10); // Africa/Lagos = UTC+1
+                const r = await syncEspnLineups(lagos);
+                logger.info(`[Scheduler] ESPN lineups: updated ${r.updated}/${r.checked}`);
+            } catch (e) {
+                logger.warn({ error: e.message }, '[Scheduler] ESPN lineup supplement failed');
+            }
         }),
         { timezone: 'Africa/Lagos' }
     );

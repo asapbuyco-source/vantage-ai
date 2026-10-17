@@ -5,7 +5,7 @@ FROM node:22-slim
 
 # Python 3 for the quant engine
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3 python3-pip python3-dev build-essential ca-certificates \
+      python3 python3-pip python3-dev build-essential ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

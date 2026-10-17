@@ -524,6 +524,24 @@ app.get('/api/espn/scoreboard', async (req, res) => {
     }
 });
 
+// GET /api/espn/match?home=&away=&date=YYYY-MM-DD — resolve our fixture to an ESPN
+// event and return lineups + stats (for the match-details page). Public, cached.
+app.get('/api/espn/match', async (req, res) => {
+    try {
+        const home = String(req.query.home || '');
+        const away = String(req.query.away || '');
+        const date = req.query.date ? String(req.query.date) : undefined;
+        const { findEvent, fetchSummary } = await import('./backend/espn_client.js');
+        const found = await findEvent({ home, away, date });
+        if (!found) return res.status(404).json({ ok: false, error: 'espn_match_not_found' });
+        const summary = await fetchSummary(found.league, found.event.id);
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json({ ok: true, league: found.league, event: found.event, lineups: summary.lineups, keyEvents: summary.keyEvents });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
+
 // GET /api/stats/record?days=30 — real track record from graded predictions:
 // win rate AND flat-stake ROI (odds-weighted) + per-market breakdown. Public, cached.
 app.get('/api/stats/record', async (req, res) => {

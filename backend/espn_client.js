@@ -76,4 +76,28 @@ export async function fetchSummary(league, eventId) {
   return { lineups, boxscore: j.boxscore || null, header: j.header || null, keyEvents: j.keyEvents || [] };
 }
 
-export default { fetchScoreboard, fetchSoccerHeader, fetchSummary, ESPN_LEAGUES };
+const _norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Resolve our prediction (team names + date) to an ESPN event. Tries the given
+ * leagues, else all known leagues. Used to pull lineups/stats for a fixture.
+ */
+export async function findEvent({ home, away, date, leagues } = {}) {
+  const hn = _norm(home), an = _norm(away);
+  if (!hn || !an) return null;
+  const codes = (leagues && leagues.length) ? leagues : Object.values(ESPN_LEAGUES);
+  for (const code of codes) {
+    let evs = [];
+    try { evs = await fetchScoreboard(code, { date }); } catch (_) { continue; }
+    for (const e of evs) {
+      const eh = _norm(e.home), ea = _norm(e.away);
+      if (!eh || !ea) continue;
+      if ((eh.includes(hn) || hn.includes(eh)) && (ea.includes(an) || an.includes(ea))) {
+        return { league: code, event: e };
+      }
+    }
+  }
+  return null;
+}
+
+export default { fetchScoreboard, fetchSoccerHeader, fetchSummary, findEvent, ESPN_LEAGUES };
