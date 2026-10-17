@@ -509,6 +509,19 @@ function adminAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized — valid x-admin-token or Bearer JWT required' });
 }
 
+// GET /api/admin/betmines-test?url=... — verify the BetMines client in-container
+// (Cloudflare blocks Node; curl + BETMINES_PROXY is the transport). Admin-only.
+app.get('/api/admin/betmines-test', adminAuth, async (req, res) => {
+    try {
+        const { fetchBetminesFixtures } = await import('./backend/betmines_client.js');
+        const url = String(req.query.url || 'https://betmines.com/football-predictions-today');
+        const fixtures = await fetchBetminesFixtures(url);
+        return res.json({ ok: fixtures.length > 0, count: fixtures.length, proxy: !!(process.env.BETMINES_PROXY), sample: fixtures.slice(0, 3) });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 200) });
+    }
+});
+
 // ── ESPN free data (no key, no browser) — supplements API-Football. Public, cached. ──
 // GET /api/espn/scoreboard?league=eng.1&date=YYYY-MM-DD
 app.get('/api/espn/scoreboard', async (req, res) => {
