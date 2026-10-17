@@ -289,6 +289,73 @@ def _fetch_results_from_football_data_org(date_str: str, predictions: list) -> d
     return results
 
 
+# ESPN official slug map (free, no key, no browser). Matched loosely against our
+# league names so we fetch only the leagues our predictions actually need.
+_ESPN_SLUGS = {
+    "premier league": "eng.1", "english premier league": "eng.1", "championship": "eng.2",
+    "la liga": "esp.1", "laliga": "esp.1", "segunda": "esp.2",
+    "serie a": "ita.1", "bundesliga": "ger.1", "ligue 1": "fra.1",
+    "champions league": "uefa.champions", "europa league": "uefa.europa",
+    "eredivisie": "ned.1", "primeira": "por.1", "mls": "usa.1",
+    "libertadores": "conmebol.libertadores", "world cup": "fifa.world",
+}
+
+
+def _fetch_results_from_espn(date_str: str, predictions: list) -> dict:
+    """
+    ESPN free results (no API key, no cap, no browser). Fills gaps left by
+    API-Football / football-data.org. Matched by team name downstream.
+    """
+    try:
+        import requests
+    except Exception:
+        return {}
+    slugs = []
+    for p in predictions:
+        lg = (p.get("league") or "").lower()
+        for k, v in _ESPN_SLUGS.items():
+            if k in lg:
+                slugs.append(v)
+    # Always probe the big five + UCL so a missing/odd league name still gets covered.
+    slugs += ["eng.1", "esp.1", "ita.1", "ger.1", "fra.1", "uefa.champions"]
+    slugs = list(dict.fromkeys(slugs))
+    d = date_str.replace("-", "")
+    results = {}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0 Safari/537.36"}
+    for slug in slugs:
+        try:
+            r = requests.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard?dates={d}",
+                headers=headers, timeout=12,
+            )
+            if r.status_code != 200:
+                continue
+            for ev in r.json().get("events", []):
+                comp = (ev.get("competitions") or [{}])[0]
+                st = comp.get("status", {}) or ev.get("status", {})
+                if (st.get("type") or {}).get("state") != "post":
+                    continue
+                cs = comp.get("competitors", [])
+                home = next((c for c in cs if c.get("homeAway") == "home"), None)
+                away = next((c for c in cs if c.get("homeAway") == "away"), None)
+                if not home or not away:
+                    continue
+                hg, ag = home.get("score"), away.get("score")
+                if hg is None or ag is None:
+                    continue
+                hn = (home.get("team", {}).get("displayName") or "").lower().strip()
+                an = (away.get("team", {}).get("displayName") or "").lower().strip()
+                results[f"espn_{ev.get('id')}"] = {
+                    "home_goals": int(hg), "away_goals": int(ag), "state": "FT",
+                    "closing_odds": {}, "home_name": hn, "away_name": an,
+                }
+        except Exception as e:
+            print(f"[Grading-ESPN] {slug} error: {e}", file=sys.stderr)
+    if results:
+        print(f"[Grading-ESPN] ESPN returned {len(results)} finished matches for {date_str}")
+    return results
+
+
 
 
 def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
@@ -393,6 +460,15 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
         res1 = _fetch_results_from_football_data_org(date_str, predictions) or {}
         res2 = _fetch_results_from_football_data_org(next_date_str, predictions) or {}
         results_map = {**res1, **res2}
+
+    # ── Step 3b: ESPN (free, no key) — ALWAYS merged to fill any gaps ────────
+    # API-Football keys win on collision; ESPN adds the fixtures the paid source missed.
+    try:
+        espn_res = _fetch_results_from_espn(date_str, predictions) or {}
+        if espn_res:
+            results_map = {**espn_res, **results_map}
+    except Exception as e:
+        print(f"[Grading] ESPN fallback error: {e}", file=sys.stderr)
 
     # ── Step 4: Enrich with real closing odds (for CLV) ──────────────────────
     # Only fetch odds for fixtures we are actually grading, to bound API calls.
