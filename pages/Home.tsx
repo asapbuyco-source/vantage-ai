@@ -708,10 +708,15 @@ export const Home: React.FC<HomeProps> = () => {
                                 const locked = !isVip && pi >= 1; // first pick free, the rest VIP
                                 if (locked) {
                                   return (
-                                    <div key={pi} onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="flex items-center justify-between gap-2 cursor-pointer">
-                                      <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 truncate blur-[4px] select-none">{plainMarket(p.name)}</span>
-                                      <span className="flex items-center gap-1 shrink-0 text-[9px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/25 px-2 py-0.5 rounded-full">
-                                        <Lock size={9} /> VIP
+                                    <div key={pi} onClick={(e) => { e.stopPropagation(); navigate('/vip'); }}
+                                      className="group flex items-center justify-between gap-2 rounded-lg border border-vantage-purple/25 bg-gradient-to-r from-vantage-purple/10 via-vantage-purple/5 to-transparent px-2.5 py-1.5 cursor-pointer hover:border-vantage-purple/60 hover:from-vantage-purple/20 transition-all">
+                                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-vantage-purple/90 truncate">
+                                        <Lock size={10} className="shrink-0 opacity-80" />
+                                        <span className="truncate">{plainMarket(p.name)}</span>
+                                      </span>
+                                      <span className="flex items-center gap-1.5 shrink-0">
+                                        <span className="text-[11px] font-black font-mono text-vantage-purple/60 blur-[3px] select-none">{Math.round(p.prob * 100)}%</span>
+                                        <span className="text-[8px] font-black uppercase tracking-wide text-white bg-vantage-purple px-1.5 py-0.5 rounded shadow-sm">VIP</span>
                                       </span>
                                     </div>
                                   );
@@ -731,12 +736,17 @@ export const Home: React.FC<HomeProps> = () => {
                             })()}
                             {/* Guarantee a gate on EVERY match, even ones with a single pick */}
                             {!isVip && getTopProbPicks(match).length <= 1 && (
-                              <div onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="flex items-center justify-between gap-2 cursor-pointer">
-                                <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 truncate blur-[4px] select-none">
-                                  {language === 'fr' ? 'Mise exacte & cote optimale' : 'Exact stake & best odds'}
+                              <div onClick={(e) => { e.stopPropagation(); navigate('/vip'); }}
+                                className="group flex items-center justify-between gap-2 rounded-lg border border-vantage-purple/25 bg-gradient-to-r from-vantage-purple/10 via-vantage-purple/5 to-transparent px-2.5 py-1.5 cursor-pointer hover:border-vantage-purple/60 hover:from-vantage-purple/20 transition-all">
+                                <span className="flex items-center gap-1.5 text-[11px] font-bold text-vantage-purple/90 truncate">
+                                  <Lock size={10} className="shrink-0 opacity-80" />
+                                  <span className="truncate">
+                                    {language === 'fr' ? 'Mise exacte & cote optimale' : 'Exact stake & best odds'}
+                                  </span>
                                 </span>
-                                <span className="flex items-center gap-1 shrink-0 text-[9px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/25 px-2 py-0.5 rounded-full">
-                                  <Lock size={9} /> VIP
+                                <span className="flex items-center gap-1.5 shrink-0">
+                                  <span className="text-[11px] font-black font-mono text-vantage-purple/60 blur-[3px] select-none">00</span>
+                                  <span className="text-[8px] font-black uppercase tracking-wide text-white bg-vantage-purple px-1.5 py-0.5 rounded shadow-sm">VIP</span>
                                 </span>
                               </div>
                             )}
