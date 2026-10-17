@@ -324,6 +324,50 @@ fetchDetails();
                         </div>
                     </div>
 
+                    {/* Highest Value Bet — the EV-best pick, with model-vs-market math + method */}
+                    {(() => {
+                        const market = match.prediction_en || match.prediction || match.bet_type || '';
+                        const modelProb = Number((match as any).calibrated_probability ?? match.probability ?? 0); // 0..1
+                        const odds = Number(match.odds) || 0;
+                        if (!market || odds <= 1) return null;
+                        const implied = 1 / odds;
+                        const edge = modelProb > 0 ? (modelProb * odds - 1) * 100 : null;
+                        const isValue = edge != null && edge > 0;
+                        return (
+                            <div className="relative rounded-xl overflow-hidden mb-4 border border-vantage-purple/25 bg-gradient-to-r from-vantage-purple/15 to-vantage-bg">
+                                <div className="relative z-10 px-4 py-3">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[10px] font-bold text-vantage-purple uppercase tracking-widest flex items-center gap-1.5">
+                                            <Crown size={12} /> {language === 'fr' ? 'MEILLEUR VALUE BET' : 'HIGHEST VALUE BET'}
+                                        </span>
+                                        {isValue && (
+                                            <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+                                                +{edge!.toFixed(0)}% {language === 'fr' ? 'AVANTAGE' : 'EDGE'}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-bold text-white truncate">{plainMarket(market)}</span>
+                                        <span className="text-sm font-black font-mono text-white shrink-0">{odds.toFixed(2)}</span>
+                                    </div>
+                                    <div className="mt-1.5 flex items-center gap-3 text-[10px]">
+                                        <span className="text-gray-400">
+                                            {language === 'fr' ? 'Modèle' : 'Model'} <b className="text-emerald-400">{modelProb > 0 ? Math.round(modelProb * 100) : '—'}%</b>
+                                        </span>
+                                        <span className="text-gray-400">
+                                            {language === 'fr' ? 'Cotes impliquent' : 'Odds imply'} <b className="text-gray-300">{Math.round(implied * 100)}%</b>
+                                        </span>
+                                    </div>
+                                    <p className="text-[9px] text-gray-500 mt-1.5">
+                                        {language === 'fr'
+                                            ? 'Poisson + Elo + forme + xG : la probabilité du modèle comparée à celle implicite des cotes.'
+                                            : 'Poisson + Elo + form + xG ensemble — our model probability vs the probability implied by the odds.'}
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {/* Other Good Markets — only our statistically strongest, direction-aligned markets */}
                     {(() => {
                         // Direction of the prediction: favored side + goals lean
