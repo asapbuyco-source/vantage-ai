@@ -61,11 +61,8 @@ _MARKET_KEY_MAP = {
     "AH Away +0.5": "AH Away +0.5",
     "Double Chance (X2)": "Double Chance (X2)",
     # New markets — calibration seeds added 2026-07-30
-    # (full-match Over/Under 0.5 removed — odds too small, nobody bets them; FH 0.5 kept)
-    "Over 4.5 Goals": "over45",
-    "Under 4.5 Goals": "under45",
+    # (0.5 and 4.5 lines REMOVED 2026-10 — near-certain / near-impossible, worthless picks)
     "Over 1.5 FH Goals": "fh_over15",
-    "Over 0.5 FH Goals": "fh_over05",
     "BTTS FH": "fh_btts",
     "Home Win FH": "fh_home_win",
     "Draw FH": "fh_draw",
@@ -133,17 +130,13 @@ MARKET_TO_PROB = {
     "BTTS No": "btts_no",
     # OPP-01: BTTS + Over 2.5 composite — bookmakers price this inefficiently
     "BTTS + Over 2.5": "btts_and_over25",
-    # First Half markets
-    "Over 0.5 FH Goals": "fh_over05",
+    # First Half markets (0.5 line removed 2026-10 — see note above)
     "Over 1.5 FH Goals": "fh_over15",
     "BTTS FH": "fh_btts",
     "1H Home Win": "fh_home_win",
     "1H Draw": "fh_draw",
     "1H Away Win": "fh_away_win",
-    # Over/Under 4.5 Goals (extreme goal lines) — full-match 0.5 removed:
-    # odds too small to be a real betting market (FH Over 0.5 kept above)
-    "Over 4.5 Goals": "over45",
-    "Under 4.5 Goals": "under45",
+    # Over/Under 4.5 Goals REMOVED 2026-10 — extreme lines, worthless picks.
     # OVER 8.5/9.5 CORNERS SUSPENDED (audit 2026-10): corner probabilities were
     # never actually computed (xG×1.2 heuristic ≠ market odds) — 8-12% real hit
     # vs 75-80% displayed. Removed until real bookmaker corner odds are wired.
@@ -173,8 +166,7 @@ MARKET_TO_ODDS_FIELD = {
     "BTTS No": "btts_no_odds",
     # OPP-01: BTTS + Over 2.5 composite odds field (computed in data_pipeline)
     "BTTS + Over 2.5": "btts_and_over25_odds",
-    # First Half odds
-    "Over 0.5 FH Goals": "fh_over05_odds",
+    # First Half odds (0.5 line removed 2026-10)
     "Over 1.5 FH Goals": "fh_over15_odds",
     "BTTS FH": "fh_btts_odds",
     "1H Home Win": "fh_home_odds",

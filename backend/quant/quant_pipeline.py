@@ -900,7 +900,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 ("Under 3.5 Goals", probs.under35, best_bet.odds if best_bet and "under 3.5" in best_bet.market.lower() else 0),
                 ("BTTS", probs.btts, best_bet.odds if best_bet and "btts" in best_bet.market.lower() else 0),
                 ("Over 1.5 FH Goals", probs.fh_over15, 0),
-                ("Over 0.5 FH Goals", probs.fh_over05, 0),
                 ("Home Win", probs.home_win, best_bet.odds if best_bet and "home win" in best_bet.market.lower() else 0),
                 ("Away Win", probs.away_win, best_bet.odds if best_bet and "away win" in best_bet.market.lower() else 0),
                 ("Draw", probs.draw, best_bet.odds if best_bet and "draw" in best_bet.market.lower() else 0),
