@@ -702,17 +702,44 @@ export const Home: React.FC<HomeProps> = () => {
                             )}
                           </div>
                           <div className="space-y-1.5">
-                            {getTopProbPicks(match).map((p, pi) => (
-                              <div key={pi} className="flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{plainMarket(p.name)}</span>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <div className="w-12 h-1 rounded-full bg-slate-200 dark:bg-white/10">
-                                    <motion.div className="h-full rounded-full bg-vantage-cyan" initial={{ width: 0 }} animate={{ width: `${Math.round(p.prob * 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} style={{ width: `${Math.round(p.prob * 100)}%` }} />
+                            {(() => {
+                              const picks = getTopProbPicks(match);
+                              return picks.map((p, pi) => {
+                                const locked = !isVip && pi >= 1; // first pick free, the rest VIP
+                                if (locked) {
+                                  return (
+                                    <div key={pi} onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="flex items-center justify-between gap-2 cursor-pointer">
+                                      <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 truncate blur-[4px] select-none">{plainMarket(p.name)}</span>
+                                      <span className="flex items-center gap-1 shrink-0 text-[9px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/25 px-2 py-0.5 rounded-full">
+                                        <Lock size={9} /> VIP
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div key={pi} className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{plainMarket(p.name)}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <div className="w-12 h-1 rounded-full bg-slate-200 dark:bg-white/10">
+                                        <motion.div className="h-full rounded-full bg-vantage-cyan" initial={{ width: 0 }} animate={{ width: `${Math.round(p.prob * 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} style={{ width: `${Math.round(p.prob * 100)}%` }} />
+                                      </div>
+                                      <span className="text-[11px] font-bold font-mono text-emerald-400 w-8 text-right">{Math.round(p.prob * 100)}%</span>
+                                    </div>
                                   </div>
-                                  <span className="text-[11px] font-bold font-mono text-emerald-400 w-8 text-right">{Math.round(p.prob * 100)}%</span>
-                                </div>
+                                );
+                              });
+                            })()}
+                            {/* Guarantee a gate on EVERY match, even ones with a single pick */}
+                            {!isVip && getTopProbPicks(match).length <= 1 && (
+                              <div onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="flex items-center justify-between gap-2 cursor-pointer">
+                                <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 truncate blur-[4px] select-none">
+                                  {language === 'fr' ? 'Mise exacte & cote optimale' : 'Exact stake & best odds'}
+                                </span>
+                                <span className="flex items-center gap-1 shrink-0 text-[9px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/25 px-2 py-0.5 rounded-full">
+                                  <Lock size={9} /> VIP
+                                </span>
                               </div>
-                            ))}
+                            )}
                           </div>
                           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-vantage-cyan/10">
                             {match.odds > 1 && <span className="text-[10px] font-mono text-gray-400">{Number(match.odds).toFixed(2)}x</span>}
