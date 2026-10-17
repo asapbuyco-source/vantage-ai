@@ -14,10 +14,6 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm install --no-audit --no-fund
 
-# Chromium for the SofaScore live-data scraper (headless). --with-deps pulls the
-# system libs Chromium needs. Non-fatal so a Playwright hiccup can't block deploys.
-RUN npx playwright install --with-deps chromium || echo "playwright chromium install skipped"
-
 # App source
 COPY . .
 

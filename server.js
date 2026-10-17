@@ -509,17 +509,33 @@ function adminAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorized — valid x-admin-token or Bearer JWT required' });
 }
 
-// GET /api/admin/sofascore-test — proves the SofaScore scraper works from the
-// backend (headless Chromium + residential proxy). Admin-only. Read-only.
-app.get('/api/admin/sofascore-test', adminAuth, async (req, res) => {
+// ── ESPN free data (no key, no browser) — supplements API-Football. Public, cached. ──
+// GET /api/espn/scoreboard?league=eng.1&date=YYYY-MM-DD
+app.get('/api/espn/scoreboard', async (req, res) => {
     try {
-        const { fetchLivescore } = await import('./backend/sofascore_scraper.js');
-        const proxy = process.env.SOFASCORE_PROXY || process.env.ARB_PROXY || '';
-        const sport = String(req.query.sport || 'football');
-        const matches = await fetchLivescore({ sport, proxy, timeoutMs: 80000 });
-        return res.json({ ok: matches.length > 0, count: matches.length, proxy: !!proxy, sport, sample: matches.slice(0, 8) });
+        const { fetchScoreboard } = await import('./backend/espn_client.js');
+        const league = String(req.query.league || 'eng.1');
+        const date = req.query.date ? String(req.query.date) : undefined;
+        const events = await fetchScoreboard(league, { date });
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json({ ok: true, league, count: events.length, events });
     } catch (e) {
-        return res.status(500).json({ ok: false, error: String(e).slice(0, 200) });
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
+
+// GET /api/espn/summary?league=eng.1&event=401878771  (lineups + stats)
+app.get('/api/espn/summary', async (req, res) => {
+    try {
+        const league = String(req.query.league || 'eng.1');
+        const event = String(req.query.event || '');
+        if (!event) return res.status(400).json({ ok: false, error: 'event required' });
+        const { fetchSummary } = await import('./backend/espn_client.js');
+        const data = await fetchSummary(league, event);
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json({ ok: true, league, event, data });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
     }
 });
 
