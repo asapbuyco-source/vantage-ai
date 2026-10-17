@@ -506,8 +506,10 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     category = "no_edge"
                     value_rank = "none"
             elif all_value_bets:
-                # No approved bet, but markets exist — pick the best lean
-                all_value_bets.sort(key=lambda b: b.expected_value * 0.5 + b.model_prob * 0.5, reverse=True)
+                # No approved bet, but markets exist — pick the best lean.
+                # EV-FIRST (2026-10): was 50/50 prob+EV, which dragged picks toward
+                # short-odds favourites and produced the negative track record.
+                all_value_bets.sort(key=lambda b: (b.expected_value, b.model_prob), reverse=True)
                 best_bet = all_value_bets[0]
                 # Check if it has positive EV but just failed a minor filter
                 if best_bet.expected_value > 0:
@@ -587,15 +589,22 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     if should_downgrade:
                         safe_target = SAFETY_DOWNGRADES[best_bet.market]
                         safe_bet = next((b for b in all_value_bets if b.market == safe_target), None)
-                        if safe_bet:
+                        # ROI GUARD (2026-10): only downgrade when it does NOT kill the
+                        # edge. Replacing an +EV pick with a short-odds "safe" market was
+                        # the main driver of the negative track record (DC 1X -23%, etc.).
+                        # Require the safe market to stay +EV and within 3pp of the original
+                        # EV; otherwise KEEP the EV-best pick.
+                        if safe_bet and safe_bet.expected_value > 0 and safe_bet.expected_value >= best_bet.expected_value - 0.03:
                             reasons = []
                             if is_over35: reasons.append("Over 3.5 auto-downgrade")
                             if is_risky_prob: reasons.append(f"Prob {best_bet.model_prob:.0%}")
                             if is_low_agreement: reasons.append(f"Agreement {probs.goals_confidence:.2f}" if "btts" not in m and not any(k in m for k in ["over","under"]) else f"Conf {probs.goals_confidence:.2f}")
                             if is_volatile_league: reasons.append(f"Tier {match.league_tier}")
                             reason_str = " & ".join(reasons)
-                            _safe_print(f"[QuantPipeline]   🛡️ Safety Downgrade [{reason_str}]: {best_bet.market} -> {safe_target}")
+                            _safe_print(f"[QuantPipeline]   🛡️ Safety Downgrade [{reason_str}]: {best_bet.market} → {safe_target} (EV kept {safe_bet.expected_value:.1%})")
                             best_bet = safe_bet
+                        else:
+                            _safe_print(f"[QuantPipeline]   ⚖️ Downgrade skipped for {best_bet.market} (safe {safe_target} would drop EV {best_bet.expected_value:.1%} → {safe_bet.expected_value:.1%} if safe_bet else 'n/a')")
 
             # ── Odds Staleness Guard ────────────────────────────────────────
             odds_fetched_at = match.odds.odds_fetched_at if match.odds else ""
