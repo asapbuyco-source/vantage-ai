@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Zap, Activity, ArrowRight, Lock, Globe, Clock, Calendar, Sun, Moon,
   Trophy, AlertTriangle, Hourglass, Search, SlidersHorizontal, ChevronDown,
-  Flame, TrendingUp, ChevronRight, Shield, BarChart3, Copy, Check, Share2, Target, BrainCircuit
+  Flame, TrendingUp, ChevronRight, Shield, BarChart3, Copy, Check, Share2, Target, BrainCircuit, Crown
 } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { CircularProgress } from '../components/CircularProgress';
@@ -555,6 +555,22 @@ export const Home: React.FC<HomeProps> = () => {
 
       {/* ─── MATCH LIST ─── */}
       <div className="space-y-6">
+        {!isVip && !loading && (
+          <div onClick={() => navigate('/vip')}
+            className="group flex items-center justify-between gap-3 rounded-2xl border border-vantage-purple/30 bg-gradient-to-r from-vantage-purple/15 via-vantage-purple/5 to-transparent px-4 py-3 cursor-pointer hover:border-vantage-purple/60 transition-all">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Lock size={16} className="text-vantage-purple shrink-0" />
+              <span className="text-xs font-bold text-slate-800 dark:text-white/90 leading-tight">
+                {language === 'fr'
+                  ? 'VIP débloque tous les pronostics + les mises exactes du jour.'
+                  : 'VIP unlocks every pick + today\u2019s exact stakes.'}
+              </span>
+            </div>
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-white bg-vantage-purple px-2.5 py-1 rounded-lg group-hover:bg-purple-600 transition-colors">
+              {language === 'fr' ? 'Passer VIP' : 'Upgrade'}
+            </span>
+          </div>
+        )}
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(i => (
@@ -629,8 +645,6 @@ export const Home: React.FC<HomeProps> = () => {
                   const homeProb = Math.round((match.home_win_prob || 0) * 100);
                   const drawProb = Math.round((match.draw_prob || 0) * 100);
                   const awayProb = Math.round((match.away_win_prob || 0) * 100);
-                  const isFreeMatch = freeMatchIds.has(match.id);
-                  const unlocked = isVip || isFreeMatch;
 
                   return (
                     <motion.div
@@ -675,74 +689,109 @@ export const Home: React.FC<HomeProps> = () => {
                           </div>
                         </div>
 
-                        {/* Stats row */}
-                        {unlocked ? (
-                          <div className="px-4 pb-1.5 flex justify-center gap-1 flex-wrap">
-                            {homeProb > 0 && (
-                              <>
-                                <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">H {homeProb}%</span>
-                                <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">D {drawProb}%</span>
-                                <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">A {awayProb}%</span>
-                              </>
-                            )}
-                            {match.over25_prob > 0 && <span className="text-[10px] font-mono text-vantage-cyan/80 bg-vantage-cyan/5 px-1.5 py-0.5 rounded">O2.5 {Math.round(match.over25_prob * 100)}%</span>}
-                            {match.btts_prob > 0 && <span className="text-[10px] font-mono text-amber-400/80 bg-amber-400/5 px-1.5 py-0.5 rounded">BTTS {Math.round(match.btts_prob * 100)}%</span>}
-                          </div>
-                        ) : (
-                          <div className="px-4 pb-1.5 flex justify-center">
-                            <span onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="text-[10px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/20 px-3 py-1 rounded-full cursor-pointer hover:bg-vantage-purple/20">
-                              <Lock size={9} className="inline mr-1" />{language === 'fr' ? 'Stats VIP' : 'VIP Stats'}
-                            </span>
-                          </div>
-                        )}
+                        {/* Stats row — visible on all matches */}
+                        <div className="px-4 pb-1.5 flex justify-center gap-1 flex-wrap">
+                          {homeProb > 0 && (
+                            <>
+                              <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">H {homeProb}%</span>
+                              <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">D {drawProb}%</span>
+                              <span className="text-[10px] font-mono text-slate-500 bg-black/5 dark:bg-white/[0.06] px-1.5 py-0.5 rounded">A {awayProb}%</span>
+                            </>
+                          )}
+                          {match.over25_prob > 0 && <span className="text-[10px] font-mono text-vantage-cyan/80 bg-vantage-cyan/5 px-1.5 py-0.5 rounded">O2.5 {Math.round(match.over25_prob * 100)}%</span>}
+                          {match.btts_prob > 0 && <span className="text-[10px] font-mono text-amber-400/80 bg-amber-400/5 px-1.5 py-0.5 rounded">BTTS {Math.round(match.btts_prob * 100)}%</span>}
+                        </div>
 
                         {/* Prediction — show each pick with its percentage */}
-                        {unlocked ? (
-                          <div className="mx-3 mb-3 p-3 rounded-xl bg-vantage-cyan/5 border border-vantage-cyan/15 overflow-hidden">
-                            <span className="text-[9px] text-vantage-cyan uppercase tracking-widest block mb-1.5 font-bold">{t('free.pred_label') || 'Prediction'}</span>
-                            <div className="space-y-1.5">
-                              {getTopProbPicks(match).map((p, pi) => (
-                                <div key={pi} className="flex items-center justify-between gap-2">
-                                  <span className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{plainMarket(p.name)}</span>
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    <div className="w-12 h-1 rounded-full bg-slate-200 dark:bg-white/10">
-                                      <motion.div className="h-full rounded-full bg-vantage-cyan" initial={{ width: 0 }} animate={{ width: `${Math.round(p.prob * 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} style={{ width: `${Math.round(p.prob * 100)}%` }} />
-                                    </div>
-                                    <span className="text-[11px] font-bold font-mono text-emerald-400 w-8 text-right">{Math.round(p.prob * 100)}%</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-vantage-cyan/10">
-                              {match.odds > 1 && <span className="text-[10px] font-mono text-gray-400">{Number(match.odds).toFixed(2)}x</span>}
-                              <span className="text-[10px] font-mono text-gray-400">{confidence}% match</span>
-                              {isVip && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setTicketPicks(prev => { if (prev.some(p => p.id === match.id)) return prev; return [...prev, { id: match.id, home: match.homeTeam || match.home_team || '', away: match.awayTeam || match.away_team || '', pick: pred || '', odds: Number(match.odds) || 0 }]; }); }}
-                                  className="p-1 rounded-lg bg-vantage-cyan/10 hover:bg-vantage-cyan/20 text-vantage-cyan transition-colors"
-                                  title={language === 'fr' ? 'Ajouter au ticket' : 'Add to ticket'}
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mx-3 mb-3 p-3 rounded-xl bg-vantage-purple/5 border border-vantage-purple/20">
-                            <div className="flex items-center justify-between">
-                              <div className="flex flex-col">
-                                <span className="text-[9px] text-vantage-purple uppercase tracking-widest font-bold">{t('free.pred_label') || 'Prediction'}</span>
-                                <span className="text-xs font-bold text-vantage-purple/40">{language === 'fr' ? 'Réservé VIP' : 'VIP Only'}</span>
-                              </div>
-                              <span onClick={(e) => { e.stopPropagation(); navigate('/vip'); }} className="text-[10px] font-bold text-vantage-purple bg-vantage-purple/10 border border-vantage-purple/20 px-2.5 py-1 rounded-full cursor-pointer hover:bg-vantage-purple/20 flex items-center gap-1">
-                                <Lock size={10} /> {language === 'fr' ? 'Débloquer' : 'Unlock'}
+                        <div className="mx-3 mb-3 p-3 rounded-xl bg-vantage-cyan/5 border border-vantage-cyan/15 overflow-hidden">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[9px] text-vantage-cyan uppercase tracking-widest font-bold">{t('free.pred_label') || 'Prediction'}</span>
+                            {match.category === 'safe' && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
+                                {language === 'fr' ? 'SÛR' : 'BANKER'}
                               </span>
-                            </div>
+                            )}
+                            {match.category === 'value' && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-vantage-purple/15 border border-vantage-purple/30 text-vantage-purple font-bold flex items-center gap-1">
+                                <Crown size={9} /> {language === 'fr' ? 'VALEUR VIP' : 'VIP VALUE'}
+                              </span>
+                            )}
                           </div>
-                        )}
+                          <div className="space-y-1.5">
+                            {(() => {
+                              const picks = getTopProbPicks(match);
+                              return picks.map((p, pi) => {
+                                const locked = !isVip && pi >= 1; // first pick free, the rest VIP
+                                if (locked) {
+                                  return (
+                                    <div key={pi} onClick={(e) => { e.stopPropagation(); navigate('/vip'); }}
+                                      className="group flex items-center justify-between gap-2 rounded-lg border border-vantage-purple/25 bg-gradient-to-r from-vantage-purple/10 via-vantage-purple/5 to-transparent px-2.5 py-1.5 cursor-pointer hover:border-vantage-purple/60 hover:from-vantage-purple/20 transition-all">
+                                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-vantage-purple/90 truncate">
+                                        <Lock size={10} className="shrink-0 opacity-80" />
+                                        <span className="truncate">{plainMarket(p.name)}</span>
+                                      </span>
+                                      <span className="flex items-center gap-1.5 shrink-0">
+                                        <span className="text-[11px] font-black font-mono text-vantage-purple/60 blur-[3px] select-none">{Math.round(p.prob * 100)}%</span>
+                                        <span className="text-[8px] font-black uppercase tracking-wide text-white bg-vantage-purple px-1.5 py-0.5 rounded shadow-sm">VIP</span>
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div key={pi} className="flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-slate-900 dark:text-white truncate">{plainMarket(p.name)}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <div className="w-12 h-1 rounded-full bg-slate-200 dark:bg-white/10">
+                                        <motion.div className="h-full rounded-full bg-vantage-cyan" initial={{ width: 0 }} animate={{ width: `${Math.round(p.prob * 100)}%` }} transition={{ duration: 1, delay: idx * 0.05 + 0.3 }} style={{ width: `${Math.round(p.prob * 100)}%` }} />
+                                      </div>
+                                      <span className="text-[11px] font-bold font-mono text-emerald-400 w-8 text-right">{Math.round(p.prob * 100)}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                            {/* Guarantee a gate on EVERY match, even ones with a single pick */}
+                            {!isVip && getTopProbPicks(match).length <= 1 && (
+                              <div onClick={(e) => { e.stopPropagation(); navigate('/vip'); }}
+                                className="group flex items-center justify-between gap-2 rounded-lg border border-vantage-purple/25 bg-gradient-to-r from-vantage-purple/10 via-vantage-purple/5 to-transparent px-2.5 py-1.5 cursor-pointer hover:border-vantage-purple/60 hover:from-vantage-purple/20 transition-all">
+                                <span className="flex items-center gap-1.5 text-[11px] font-bold text-vantage-purple/90 truncate">
+                                  <Lock size={10} className="shrink-0 opacity-80" />
+                                  <span className="truncate">
+                                    {language === 'fr' ? 'Mise exacte & cote optimale' : 'Exact stake & best odds'}
+                                  </span>
+                                </span>
+                                <span className="flex items-center gap-1.5 shrink-0">
+                                  <span className="text-[11px] font-black font-mono text-vantage-purple/60 blur-[3px] select-none">00</span>
+                                  <span className="text-[8px] font-black uppercase tracking-wide text-white bg-vantage-purple px-1.5 py-0.5 rounded shadow-sm">VIP</span>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-vantage-cyan/10">
+                            {match.odds > 1 && <span className="text-[10px] font-mono text-gray-400">{Number(match.odds).toFixed(2)}x</span>}
+                            <span className="text-[10px] font-mono text-gray-400">{confidence}% {language === 'fr' ? 'confiance' : 'confidence'}</span>
+                            {isVip ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setTicketPicks(prev => { if (prev.some(p => p.id === match.id)) return prev; return [...prev, { id: match.id, home: match.homeTeam || match.home_team || '', away: match.awayTeam || match.away_team || '', pick: pred || '', odds: Number(match.odds) || 0 }]; }); }}
+                                className="p-1 rounded-lg bg-vantage-cyan/10 hover:bg-vantage-cyan/20 text-vantage-cyan transition-colors"
+                                title={language === 'fr' ? 'Ajouter au ticket' : 'Add to ticket'}
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); navigate('/vip'); }}
+                                className="flex items-center gap-1 text-[9px] font-bold text-vantage-purple hover:text-purple-300 transition-colors"
+                                title={language === 'fr' ? 'Créer un accumulateur VIP' : 'Create VIP accumulator'}
+                              >
+                                <Lock size={9} /> {language === 'fr' ? 'Ticket VIP' : 'Acca VIP'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
                         <div className="px-3 pb-2.5 flex justify-center">
                           <span className="text-[9px] font-semibold text-gray-400 flex items-center gap-1">
-                            <ChevronRight size={10} /> {language === 'fr' ? 'Voir les détails' : 'Tap to view'}
+                            <ChevronRight size={10} /> {language === 'fr' ? 'Voir l\'analyse complète' : 'View full analysis'}
                           </span>
                         </div>
                       </div>

@@ -359,6 +359,12 @@ export const FreePicks: React.FC<FreePicksProps> = () => {
           </div>
           <ArrowRight size={20} className="text-white shrink-0 group-hover:translate-x-1 transition-transform" />
         </motion.button>
+        <button
+          onClick={() => navigate('/home')}
+          className="w-full py-3 text-center text-xs font-bold text-gray-400 hover:text-vantage-cyan transition-colors border-t border-white/5 bg-black/20"
+        >
+          {language === 'fr' ? 'Parcourir tous les matchs avec analyse gratuite →' : 'Browse all matches with free predictions →'}
+        </button>
       </motion.div>
     );
   };

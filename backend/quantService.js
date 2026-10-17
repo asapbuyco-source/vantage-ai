@@ -15,6 +15,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import pino from 'pino';
+import { generateAnalysis } from './analysisTemplates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const QUANT_SCRIPT = path.join(__dirname, 'quant', 'quant_pipeline.py');
@@ -30,10 +31,24 @@ const logger = pino({
 // ── AI Analysis via OpenRouter (Nemotron free model) ────────────────────────
 async function enrichWithAIAnalysis(predictions) {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
-    if (!apiKey) {
-        logger.warn('[QuantService] OPENROUTER_API_KEY not set, skipping AI analysis');
-        return predictions;
+    // ── FAST PATH (default) ──────────────────────────────────────────────────
+    // Deterministic bilingual template engine: instant, free, no rate limits,
+    // thousands of combinations. This replaces the old per-match AI (2 network
+    // calls + delays each → minutes/day). Opt back into AI with USE_AI_ANALYSIS=1.
+    const useAI = process.env.USE_AI_ANALYSIS === '1';
+    if (!useAI || !apiKey) {
+        logger.info(`[QuantService] Template analysis for ${predictions.length} predictions (fast path)`);
+        return predictions.map(pred => {
+            try {
+                const { en, fr } = generateAnalysis(pred);
+                return { ...pred, analysis_en: en, analysis_fr: fr };
+            } catch (e) {
+                const fb = pred.prediction || pred.prediction_en || `${pred.home_team} vs ${pred.away_team}`;
+                return { ...pred, analysis_en: fb, analysis_fr: fb };
+            }
+        });
     }
+    logger.warn('[QuantService] USE_AI_ANALYSIS=1 — using the slow AI path');
 
     const AI_MODEL = 'nvidia/nemotron-3-super-120b-a12b:free';
     const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -43,23 +58,34 @@ async function enrichWithAIAnalysis(predictions) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    async function callGroq(messages, temperature = 0.15, retries = 3) {
-        // Free instruct models for 2-sentence tips — Nemotron reasoning leaks "We need to output..."
-        const models = [
-            'google/gemma-4-31b-it:free',
-            'google/gemma-4-26b-a4b-it:free',
-            'nvidia/nemotron-3-super-120b-a12b:free',
+async function callGroq(messages, temperature = 0.15, retries = 3) {
+        // Provider fallback: Groq free tier first (generous limits, no card),
+        // then OpenRouter free models. Both are OpenAI-compatible.
+        const providers = [
+            ...(process.env.GROQ_API_KEY ? [{
+                name: 'groq',
+                url: 'https://api.groq.com/openai/v1/chat/completions',
+                key: process.env.GROQ_API_KEY,
+                models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+            }] : []),
+            ...(process.env.OPENROUTER_API_KEY ? [{
+                name: 'openrouter',
+                url: 'https://openrouter.ai/api/v1/chat/completions',
+                key: process.env.OPENROUTER_API_KEY,
+                models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free'],
+            }] : []),
         ];
-        for (const model of models) {
-            for (let attempt = 0; attempt < retries; attempt++) {
-                let response;
-                try {
-                    response = await fetch(AI_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            'Content-Type': 'application/json'
-                        },
+        for (const provider of providers) {
+            for (const model of provider.models) {
+                for (let attempt = 0; attempt < retries; attempt++) {
+                    let response;
+                    try {
+                        response = await fetch(provider.url, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${provider.key}`,
+                                'Content-Type': 'application/json'
+                            },
                         body: JSON.stringify({
                             model,
                             messages,
@@ -116,9 +142,10 @@ async function enrichWithAIAnalysis(predictions) {
                     if (last && last.length > 5) return last;
                 }
                 return '';
+                    }
+                }
             }
-        }
-        throw new Error('AI API error: all models failed');
+        throw new Error('AI API error: all providers failed');
     }
 
     const enriched = [];
@@ -345,6 +372,7 @@ function buildPythonEnv() {
         FOOTBALL_DATA_KEY: process.env.FOOTBALL_DATA_KEY || '',
         API_BASKETBALL_KEY: process.env.API_BASKETBALL_KEY || '',
         ODDS_API_KEY: process.env.ODDS_API_KEY || '',
+        OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY || '',
         GOOGLE_GENAI_API_KEY: process.env.GOOGLE_GENAI_API_KEY || '',
         OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
         FIREBASE_SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT || '',
@@ -518,11 +546,18 @@ export const runQuantPipeline = async (dateStr = null, dryRun = false) => {
                     // Update Firestore with enriched predictions
                     if (JSON.stringify(enrichedPredictions) !== JSON.stringify(predictions)) {
                         try {
+                            // PAYWALL: quant_predictions is publicly readable (firestore.rules).
+                            // Strip VIP-only content (AI analysis, other good markets, banker
+                            // metadata) from the PUBLIC copy so the VIP tier stays exclusive.
+                            const publicPredictions = enrichedPredictions.map(p => {
+                                const { analysis_en, analysis_fr, all_value_bets, _safest_bet, hedge_suggestion, ...pub } = p;
+                                return pub;
+                            });
                             await db.collection('quant_predictions').doc(effectiveDate).set(
-                                { predictions: enrichedPredictions },
+                                { predictions: publicPredictions },
                                 { merge: true }
                             );
-                            // Also update VIP document
+                            // VIP document keeps the full enriched payload
                             await db.collection('quant_vip').doc(effectiveDate).set(
                                 { predictions: enrichedPredictions },
                                 { merge: true }

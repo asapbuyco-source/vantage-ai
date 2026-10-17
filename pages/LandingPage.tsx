@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle, Bell } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { TeamLogo } from '../components/TeamLogo';
 import { getFirestorePredictionsOnly, getPredictionsForDate } from '../services/db';
@@ -385,6 +385,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                         </div>
                     ))}
                 </div>
+            </div>
+
+            {/* 8. Download App Section */}
+            <div className="max-w-4xl mx-auto px-4 mb-20 w-full">
+                <motion.div
+                    initial={{ opacity: 0, y: 24 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.3 }}
+                    transition={{ duration: 0.5 }}
+                    className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-vantage-purple/15 via-vantage-purple/5 to-vantage-cyan/10 border border-vantage-purple/20 p-8 md:p-12 text-center"
+                >
+                    {/* decorative glow */}
+                    <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-vantage-cyan/10 blur-[90px] pointer-events-none" />
+
+                    <div className="relative">
+                        <h2 className="text-2xl md:text-3xl font-black font-orbitron text-slate-900 dark:text-white mb-3">
+                            Get the <span className="text-vantage-purple">Vantage AI</span> App
+                        </h2>
+                        <p className="text-sm md:text-base text-gray-500 dark:text-gray-300 max-w-xl mx-auto mb-8">
+                            Your predictions, live scores and VIP signals — right on your phone.
+                            Android + Web, free forever.
+                        </p>
+
+                        <div className="flex flex-wrap justify-center gap-3 mb-8">
+                            {[
+                                { icon: <Bell size={15} />, label: 'Real-time alerts' },
+                                { icon: <TrendingUp size={15} />, label: 'Live picks & EV' },
+                                { icon: <ShieldCheck size={15} />, label: 'Bankroll safeguards' },
+                            ].map((f, i) => (
+                                <span key={i} className="flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-full bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-slate-700 dark:text-gray-300">
+                                    <span className="text-vantage-cyan">{f.icon}</span> {f.label}
+                                </span>
+                            ))}
+                        </div>
+
+                        {/* Google Play button */}
+                        <a
+                            href="https://play.google.com/store/apps/details?id=com.vantageai.app&hl=en"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-4 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all px-6 py-3 text-white shadow-xl shadow-slate-900/20"
+                        >
+                            <svg viewBox="0 0 512 512" className="w-9 h-9 shrink-0 fill-current" aria-hidden="true">
+                                <path d="M99.617 8.057a50.191 50.191 0 0 0-19.372 5.286l194.268 261.64L468.514 13.343a50.19 50.19 0 0 0-19.372-5.286H99.617zm-25.898 12.06A50.191 50.191 0 0 0 64 39.224v433.552c0 8.47 3.397 16.88 9.584 23.41l235.02-252.962L73.719 20.117zM320 276.09l-50.73 54.607L339 403.3l124.264-71.47-57.61-55.74L320 276.09z"/>
+                            </svg>
+                            <span className="text-left leading-tight">
+                                <span className="block text-[9px] uppercase tracking-widest text-gray-300">Get it on</span>
+                                <span className="block text-lg font-bold font-sans">Google Play</span>
+                            </span>
+                        </a>
+                    </div>
+                </motion.div>
             </div>
 
             {/* Footer Minimal */}

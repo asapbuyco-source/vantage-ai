@@ -5,8 +5,8 @@ Approved league tiers and IDs for the quant pipeline.
 Only matches from these leagues are analyzed.
 
 Two ID namespaces are tracked:
-  - Sportmonks / API-Football IDs (legacy, used by api_football provider)
-  - Sport Highlights API IDs     (used by sport_highlights provider)
+  - API-Football v3 IDs (primary — the pipeline's fixture source)
+  - Sportmonks IDs (legacy, for cache-based backtesting)
 """
 
 # ── Tier 1: Top European + Global competitions ─────────────────────────────

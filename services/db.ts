@@ -78,6 +78,9 @@ export const normalizeQuantPrediction = (p: any): any => {
         homeTeamLogo: p.home_team_logo ?? '',
         awayTeamLogo: p.away_team_logo ?? '',
         league: p.league ?? '',
+        // League tier + other good markets (used by AI ticket generator / concierge)
+        leagueTier: p.league_tier ?? p.leagueTier ?? 5,
+        allValueBets: p.all_value_bets ?? p.allValueBets ?? [],
         // Time: prefer human-readable kickoff_local; fall back to kickoff_utc snippet
         time: p.time ?? p.kickoff_local ?? (p.kickoff_utc ? p.kickoff_utc.substring(11, 16) : ''),
         // Prediction labels expected by AccumulatorModal / FreePicks / Home

@@ -32,7 +32,7 @@ except ImportError:
     fetch_match_result_free = None
 
 
-# (Sportmonks helpers removed — using sport-highlights-api instead)
+# (Sportmonks helpers removed — API-Football + football-data.org are the result sources)
 
 FINISHED_STATES = {"FT", "AET", "PEN", "FINS"}
 VOIDED_STATES = {"CANCL", "POSTP", "INT", "ABANDONED", "TBA", "NS"}
@@ -108,7 +108,7 @@ def resolveMarket(market: str) -> MarketType:
     return MarketType.UNKNOWN
 
 
-# (Sportmonks helper functions removed — using sport-highlights-api instead)
+# (Sportmonks helper functions removed — API-Football is the primary result source)
 
 
 def _compute_clv(pick_odds: float, closing_odds: float) -> float:
@@ -145,6 +145,36 @@ def _compute_ev(pick_odds: float, win_prob: float) -> float:
         return 0.0
     return (win_prob * pick_odds) - (1.0 - win_prob)
 
+def _enrich_closing_odds(results_map: dict, fixture_ids: set) -> None:
+    """
+    Populate closing_odds for graded fixtures so CLV can be computed.
+    API-Football retains the pre-match odds for a fixture; at grading time the
+    odds endpoint returns the last posted odds. Best-effort: on any failure the
+    entry keeps closing_odds = {} and CLV is simply skipped.
+    """
+    try:
+        from ev_engine import MARKET_TO_ODDS_FIELD
+        from api_football_client import fetch_odds_for_fixture
+    except ImportError:
+        return
+    for fid in fixture_ids:
+        result = results_map.get(fid)
+        if not result or result.get("closing_odds"):
+            continue
+        try:
+            odds_data = fetch_odds_for_fixture(int(fid)) or {}
+            closing = {
+                market: float(odds_data[field])
+                for market, field in MARKET_TO_ODDS_FIELD.items()
+                if odds_data.get(field)
+            }
+            if closing:
+                result["closing_odds"] = closing
+        except (ValueError, TypeError):
+            continue
+        except Exception as e:
+            print(f"[Grading] Closing-odds fetch failed for fixture {fid}: {e}", file=sys.stderr)
+
 def _has_negative_ev(pred: dict) -> bool:
     """
     Check if a prediction has negative expected value.
@@ -154,11 +184,13 @@ def _has_negative_ev(pred: dict) -> bool:
     if pick_odd <= 1.0:
         return False
     market = pred.get("bet_type", "")
-    home_prob = float(pred.get("home_prob", 0) or 0)
-    away_prob = float(pred.get("away_prob", 0) or 0)
+    # NOTE: pipeline stores home_win_prob / away_win_prob / draw_prob / btts_prob
+    # (the old home_prob/away_prob/btts_yes_prob keys never existed → filter was inert)
+    home_prob = float(pred.get("home_win_prob", 0) or 0)
+    away_prob = float(pred.get("away_win_prob", 0) or 0)
     draw_prob = float(pred.get("draw_prob", 0) or 0)
     over25_prob = float(pred.get("over25_prob", 0) or 0)
-    btts_yes_prob = float(pred.get("btts_yes_prob", 0) or 0)
+    btts_yes_prob = float(pred.get("btts_prob", 0) or 0)
     win_prob = 0.0
     if "home win" in market.lower() and home_prob > 0:
         win_prob = home_prob
@@ -254,6 +286,73 @@ def _fetch_results_from_football_data_org(date_str: str, predictions: list) -> d
                 }
     except Exception as e:
         print(f"[Grading-FD] football-data.org error: {e}", file=sys.stderr)
+    return results
+
+
+# ESPN official slug map (free, no key, no browser). Matched loosely against our
+# league names so we fetch only the leagues our predictions actually need.
+_ESPN_SLUGS = {
+    "premier league": "eng.1", "english premier league": "eng.1", "championship": "eng.2",
+    "la liga": "esp.1", "laliga": "esp.1", "segunda": "esp.2",
+    "serie a": "ita.1", "bundesliga": "ger.1", "ligue 1": "fra.1",
+    "champions league": "uefa.champions", "europa league": "uefa.europa",
+    "eredivisie": "ned.1", "primeira": "por.1", "mls": "usa.1",
+    "libertadores": "conmebol.libertadores", "world cup": "fifa.world",
+}
+
+
+def _fetch_results_from_espn(date_str: str, predictions: list) -> dict:
+    """
+    ESPN free results (no API key, no cap, no browser). Fills gaps left by
+    API-Football / football-data.org. Matched by team name downstream.
+    """
+    try:
+        import requests
+    except Exception:
+        return {}
+    slugs = []
+    for p in predictions:
+        lg = (p.get("league") or "").lower()
+        for k, v in _ESPN_SLUGS.items():
+            if k in lg:
+                slugs.append(v)
+    # Always probe the big five + UCL so a missing/odd league name still gets covered.
+    slugs += ["eng.1", "esp.1", "ita.1", "ger.1", "fra.1", "uefa.champions"]
+    slugs = list(dict.fromkeys(slugs))
+    d = date_str.replace("-", "")
+    results = {}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0 Safari/537.36"}
+    for slug in slugs:
+        try:
+            r = requests.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/soccer/{slug}/scoreboard?dates={d}",
+                headers=headers, timeout=12,
+            )
+            if r.status_code != 200:
+                continue
+            for ev in r.json().get("events", []):
+                comp = (ev.get("competitions") or [{}])[0]
+                st = comp.get("status", {}) or ev.get("status", {})
+                if (st.get("type") or {}).get("state") != "post":
+                    continue
+                cs = comp.get("competitors", [])
+                home = next((c for c in cs if c.get("homeAway") == "home"), None)
+                away = next((c for c in cs if c.get("homeAway") == "away"), None)
+                if not home or not away:
+                    continue
+                hg, ag = home.get("score"), away.get("score")
+                if hg is None or ag is None:
+                    continue
+                hn = (home.get("team", {}).get("displayName") or "").lower().strip()
+                an = (away.get("team", {}).get("displayName") or "").lower().strip()
+                results[f"espn_{ev.get('id')}"] = {
+                    "home_goals": int(hg), "away_goals": int(ag), "state": "FT",
+                    "closing_odds": {}, "home_name": hn, "away_name": an,
+                }
+        except Exception as e:
+            print(f"[Grading-ESPN] {slug} error: {e}", file=sys.stderr)
+    if results:
+        print(f"[Grading-ESPN] ESPN returned {len(results)} finished matches for {date_str}")
     return results
 
 
@@ -361,6 +460,19 @@ def grade_predictions(date_str: str, force_regrade: bool = False) -> dict:
         res1 = _fetch_results_from_football_data_org(date_str, predictions) or {}
         res2 = _fetch_results_from_football_data_org(next_date_str, predictions) or {}
         results_map = {**res1, **res2}
+
+    # ── Step 3b: ESPN (free, no key) — ALWAYS merged to fill any gaps ────────
+    # API-Football keys win on collision; ESPN adds the fixtures the paid source missed.
+    try:
+        espn_res = _fetch_results_from_espn(date_str, predictions) or {}
+        if espn_res:
+            results_map = {**espn_res, **results_map}
+    except Exception as e:
+        print(f"[Grading] ESPN fallback error: {e}", file=sys.stderr)
+
+    # ── Step 4: Enrich with real closing odds (for CLV) ──────────────────────
+    # Only fetch odds for fixtures we are actually grading, to bound API calls.
+    _enrich_closing_odds(results_map, {str(p.get("fixture_id", "")) for p in to_grade})
 
     graded_count = 0
     clv_sum = 0.0

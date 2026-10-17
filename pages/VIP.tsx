@@ -121,9 +121,14 @@ export const VIP: React.FC<VIPProps> = () => {
     const fetchAIFeatures = async () => {
       setAiLoading(true);
       try {
+        const currentUser = (await import('../firebaseConfig')).auth.currentUser;
+        const token = currentUser ? await currentUser.getIdToken() : '';
         const response = await fetch(`${backendUrl}/api/ai/features`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({ predictions: quantPredictions })
         });
         if (response.ok) {

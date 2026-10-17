@@ -40,7 +40,11 @@ export async function fulfillVipPayment({
       throw err;
     }
 
-    const expiry = getVipExpiry(plan);
+    // Renewal must EXTEND from the current expiry, not reset from today —
+    // otherwise a user renewing with 20 days left loses them.
+    const now = new Date();
+    const stillVip = user.isVip && user.vipExpiry && new Date(user.vipExpiry) > now;
+    const expiry = getVipExpiry(plan, stillVip ? new Date(user.vipExpiry) : now);
     tx.update(userRef, {
       isVip: true,
       vipExpiry: expiry,

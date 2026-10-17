@@ -7,15 +7,14 @@ export interface ProbPick {
 
 export const getTopProbPicks = (match: Match): ProbPick[] => {
   const markets = [
-    { name: 'Over 0.5 Goals', prob: match.over05_prob ?? 0 },
+    // 0.5 and 4.5 lines removed — they are near-certain / near-impossible and make
+    // worthless "picks" (Odds ~1.02 or a near-miss). Keep meaningful lines only.
     { name: 'Over 1.5 Goals', prob: match.over15_prob ?? 0 },
     { name: 'Over 2.5 Goals', prob: match.over25_prob ?? 0 },
     { name: 'Over 3.5 Goals', prob: match.over35_prob ?? 0 },
-    { name: 'Over 4.5 Goals', prob: match.over45_prob ?? 0 },
     { name: 'Under 1.5 Goals', prob: match.under15_prob ?? 0 },
     { name: 'Under 2.5 Goals', prob: match.under25_prob ?? 0 },
     { name: 'Under 3.5 Goals', prob: match.under35_prob ?? 0 },
-    { name: 'Under 4.5 Goals', prob: match.under45_prob ?? 0 },
     { name: 'BTTS', prob: match.btts_prob ?? 0 },
     { name: 'Home Win', prob: match.home_win_prob ?? 0 },
     { name: 'Draw', prob: match.draw_prob ?? 0 },
@@ -23,7 +22,6 @@ export const getTopProbPicks = (match: Match): ProbPick[] => {
     { name: 'DC 1X', prob: match.double_chance_1x ?? 0 },
     { name: 'DC X2', prob: match.double_chance_x2 ?? 0 },
     { name: 'DC 12', prob: match.double_chance_12 ?? 0 },
-    { name: '1H Over 0.5', prob: match.fh_over05_prob ?? 0 },
     { name: '1H Over 1.5', prob: match.fh_over15_prob ?? 0 },
     { name: '1H BTTS', prob: match.fh_btts_prob ?? 0 },
   ];

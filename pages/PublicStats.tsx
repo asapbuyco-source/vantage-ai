@@ -6,6 +6,7 @@ import { GlassCard } from '../components/GlassCard';
 import { useData } from '../context/DataContext';
 import { useAppContext } from '../context/AppContext';
 import { getUserCount, getWinRateStats } from '../services/db';
+import { getTrackRecord, TrackRecord } from '../services/trackRecord';
 
 interface PublicStatsProps {}
 
@@ -17,17 +18,20 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
     const [totalWins, setTotalWins] = useState<number | null>(null);
     const [loadingCounts, setLoadingCounts] = useState(true);
     const [localStats, setLocalStats] = useState<any>(null);
+    const [record, setRecord] = useState<TrackRecord | null>(null);
 
     useEffect(() => {
         (async () => {
             setLoadingCounts(true);
             try {
-                const [counts, stats] = await Promise.all([
+                const [counts, stats, rec] = await Promise.all([
                     getUserCount(),
                     getWinRateStats(),
+                    getTrackRecord(30),
                 ]);
                 setMemberCount(counts);
                 setLocalStats(stats);
+                setRecord(rec);
                 // Estimate total wins from monthly win rate × graded matches
                 const guessedTotal = Math.round((stats.monthly / 100) * 30 * 8);
                 setTotalWins(guessedTotal > 0 ? guessedTotal : null);
@@ -142,6 +146,49 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
                     ))}
                 </div>
             </GlassCard>
+
+            {/* 30-day Track Record — win-rate AND odds-weighted ROI (honest KPI) */}
+            {record && record.graded.total > 0 && (
+                <GlassCard className="border-vantage-purple/20 bg-vantage-purple/5">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Trophy size={18} className="text-vantage-purple" />
+                            <h3 className="text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-white">
+                                {language === 'fr' ? 'Bilan 30 jours' : '30-Day Track Record'}
+                            </h3>
+                        </div>
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-full ${record.roi >= 0 ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'}`}>
+                            ROI {record.roi >= 0 ? '+' : ''}{record.roi}%
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                            <div className="text-xl font-black font-orbitron text-slate-900 dark:text-white">{record.graded.total}</div>
+                            <div className="text-[10px] text-gray-500 uppercase">{language === 'fr' ? 'Analysés' : 'Settled'}</div>
+                        </div>
+                        <div>
+                            <div className="text-xl font-black font-orbitron text-vantage-cyan">{record.winRate}%</div>
+                            <div className="text-[10px] text-gray-500 uppercase">{language === 'fr' ? 'Victoires' : 'Win rate'}</div>
+                        </div>
+                        <div>
+                            <div className={`text-xl font-black font-orbitron ${record.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>{record.roi >= 0 ? '+' : ''}{record.roi}%</div>
+                            <div className="text-[10px] text-gray-500 uppercase">ROI</div>
+                        </div>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-white/5 space-y-1">
+                        {Object.entries(record.byMarket)
+                            .filter(([, m]) => m.staked >= 20)
+                            .sort((a, b) => b[1].roi - a[1].roi)
+                            .slice(0, 4)
+                            .map(([name, m]) => (
+                                <div key={name} className="flex items-center justify-between text-[11px]">
+                                    <span className="text-gray-400 truncate">{name}</span>
+                                    <span className={`font-mono font-bold ${m.roi >= 0 ? 'text-green-400' : 'text-red-400'}`}>{m.winRate}% · {m.roi >= 0 ? '+' : ''}{m.roi}%</span>
+                                </div>
+                            ))}
+                    </div>
+                </GlassCard>
+            )}
 
             {/* Trust Signals */}
             <div className="grid grid-cols-1 gap-3">

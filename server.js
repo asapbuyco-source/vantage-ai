@@ -290,40 +290,82 @@ app.post('/api/gemini/generate', adminAuth, geminiLimiter, async (req, res) => {
 // AI FEATURES ENDPOINT (League Radar, Acca Copilot, Daily Tip)
 // ══════════════════════════════════════════════════════════════════════
 
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GROQ_API_KEY;
-const AI_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const AI_MODEL = 'google/gemma-4-31b-it:free';
+// AI text generation with provider fallback: Groq free tier first (generous
+// limits, no credit card), then OpenRouter free models. Both speak the
+// OpenAI-compatible chat/completions API.
+const AI_PROVIDERS = [];
+if (process.env.GROQ_API_KEY) {
+    AI_PROVIDERS.push({
+        name: 'groq',
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        key: process.env.GROQ_API_KEY,
+        models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+    });
+}
+if (process.env.OPENROUTER_API_KEY) {
+    AI_PROVIDERS.push({
+        name: 'openrouter',
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        key: process.env.OPENROUTER_API_KEY,
+        models: ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free'],
+    });
+}
 
 async function callGroq(messages, temperature = 0.15, maxTokens = 150) {
-    if (!AI_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
-    const response = await fetch(AI_URL, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${AI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: AI_MODEL, messages, temperature, max_tokens: maxTokens })
-    });
-    if (!response.ok) throw new Error(`AI error: ${response.status}`);
-    const data = await response.json();
-    let content = data.choices?.[0]?.message?.content?.trim() || '';
-    // Nemotron/DeepSeek reasoning leak: content may be chain-of-thought starting with "We need to..."
-    if (content && /We need to produce|We need to|The match:/i.test(content)) {
-        const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-        // Last line that doesn't look like reasoning is the tip
-        for (let i = lines.length - 1; i >= 0; i--) {
-            if (!/We need to|The match:/i.test(lines[i]) && lines[i].length > 10) {
-                content = lines[i];
-                break;
+    if (AI_PROVIDERS.length === 0) throw new Error('No AI provider configured (set OPENROUTER_API_KEY or GROQ_API_KEY)');
+    for (const provider of AI_PROVIDERS) {
+        for (const model of provider.models) {
+            try {
+                const response = await fetch(provider.url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${provider.key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
+                    signal: AbortSignal.timeout(30000),
+                });
+                // 429 = rate limit: skip to the next model/provider instead of throwing
+                if (!response.ok) {
+                    console.warn(`[AI] ${response.status} on ${provider.name}/${model} — trying next`);
+                    continue;
+                }
+                const data = await response.json();
+                let content = data.choices?.[0]?.message?.content?.trim() || '';
+                // Nemotron/DeepSeek reasoning leak: content may be chain-of-thought starting with "We need to..."
+                if (content && /We need to produce|We need to|The match:/i.test(content)) {
+                    const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+                    // Last line that doesn't look like reasoning is the tip
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        if (!/We need to|The match:/i.test(lines[i]) && lines[i].length > 10) {
+                            content = lines[i];
+                            break;
+                        }
+                    }
+                }
+                if (!content) {
+                    const reasoning = data.choices?.[0]?.message?.reasoning || '';
+                    if (reasoning) {
+                        const lines = String(reasoning).split('\n').filter(Boolean);
+                        content = lines[lines.length - 1]?.trim() || '';
+                    }
+                }
+                if (content) return content;
+            } catch (err) {
+                console.warn(`[AI] ${provider.name}/${model} failed: ${err.message}`);
             }
         }
     }
-    if (!content) {
-        const reasoning = data.choices?.[0]?.message?.reasoning || '';
-        if (reasoning) {
-            const lines = String(reasoning).split('\n').filter(Boolean);
-            content = lines[lines.length - 1]?.trim() || '';
-        }
-    }
-    return content;
+    throw new Error('AI error: all providers/models failed');
 }
+
+// AI feature endpoints (league radar / acca copilot / daily tip / ticket explanation)
+// burn OpenRouter credits — bound per-IP usage AND require a signed-in user.
+// NOTE: must be declared BEFORE the /api/ai/* routes below (const TDZ).
+const aiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 40,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many AI requests from this IP, please try again in 15 minutes' }
+});
 
 async function generateLeagueRadar(predictions) {
     if (!predictions || predictions.length === 0) return null;
@@ -381,7 +423,7 @@ async function generateDailyTip(predictions) {
     }
 }
 
-app.post('/api/ai/features', async (req, res) => {
+app.post('/api/ai/features', aiLimiter, requireFirebaseUser, async (req, res) => {
     try {
         const { predictions } = req.body;
         const [leagueRadar, accaCopilot, dailyTip] = await Promise.all([
@@ -396,7 +438,7 @@ app.post('/api/ai/features', async (req, res) => {
     }
 });
 
-app.post('/api/ai/ticket-explanation', async (req, res) => {
+app.post('/api/ai/ticket-explanation', aiLimiter, requireFirebaseUser, async (req, res) => {
     try {
         const { ticket, stake, legCount } = req.body;
         if (!ticket || ticket.length === 0) {
@@ -466,6 +508,110 @@ function adminAuth(req, res, next) {
 
     return res.status(401).json({ error: 'Unauthorized — valid x-admin-token or Bearer JWT required' });
 }
+
+// GET /api/admin/betmines-test?url=... — verify the BetMines client in-container
+// (Cloudflare blocks Node; curl + BETMINES_PROXY is the transport). Admin-only.
+app.get('/api/admin/betmines-test', adminAuth, async (req, res) => {
+    try {
+        const { fetchBetminesFixtures } = await import('./backend/betmines_client.js');
+        const url = String(req.query.url || 'https://betmines.com/football-predictions-today');
+        const fixtures = await fetchBetminesFixtures(url);
+        return res.json({ ok: fixtures.length > 0, count: fixtures.length, proxy: !!(process.env.BETMINES_PROXY), sample: fixtures.slice(0, 3) });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 200) });
+    }
+});
+
+// ── ESPN free data (no key, no browser) — supplements API-Football. Public, cached. ──
+// GET /api/espn/scoreboard?league=eng.1&date=YYYY-MM-DD
+app.get('/api/espn/scoreboard', async (req, res) => {
+    try {
+        const { fetchScoreboard } = await import('./backend/espn_client.js');
+        const league = String(req.query.league || 'eng.1');
+        const date = req.query.date ? String(req.query.date) : undefined;
+        const events = await fetchScoreboard(league, { date });
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.json({ ok: true, league, count: events.length, events });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
+
+// GET /api/espn/match?home=&away=&date=YYYY-MM-DD — resolve our fixture to an ESPN
+// event and return lineups + stats (for the match-details page). Public, cached.
+app.get('/api/espn/match', async (req, res) => {
+    try {
+        const home = String(req.query.home || '');
+        const away = String(req.query.away || '');
+        const date = req.query.date ? String(req.query.date) : undefined;
+        const { findEvent, fetchSummary } = await import('./backend/espn_client.js');
+        const found = await findEvent({ home, away, date });
+        if (!found) return res.status(404).json({ ok: false, error: 'espn_match_not_found' });
+        const summary = await fetchSummary(found.league, found.event.id);
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json({ ok: true, league: found.league, event: found.event, lineups: summary.lineups, keyEvents: summary.keyEvents });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
+
+// GET /api/stats/record?days=30 — real track record from graded predictions:
+// win rate AND flat-stake ROI (odds-weighted) + per-market breakdown. Public, cached.
+app.get('/api/stats/record', async (req, res) => {
+    try {
+        const days = Math.min(Number(req.query.days) || 30, 120);
+        const db = admin.firestore();
+        const snap = await db.collection('quant_predictions').orderBy('date', 'desc').limit(days).get();
+        let won = 0, lost = 0, voided = 0, staked = 0, returned = 0;
+        const byMarket = {};
+        for (const doc of snap.docs) {
+            const preds = (doc.data() || {}).predictions || [];
+            for (const p of preds) {
+                const st = p.status;
+                if (st !== 'won' && st !== 'lost' && st !== 'void') continue;
+                const odds = Number(p.odds || p.pick_time_odds || 0);
+                const key = p.bet_type || p.prediction || 'other';
+                const mm = (byMarket[key] = byMarket[key] || { won: 0, lost: 0, void: 0, staked: 0, returned: 0 });
+                if (st === 'void') { voided++; mm.void++; continue; }
+                staked++; mm.staked++;
+                if (st === 'won') { won++; mm.won++; const r = odds > 1 ? odds : 1; returned += r; mm.returned += r; }
+                else { lost++; mm.lost++; }
+            }
+        }
+        const roi = staked ? ((returned - staked) / staked) * 100 : 0;
+        const winRate = (won + lost) ? (won / (won + lost)) * 100 : 0;
+        for (const k of Object.keys(byMarket)) {
+            const m = byMarket[k];
+            m.roi = m.staked ? +(((m.returned - m.staked) / m.staked) * 100).toFixed(1) : 0;
+            m.winRate = (m.won + m.lost) ? +((m.won / (m.won + m.lost)) * 100).toFixed(1) : 0;
+            m.returned = +m.returned.toFixed(2);
+        }
+        res.set('Cache-Control', 'public, max-age=300');
+        return res.json({
+            ok: true, period_days: days,
+            graded: { won, lost, void: voided, total: won + lost },
+            winRate: +winRate.toFixed(1),
+            staked, returned: +returned.toFixed(2),
+            roi: +roi.toFixed(2),
+            byMarket,
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
+app.get('/api/espn/summary', async (req, res) => {
+    try {
+        const league = String(req.query.league || 'eng.1');
+        const event = String(req.query.event || '');
+        if (!event) return res.status(400).json({ ok: false, error: 'event required' });
+        const { fetchSummary } = await import('./backend/espn_client.js');
+        const data = await fetchSummary(league, event);
+        res.set('Cache-Control', 'public, max-age=120');
+        return res.json({ ok: true, league, event, data });
+    } catch (e) {
+        return res.status(502).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
 
 // GET /api/admin/token — exchange a Firebase ID token for a short-lived admin JWT.
 // The caller must be authenticated with Firebase and have isAdmin:true in Firestore.
@@ -1358,11 +1504,31 @@ app.post('/api/push/register-fcm', pushLimiter, requireFirebaseUser, async (req,
 // Module-level base URL — used by sitemap AND SSR handler
 const baseUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, '') : 'https://vantageai.online';
 
-// 1. Serve static files from the React dist directory FIRST (except index.html)
-const distPath = path.join(__dirname, 'dist');
-app.use(express.static(distPath, { index: false }));
+// ── SEO LEAGUE SLUGS (keep in sync with pages/LeaguePage.tsx) ──
+const SEO_LEAGUES = {
+    'premier-league': { nameFr: 'Premier League' },
+    'la-liga': { nameFr: 'La Liga' },
+    'bundesliga': { nameFr: 'Bundesliga' },
+    'serie-a': { nameFr: 'Série A' },
+    'ligue-1': { nameFr: 'Ligue 1' },
+    'champions-league': { nameFr: 'Ligue des Champions' },
+    'europa-league': { nameFr: 'Ligue Europa' },
+    'eredivisie': { nameFr: 'Eredivisie' },
+    'primeira-liga': { nameFr: 'Primeira Liga' },
+    'championship': { nameFr: 'Championship' },
+    'elite-one': { nameFr: 'Élite One' },
+    'liga-mx': { nameFr: 'Liga MX' },
+    'saudi-pro-league': { nameFr: 'Saudi Pro League' },
+    'sueper-lig': { nameFr: 'Süper Lig' },
+    'brasileirao': { nameFr: 'Brasileirão Série A' },
+    'mls': { nameFr: 'Major League Soccer' },
+    'fifa-world-cup': { nameFr: 'Coupe du Monde' },
+};
 
-// 2. Dynamic Sitemap Generator
+const distPath = path.join(__dirname, 'dist');
+
+// 1. Dynamic Sitemap Generator — registered BEFORE express.static so the static
+// dist/sitemap.xml (7 hand-written URLs) never shadows the live Firestore-fed map.
 app.get('/sitemap.xml', async (req, res) => {
     try {
         res.header('Content-Type', 'application/xml');
@@ -1370,28 +1536,32 @@ app.get('/sitemap.xml', async (req, res) => {
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-        // Add static routes
-        const staticRoutes = ['/', '/blog', '/VIP', '/FreePicks', '/Kelly', '/Guide'];
+        // Static routes aligned with the real SPA routes
+        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
         });
 
         if (admin.apps.length > 0) {
-            // Get up to 60 most recent prediction days
-            const predictionSnap = await admin.firestore()
-                .collection('daily_predictions')
-                .orderBy('updatedAt', 'desc')
-                .limit(60)
-                .get();
+            // Quant prediction days — the live pipeline writes quant_predictions/{date}
+            const qSnap = await admin.firestore().collection('quant_predictions').limit(60).get();
+            qSnap.forEach(doc => {
+                const dateKey = doc.id;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+                    xml += `  <url>\n    <loc>${baseUrl}/predictions/${dateKey}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+                }
+            });
 
-            predictionSnap.forEach(doc => {
+            // Legacy daily_predictions (pre-quant days)
+            const legSnap = await admin.firestore().collection('daily_predictions').limit(30).get();
+            legSnap.forEach(doc => {
                 const dateKey = doc.id;
                 if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
                     xml += `  <url>\n    <loc>${baseUrl}/predictions/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
                 }
             });
 
-            // Get all blog posts for SEO
+            // Blog posts — doc ids ARE the URL slugs (e.g. 2026-10-06_en_roundup_epL)
             const blogSnap = await admin.firestore()
                 .collection('daily_blogs')
                 .orderBy('generatedAt', 'desc')
@@ -1399,13 +1569,10 @@ app.get('/sitemap.xml', async (req, res) => {
                 .get();
 
             blogSnap.forEach(doc => {
-                const dateKey = doc.id;
-                if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
-                    xml += `  <url>\n    <loc>${baseUrl}/blog/${dateKey}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
-                }
+                xml += `  <url>\n    <loc>${baseUrl}/blog/${encodeURIComponent(doc.id)}</loc>\n    <changefreq>never</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
             });
 
-            // Add individual match URLs from last 3 days for deeper indexing
+            // Individual match URLs from the last 3 days for deeper indexing
             const today = new Date();
             const matchIds = new Set();
             for (let i = 0; i < 3; i++) {
@@ -1418,10 +1585,14 @@ app.get('/sitemap.xml', async (req, res) => {
                         const matchId = m.id || m.fixture_id || `${m.home_team || 'home'}_${m.away_team || 'away'}`.replace(/\s+/g, '-').toLowerCase();
                         if (matchId && !matchIds.has(matchId)) {
                             matchIds.add(matchId);
-                            xml += `  <url>\n    <loc>${baseUrl}/match/${matchId}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+                            xml += `  <url>\n    <loc>${baseUrl}/match/${encodeURIComponent(matchId)}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
                         }
                     }
                 }
+            }
+        // Social/SEO league pages (phase 3 content)
+            for (const slug of Object.keys(SEO_LEAGUES)) {
+                xml += `  <url>\n    <loc>${baseUrl}/pronostics/${slug}</loc>\n    <changefreq>daily</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
             }
         }
 
@@ -1432,6 +1603,9 @@ app.get('/sitemap.xml', async (req, res) => {
         res.status(500).end();
     }
 });
+
+// 2. Serve static files from the React dist directory (except index.html)
+app.use(express.static(distPath, { index: false }));
 
 // 3. Catch-all for rendering HTML
 app.use(async (req, res, next) => {
@@ -1477,15 +1651,27 @@ app.use(async (req, res, next) => {
         if (predictionsMatch && admin.apps.length > 0) {
             const dateKey = predictionsMatch[1];
 
-            // Try to fetch predictions and blog for this date
-            const [predDoc, blogDoc] = await Promise.all([
+            // Primary source: quant_predictions (the live quant pipeline);
+            // legacy daily_predictions as fallback.
+            const [qPredDoc, legPredDoc, blogDoc] = await Promise.all([
+                admin.firestore().collection('quant_predictions').doc(dateKey).get(),
                 admin.firestore().collection('daily_predictions').doc(dateKey).get(),
                 admin.firestore().collection('daily_blogs').doc(dateKey).get()
             ]);
+            const predDoc = qPredDoc.exists ? qPredDoc : legPredDoc;
 
             if (predDoc.exists) {
-                const matchCount = predDoc.data()?.matches?.length || 0;
-                const matches = predDoc.data()?.matches || [];
+                const preds = qPredDoc.exists
+                    ? (qPredDoc.data()?.predictions || [])
+                    : (predDoc.data()?.matches || []);
+                const matchCount = preds.length || 0;
+                const topPicks = preds.slice(0, 5)
+                    .map(p => {
+                        const home = p.home_team || p.homeTeam || 'Home';
+                        const away = p.away_team || p.awayTeam || 'Away';
+                        const market = p.prediction || p.bet_type || '—';
+                        return `{ "@type": "SportsEvent", "name": "${home} vs ${away}", "description": "${market}" }`;
+                    }).join(',\n');
 
                 // Construct a dynamic title and description
                 const title = `Pronostics Football ${dateKey} | Vantage AI (${matchCount} Matchs Analysés)`;
@@ -1499,13 +1685,18 @@ app.use(async (req, res, next) => {
                     blogContent = blogDoc.data().content || '';
                 }
 
-                // Inject SEO Tags
+                // Inject SEO Tags + canonical + JSON-LD
                 const seoTags = `
     <title>${title}</title>
     <meta name="description" content="${description}" />
+    <link rel="canonical" href="${baseUrl}/predictions/${dateKey}" />
+    <meta property="og:type" content="website" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:url" content="${baseUrl}/predictions/${dateKey}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"ItemList","name":"${title}","itemListElement":[${topPicks}]}
+    </script>
                 `;
 
                 // Replace the default title and placeholders
@@ -1544,6 +1735,31 @@ app.use(async (req, res, next) => {
             }
         }
 
+        // ── SPECIFIC ROUTE: /pronostics/:leagueSlug (public SEO league pages) ──
+        const leagueMatch = req.path.match(/^\/pronostics\/([a-z0-9-]+)$/);
+        if (leagueMatch) {
+            const slug = leagueMatch[1];
+            const league = SEO_LEAGUES[slug];
+            if (league) {
+                const url = `${baseUrl}/pronostics/${slug}`;
+                const title = `Pronostics ${league.nameFr} du jour | Vantage AI`;
+                const description = `Pronostics football ${league.nameFr} du jour générés par l'IA de Vantage AI : analyses data-driven, probabilités, cotes et valeurs attendues pour vos paris.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${url}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${url}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"ItemList","name":"${title}"}
+    </script>
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+            }
+        }
+
         // --- SPECIFIC ROUTE: /match/:id ---
         const matchRegex = req.path.match(/^\/match\/([a-zA-Z0-9_-]+)$/);
         if (matchRegex && admin.apps.length > 0) {
@@ -1573,18 +1789,130 @@ app.use(async (req, res, next) => {
                 const home = foundMatch.home_team || 'Home';
                 const away = foundMatch.away_team || 'Away';
                 const league = foundMatch.league || 'Football';
+                const market = foundMatch.prediction || foundMatch.bet_type || '';
                 const title = `${home} vs ${away} Prediction & Odds - ${league} | Vantage AI`;
                 const description = `Data-driven prediction for ${home} vs ${away}. View AI confidence, expected goals, head-to-head stats, and the best betting value from Vantage AI's quantitative model.`;
-                
+                const matchUrl = `${baseUrl}/match/${matchId}`;
+
                 const seoTags = `
     <title>${title}</title>
     <meta name="description" content="${description}" />
+    <link rel="canonical" href="${matchUrl}" />
+    <meta property="og:type" content="article" />
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
-    <meta property="og:url" content="${process.env.FRONTEND_URL || 'https://vantageai.online'}/match/${matchId}" />
+    <meta property="og:url" content="${matchUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"SportsEvent","name":"${home} vs ${away}","competitor":[{"@type":"SportsTeam","name":"${home}"},{"@type":"SportsTeam","name":"${away}"}],"description":"${market || 'Match prediction'}"}
+    </script>
                 `;
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
             }
+        }
+
+        // ── SPECIFIC ROUTE: /blog/:slug (100+ daily programmatic posts) ──
+        const blogMatch = req.path.match(/^\/blog\/([a-zA-Z0-9\-_.]+)$/);
+        if (blogMatch) {
+            try {
+                const bSnap = await admin.firestore().collection('daily_blogs').doc(blogMatch[1]).get();
+                if (bSnap.exists) {
+                    const bd = bSnap.data() || {};
+                    const blogUrl = `${baseUrl}/blog/${blogMatch[1]}`;
+                    const postTitle = bd.title || `Pronostics du jour | Vantage AI`;
+                    const title = `${postTitle} | Vantage AI`;
+                    const plainText = String(bd.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                    const description = String(bd.excerpt || plainText).substring(0, 200) || `Pronostics football du jour générés par le modèle quantitatif de Vantage AI.`;
+                    const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${blogUrl}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${blogUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Article","headline":"${postTitle}","description":"${description}"}
+    </script>
+                `;
+                    html = html.replace(/<title>.*?<\/title>/, seoTags);
+                    // Let crawlers read the post body without JS
+                    const sanitizedContent = sanitizeHtml(String(bd.content || ''), {
+                        allowedTags: ['p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'a', 'blockquote'],
+                        allowedAttributes: { 'a': ['href'], 'span': ['style'] },
+                        transformTags: {
+                            'a': (tagName, attribs) => {
+                                const href = attribs.href || '';
+                                if (href && !href.match(/^https?:\/\//)) return { tagName, attribs: { ...attribs, href: '#' } };
+                                return { tagName, attribs };
+                            },
+                        },
+                    });
+                    html = html.replace('<!-- REACT_ROOT -->',
+                        `<div id="vantage-seo-content" style="display:none;" aria-hidden="true">${sanitizedContent}</div>\n<!-- REACT_ROOT -->`);
+                }
+            } catch (bErr) {
+                console.warn('[SSR] Blog SSR error:', bErr.message);
+            }
+        }
+
+        // ── SPECIFIC ROUTE: /blog (listing page — GSC flagged as duplicate) ──
+        if (req.path === '/blog' || req.path === '/blog/') {
+            try {
+                const blogUrl = `${baseUrl}/blog`;
+                const title = `Blog Pronostics Football & Analyses | Vantage AI`;
+                const description = `Analyses, pronostics et explanations de modèles de paris par Vantage AI. Retrouvez nos articles quotidiens pour chaque match analysé.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${blogUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${blogUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+                const postsSnap = await admin.firestore()
+                    .collection('daily_blogs')
+                    .orderBy('generatedAt', 'desc')
+                    .limit(15)
+                    .get();
+                const listHtml = postsSnap.docs.map((doc) => {
+                    const d = doc.data() || {};
+                    const t = String(d.title || doc.id).replace(/</g, '&lt;');
+                    return `<li><a href="${blogUrl}/${encodeURIComponent(doc.id)}">${t}</a></li>`;
+                }).join('\n');
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${title}</h1><ul>${listHtml}</ul></div>\n<!-- REACT_ROOT -->`);
+            } catch (listErr) {
+                console.warn('[SSR] Blog listing SSR error:', listErr.message);
+            }
+        }
+
+        // ── SPECIFIC ROUTE: /privacy-policy (distinct static page) ──
+        if (req.path === '/privacy-policy' || req.path === '/privacy-policy/') {
+            try {
+                const ppUrl = `${baseUrl}/privacy-policy`;
+                const title = `Politique de Confidentialité | Vantage AI`;
+                const description = `Politique de confidentialité de Vantage AI : quelles données nous collectons, comment nous les utilisons et vos droits.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${ppUrl}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:url" content="${ppUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+            } catch (ppErr) {
+                console.warn('[SSR] Privacy policy SSR error:', ppErr.message);
+            }
+        }
+
+        // Canonical fallback for every page (home, blog, guide, stats, VIP…).
+        // Prevents ?tab= / ?lang= / trailing-slash duplicates from all pointing
+        // at the same shell. Query strings are dropped so variants collapse to one URL.
+        if (!html.includes('rel="canonical"')) {
+            const canonicalUrl = `${baseUrl}${req.path.replace(/\/+$/, '') || '/'}`;
+            html = html.replace('</head>', `    <link rel="canonical" href="${canonicalUrl}" />\n  </head>`);
         }
 
         res.send(html);

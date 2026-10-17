@@ -1,26 +1,61 @@
 """
 weather_service.py
 ──────────────────
-Fetches match-day weather from OpenWeatherMap free tier.
+Fetches match-day weather from Open-Meteo (FREE, no API key).
 Used to apply probability penalties for adverse conditions.
 
-FREE API: OpenWeatherMap
-  Sign up at: https://openweathermap.org/api
-  Free tier: 60 calls/minute, 1,000 calls/day
-  Get your API key from: https://home.openweathermap.org/api_keys
-  Set as: OPENWEATHER_API_KEY env variable
+Open-Meteo:
+  Geocoding: https://geocoding-api.open-meteo.com/v1/search
+  Forecast:  https://api.open-meteo.com/v1/forecast
+  No sign-up, no key, no rate-limit bill for our usage.
 
 Stadium-to-city mapping covers the most common leagues.
 Add more stadiums as needed in STADIUM_CITIES below.
 """
 
-import os, json
+import json
 import requests
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 
-API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
-BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
+GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+# WMO weather codes -> OpenWeatherMap-style condition names (keeps downstream logic)
+_WMO_CONDITIONS = {
+    0: "Clear",
+    1: "Clouds", 2: "Clouds", 3: "Clouds",
+    45: "Fog", 48: "Fog",
+    51: "Drizzle", 53: "Drizzle", 55: "Drizzle", 56: "Drizzle", 57: "Drizzle",
+    61: "Rain", 63: "Rain", 65: "Rain", 66: "Rain", 67: "Rain",
+    71: "Snow", 73: "Snow", 75: "Snow", 77: "Snow",
+    80: "Rain", 81: "Rain", 82: "Rain",
+    85: "Snow", 86: "Snow",
+    95: "Thunderstorm", 96: "Thunderstorm", 99: "Thunderstorm",
+}
+
+def _wmo_condition(code):
+    return _WMO_CONDITIONS.get(code, "Clear")
+
+
+def _geocode(city: str, country: str | None = None) -> tuple | None:
+    """Resolve a city name to (lat, lon) via Open-Meteo's free geocoding API."""
+    try:
+        params = {"name": city, "count": 1, "language": "en", "format": "json"}
+        resp = requests.get(GEO_URL, params=params, timeout=10)
+        if resp.status_code != 200:
+            return None
+        results = resp.json().get("results") or []
+        for r in results:
+            if country and r.get("country_code") and r["country_code"].lower() != country.lower():
+                continue
+            if r.get("latitude") is not None and r.get("longitude") is not None:
+                return float(r["latitude"]), float(r["longitude"])
+        if results and results[0].get("latitude") is not None and results[0].get("longitude") is not None:
+            return float(results[0]["latitude"]), float(results[0]["longitude"])
+    except Exception:
+        return None
+    return None
 
 # Stadium → city mapping for common leagues
 # Format: team_name_substring → (city, country_code)
@@ -97,13 +132,10 @@ STADIUM_CITIES = {
 
 def get_weather_context(home_team: str, kickoff_utc: str = None) -> dict:
     """
-    Fetch weather for a match venue.
+    Fetch weather for a match venue from Open-Meteo (free, no key).
     If a city name is passed (from API-Football venue data), use it directly.
     If a team name is passed, looks up in STADIUM_CITIES.
     """
-    if not API_KEY:
-        return {"has_weather_risk": False, "penalty_reason": "", "error": "no_api_key"}
-
     city = home_team.strip() if home_team else None
     if not city:
         return {"has_weather_risk": False, "penalty_reason": "", "error": "unknown_stadium"}
@@ -117,22 +149,27 @@ def get_weather_context(home_team: str, kickoff_utc: str = None) -> dict:
             country = country_code
             break
 
+    coords = _geocode(city, country)
+    if not coords:
+        return {"has_weather_risk": False, "penalty_reason": "", "error": "geocode_failed"}
+
     try:
         params = {
-            "q": f"{city},{country}" if country else city,
-            "appid": API_KEY,
-            "units": "metric",
+            "latitude": coords[0],
+            "longitude": coords[1],
+            "current": "temperature_2m,wind_speed_10m,precipitation,weather_code",
+            "wind_speed_unit": "kmh",
+            "timezone": "auto",
         }
-        resp = requests.get(BASE_URL, params=params, timeout=10)
+        resp = requests.get(FORECAST_URL, params=params, timeout=10)
         if resp.status_code != 200:
             return {"has_weather_risk": False, "penalty_reason": "", "error": f"api_error_{resp.status_code}"}
 
-        data = resp.json()
-        wind_speed = data.get("wind", {}).get("speed", 0)  # m/s
-        wind_kmh = wind_speed * 3.6  # Convert to km/h
-        rain = data.get("rain", {}).get("1h", 0) if "rain" in data else 0
-        condition = data.get("weather", [{}])[0].get("main", "")
-        temp = data.get("main", {}).get("temp", 15)
+        current = (resp.json().get("current") or {}).get("weather", {}) or resp.json().get("current") or {}
+        temp = current.get("temperature_2m", 15)
+        wind_kmh = current.get("wind_speed_10m", 0)
+        rain = current.get("precipitation", 0)
+        condition = _wmo_condition(current.get("weather_code", 0))
 
         # Risk assessment
         has_risk = False

@@ -27,7 +27,9 @@ async function callGroq(messages, temperature = 0.3, maxTokens = 50) {
 export async function generateDailyTipFromPredictions(predictions) {
     if (!predictions || predictions.length === 0) return null;
     try {
-        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0)
+        // Risk guard (2026-10): the AI tip only reaches users for high-confidence,
+        // top-league picks — never a thin-EV bet from a minor league.
+        const bestPick = predictions.filter(p => p.vault_eligible && p.odds > 0 && (p.confidence ?? 0) >= 70 && (p.league_tier ?? 99) <= 2)
             .sort((a, b) => (b.expected_value || 0) - (a.expected_value || 0))[0];
         if (!bestPick) return null;
         const prompt = `As a betting expert, give a ONE sentence tip for today focusing on this top pick:\n\nMatch: ${bestPick.home_team} vs ${bestPick.away_team} (${bestPick.league})\nPick: ${bestPick.bet_type} @ ${bestPick.odds}\nEV: ${((bestPick.expected_value || 0) * 100).toFixed(1)}%\n\nMake it punchy and actionable. Max 20 words. Example: "Back Over 2.5 at Anfield - Liverpool's home games average 3.2 goals."`;
@@ -143,28 +145,37 @@ export async function broadcastPush(notification) {
             }
         };
 
-        const result = await admin.messaging().sendEachForMulticast({
-            tokens,
-            ...message,
-        });
-
+        // FCM caps a single multicast at 500 tokens — chunk to support >500 subscribers.
+        const FCM_BATCH_SIZE = 500;
+        let successCount = 0;
+        let failureCount = 0;
         let deleteCount = 0;
-        for (const failure of result.failureList) {
-            if (failure.error?.message?.includes('Invalid registration token') ||
-                failure.error?.message?.includes('not registered')) {
-                const docId = fcmSnapshot.docs.find(d => d.data().fcmToken === failure.token)?.id;
-                if (docId) {
-                    await db.collection('push_subscriptions').doc(docId).delete();
-                    deleteCount++;
+        for (let i = 0; i < tokens.length; i += FCM_BATCH_SIZE) {
+            const batch = tokens.slice(i, i + FCM_BATCH_SIZE);
+            const result = await admin.messaging().sendEachForMulticast({
+                tokens: batch,
+                ...message,
+            });
+            successCount += result.successCount;
+            failureCount += result.failureCount;
+
+            for (const failure of result.failureList) {
+                if (failure.error?.message?.includes('Invalid registration token') ||
+                    failure.error?.message?.includes('not registered')) {
+                    const docId = fcmSnapshot.docs.find(d => d.data().fcmToken === failure.token)?.id;
+                    if (docId) {
+                        await db.collection('push_subscriptions').doc(docId).delete();
+                        deleteCount++;
+                    }
                 }
             }
         }
 
-        logger.info(`[PushService] Broadcast: ${result.successCount} sent, ${result.failureCount} failed, ${deleteCount} cleaned up`);
+        logger.info(`[PushService] Broadcast: ${successCount} sent, ${failureCount} failed, ${deleteCount} cleaned up`);
         return {
             success: true,
-            sentCount: result.successCount,
-            failCount: result.failureCount,
+            sentCount: successCount,
+            failCount: failureCount,
             deletedCount: deleteCount
         };
     } catch (e) {

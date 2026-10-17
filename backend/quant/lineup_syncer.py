@@ -41,6 +41,8 @@ def init_firebase():
             service_account_raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
             if service_account_raw:
                 sa = json.loads(service_account_raw)
+                if "private_key" in sa:
+                    sa["private_key"] = sa["private_key"].replace('\\n', '\n').lstrip('\n\r\t ')
                 cred = credentials.Certificate(sa)
             else:
                 cred = credentials.ApplicationDefault()

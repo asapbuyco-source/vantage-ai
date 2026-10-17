@@ -304,14 +304,11 @@ def _optimize_legs(bets: list[dict], config: dict, exclude_fixtures: set = None)
         if len(combo) + remaining < config["min_legs"]:
             return
 
-        max_possible = score
         for i in range(start_idx, len(pool)):
             if valid(combo, pool[i]):
                 combo.append(pool[i])
                 backtrack(combo, i + 1)
                 combo.pop()
-            if max_possible < best_score * 0.5 and i > start_idx + 5:
-                break
 
     backtrack([], 0)
     return best_combo if best_combo else _select_legs(bets, config, exclude_fixtures)

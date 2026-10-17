@@ -9,7 +9,7 @@ Daily workflow:
   3. Run Poisson model
   4. Run Elo model
   5. Run Form model
-  6. Combine models (60/30/10)
+  6. Combine models (60/25/10 + adaptive H2H)
   7. Evaluate all markets for EV
   8. Apply risk filters
   9. Calculate Kelly stakes
@@ -39,7 +39,6 @@ try:
 except ImportError:
     pass
 import json
-import math
 from datetime import datetime, timezone, timedelta
 
 # ── Local imports ─────────────────────────────────────────────────────────────
@@ -48,8 +47,8 @@ from poisson_model import compute_probabilities, compute_dynamic_rho, top_scorel
 import math as _math
 from elo_rating import load_ratings_from_firestore, match_probabilities as elo_probs, save_dirty_ratings, get_team_rating, set_rating, is_derby_match, DEFAULT_ELO
 from form_model import compute_form_probabilities
-from probability_engine import compute_combined, CombinedProbabilities
-from ev_engine import evaluate_all_markets, get_best_value_bet
+from probability_engine import compute_combined, compute_adjusted_lambdas, CombinedProbabilities
+from ev_engine import evaluate_all_markets
 from calibration_registry import MARKET_FACTORS, get_calibration_factor, get_dynamic_calibration_factor
 try:
     import intel_model_feed as intel
@@ -214,8 +213,6 @@ def _data_quality_score(match, best_bet, odds_fresh: bool, home_stats, away_stat
         score -= 0.10
     if not best_bet or best_bet.odds <= 1.0:
         score -= 0.20
-    if getattr(match, 'provider_source', '') == 'api_football':
-        score -= 0.05
     return max(0.0, round(score, 2))
 
 
@@ -416,7 +413,35 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     intel_notes.append(f"intel-feed error: {_e}")
             else:
                 intel_notes.append("intel feed unavailable")
-            
+
+            # ── FREE Elo seeding from ClubElo.net (teams still without a rating) ──
+            # ClubElo is free and professionally maintained; used only when the
+            # team has no graded/pre-seeded/VTI Elo yet.
+            try:
+                from clubelo_client import get_club_elo_fuzzy
+                if get_team_rating(home_id) == DEFAULT_ELO:
+                    _ce = get_club_elo_fuzzy(match.home_team)
+                    if _ce:
+                        set_rating(home_id, float(_ce))
+                        intel_notes.append(f"ClubElo {match.home_team} {float(_ce):.0f}")
+                if get_team_rating(away_id) == DEFAULT_ELO:
+                    _ce = get_club_elo_fuzzy(match.away_team)
+                    if _ce:
+                        set_rating(away_id, float(_ce))
+                        intel_notes.append(f"ClubElo {match.away_team} {float(_ce):.0f}")
+            except Exception as _ce_err:
+                intel_notes.append(f"clubelo error: {_ce_err}")
+
+            # ── Weather: suppress expected goals in adverse conditions ──
+            # data_pipeline already fetched the multiplier (wind/rain/snow) but it
+            # was collected and never applied. Applying it to the lambdas shifts
+            # every goals market coherently (O/U, BTTS), not just O2.5.
+            _wp = getattr(match, 'weather_penalty', 1.0) or 1.0
+            if _wp != 1.0:
+                mu_home = max(0.15, mu_home * _wp)
+                mu_away = max(0.15, mu_away * _wp)
+                intel_notes.append(f"weather x{_wp}")
+
             home_stats = match.home_stats if match.home_stats else TeamStats(team_id=home_id, team_name=match.home_team)
             away_stats = match.away_stats if match.away_stats else TeamStats(team_id=away_id, team_name=match.away_team)
             
@@ -481,8 +506,10 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     category = "no_edge"
                     value_rank = "none"
             elif all_value_bets:
-                # No approved bet, but markets exist — pick the best lean
-                all_value_bets.sort(key=lambda b: b.expected_value * 0.5 + b.model_prob * 0.5, reverse=True)
+                # No approved bet, but markets exist — pick the best lean.
+                # EV-FIRST (2026-10): was 50/50 prob+EV, which dragged picks toward
+                # short-odds favourites and produced the negative track record.
+                all_value_bets.sort(key=lambda b: (b.expected_value, b.model_prob), reverse=True)
                 best_bet = all_value_bets[0]
                 # Check if it has positive EV but just failed a minor filter
                 if best_bet.expected_value > 0:
@@ -562,15 +589,22 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     if should_downgrade:
                         safe_target = SAFETY_DOWNGRADES[best_bet.market]
                         safe_bet = next((b for b in all_value_bets if b.market == safe_target), None)
-                        if safe_bet:
+                        # ROI GUARD (2026-10): only downgrade when it does NOT kill the
+                        # edge. Replacing an +EV pick with a short-odds "safe" market was
+                        # the main driver of the negative track record (DC 1X -23%, etc.).
+                        # Require the safe market to stay +EV and within 3pp of the original
+                        # EV; otherwise KEEP the EV-best pick.
+                        if safe_bet and safe_bet.expected_value > 0 and safe_bet.expected_value >= best_bet.expected_value - 0.03:
                             reasons = []
                             if is_over35: reasons.append("Over 3.5 auto-downgrade")
                             if is_risky_prob: reasons.append(f"Prob {best_bet.model_prob:.0%}")
                             if is_low_agreement: reasons.append(f"Agreement {probs.goals_confidence:.2f}" if "btts" not in m and not any(k in m for k in ["over","under"]) else f"Conf {probs.goals_confidence:.2f}")
                             if is_volatile_league: reasons.append(f"Tier {match.league_tier}")
                             reason_str = " & ".join(reasons)
-                            _safe_print(f"[QuantPipeline]   🛡️ Safety Downgrade [{reason_str}]: {best_bet.market} -> {safe_target}")
+                            _safe_print(f"[QuantPipeline]   🛡️ Safety Downgrade [{reason_str}]: {best_bet.market} → {safe_target} (EV kept {safe_bet.expected_value:.1%})")
                             best_bet = safe_bet
+                        else:
+                            _safe_print(f"[QuantPipeline]   ⚖️ Downgrade skipped for {best_bet.market} (safe {safe_target} would drop EV {best_bet.expected_value:.1%} → {safe_bet.expected_value:.1%} if safe_bet else 'n/a')")
 
             # ── Odds Staleness Guard ────────────────────────────────────────
             odds_fetched_at = match.odds.odds_fetched_at if match.odds else ""
@@ -648,6 +682,14 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                         })
 
             # ── Build prediction dict with RICH match stats ─────────────────
+            # Adjusted lambdas (injury + home advantage + xG bias) — the SAME
+            # values the model probabilities come from, so the displayed
+            # expected goals and top scorelines match the model.
+            adj_mu_home, adj_mu_away = compute_adjusted_lambdas(
+                mu_home, mu_away,
+                match.home_sidelined_count, match.away_sidelined_count,
+                match.league_id, match.league_tier,
+            )
             pred = {
                 "fixture_id": match.fixture_id,
                 "league": match.league,
@@ -659,7 +701,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "away_team_id": match.away_team_id,
                 "home_team_logo": match.home_logo,
                 "away_team_logo": match.away_logo,
-                "provider_source": getattr(match, "provider_source", "sportmonks"),
+                "provider_source": getattr(match, "provider_source", "api_football"),
                 "kickoff_utc": match.kickoff_utc,
                 "kickoff_local": match.kickoff_local,
                 # ── Best bet for this match ─────────────────────────────────
@@ -721,8 +763,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 # OPP-03: Flag high-value away wins as potential upsets
                 "upset_alert": best_bet is not None and best_bet.market == "Away Win" and best_bet.expected_value >= 0.05,
                 # ── Match analysis data (rich stats for cards) ──────────────
-                "expected_goals_home": round(mu_home, 2),
-                "expected_goals_away": round(mu_away, 2),
+                "expected_goals_home": round(adj_mu_home, 2),
+                "expected_goals_away": round(adj_mu_away, 2),
                 "home_form": home_form_str,
                 "away_form": away_form_str,
                 "home_win_rate": round(home_stats.win_rate * 100, 1),
@@ -795,17 +837,19 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                     for b in approved_bets[:5]
                 ],
                 # Most likely scorelines from Poisson grid (for UI display)
-                "top_scorelines": top_scorelines(compute_score_grid(mu_home, mu_away, rho), n=4),
+                # Uses the ADJUSTED lambdas so scorelines match model probs
+                "top_scorelines": top_scorelines(compute_score_grid(adj_mu_home, adj_mu_away, rho), n=4),
                 # Phase 1.6: Hedge Over 1.5 saver for high-confidence Over 2.5 picks
                 "hedge_suggestion": {
                     "market": "Over 1.5 Goals",
                     "probability": round(probs.over15, 4),
                     "reason": "Insurance: if Over 2.5 fails by 1 goal, Over 1.5 still wins"
                 } if (best_bet and "over 2.5" in best_bet.market.lower() and probs.over15 > 0.85) else None,
-                # Corner prediction (xG-correlated, r≈0.65, ~1.2 corners per expected goal)
-                "expected_corners": round((mu_home + mu_away) * 1.2, 1),
-                "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
-                "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
+                # Corner predictions SUSPENDED (audit 2026-10): xG×1.2 heuristic showed
+                # 8-12% real hit vs 75-80% displayed — removed until real odds.
+                # "expected_corners": round((mu_home + mu_away) * 1.2, 1),
+                # "over65_corners_prob": round(_corner_over_prob(mu_home + mu_away, 6.5), 4),
+                # "over75_corners_prob": round(_corner_over_prob(mu_home + mu_away, 7.5), 4),
             }
             # ── Apply calibration to no-odds predictions ──────────────────────
             # When odds are unavailable, the ev_engine calibration path is skipped.
@@ -823,30 +867,41 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             predictions.append(pred)
 
             # ── Add to accumulator pool — separate eligibility from vault ───
+            # TOP-LEAGUE ONLY (tier <= 2): accumulators must come from the
+            # leagues with the most reliable model data, not long-tail leagues.
             acca_eligible = bool(
                 best_bet
                 and best_bet.odds > 1.0
                 and odds_fresh
                 and category in ("safe", "value")
                 and value_rank in ("high", "medium")
-                and match.league_tier < 5
+                and match.league_tier <= 2
             )
             if best_bet and acca_eligible:
-                bet_pool.append({
-                    "fixture_id": match.fixture_id,
-                    "league": match.league,
-                    "home_team": match.home_team,
-                    "away_team": match.away_team,
-                    "market": best_bet.market,
-                    "odds": best_bet.odds,
-                    "model_prob": best_bet.model_prob,
-                    "expected_value": best_bet.expected_value,
-                    "kickoff_utc": match.kickoff_utc,
-                    "kickoff_local": match.kickoff_local,
-                })
+                # Use ALL approved "other good markets" per fixture, not just the
+                # single best bet — the optimizer then picks the strongest market
+                # per fixture for the combination. Cap at 4 to bound search size.
+                acca_markets_for_fixture = approved_bets[:4] if approved_bets else [best_bet]
+                for ab in acca_markets_for_fixture:
+                    if ab.odds <= 1.0 or ab.model_prob < 0.55:
+                        continue
+                    bet_pool.append({
+                        "fixture_id": match.fixture_id,
+                        "league": match.league,
+                        "home_team": match.home_team,
+                        "away_team": match.away_team,
+                        "market": ab.market,
+                        "odds": ab.odds,
+                        "model_prob": ab.model_prob,
+                        "expected_value": ab.expected_value,
+                        "kickoff_utc": match.kickoff_utc,
+                        "kickoff_local": match.kickoff_local,
+                    })
 
             # ── Accumulator pool: HIGHEST-probability pick per fixture (not EV pick) ──
-            # Users want accumulators built from safest bets, not value bets
+            # Users want accumulators built from safest bets, not value bets.
+            # NOTE: this first pool build is superseded by the post-calibration
+            # rebuild below; it only exists to derive the per-match safest bet.
             acc_markets = [
                 ("Over 1.5 Goals", probs.over15, best_bet.odds if best_bet and "over 1.5" in best_bet.market.lower() else 0),
                 ("Over 2.5 Goals", probs.over25, best_bet.odds if best_bet and "over 2.5" in best_bet.market.lower() else 0),
@@ -854,7 +909,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 ("Under 3.5 Goals", probs.under35, best_bet.odds if best_bet and "under 3.5" in best_bet.market.lower() else 0),
                 ("BTTS", probs.btts, best_bet.odds if best_bet and "btts" in best_bet.market.lower() else 0),
                 ("Over 1.5 FH Goals", probs.fh_over15, 0),
-                ("Over 0.5 FH Goals", probs.fh_over05, 0),
                 ("Home Win", probs.home_win, best_bet.odds if best_bet and "home win" in best_bet.market.lower() else 0),
                 ("Away Win", probs.away_win, best_bet.odds if best_bet and "away win" in best_bet.market.lower() else 0),
                 ("Draw", probs.draw, best_bet.odds if best_bet and "draw" in best_bet.market.lower() else 0),
@@ -865,19 +919,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             if acc_candidates:
                 # Pick the highest probability market
                 best_market, best_prob, best_odds = max(acc_candidates, key=lambda x: x[1])
-                acc_pool.append({
-                    "fixture_id": match.fixture_id,
-                    "league": match.league,
-                    "home_team": match.home_team,
-                    "away_team": match.away_team,
-                    "market": best_market,
-                    "odds": best_odds,
-                    "model_prob": round(best_prob, 4),
-                    "expected_value": round(best_prob * best_odds - 1, 4) if best_odds > 0 else 0,
-                    "category": "safe",
-                    "kickoff_utc": match.kickoff_utc,
-                    "kickoff_local": match.kickoff_local,
-                })
+                # FIX (Banker of the Day): persist the safest bet so the banker
+                # selection and grading_engine._safest_bet path actually fire.
+                pred["_safest_bet"] = [best_market, round(best_prob, 4)]
 
             emoji = {"high": "🟢", "medium": "🟡", "low": "⚪", "none": "⚫"}.get(value_rank, "⚫")
             bet_label = best_bet.market if best_bet else "N/A"
@@ -897,7 +941,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
     # pool so accumulators benefit from league-level adjustments.
     acc_pool = []
     for pred in predictions:
-        if pred.get("category") in ("safe", "value") and pred.get("odds", 0) > 1.0 and pred.get("league_tier", 5) < 5:
+        # Top-league only (tier <= 2) — same gate as bet_pool.
+        if pred.get("category") in ("safe", "value") and pred.get("odds", 0) > 1.0 and pred.get("league_tier", 5) <= 2:
             acc_pool.append({
                 "fixture_id": pred["fixture_id"],
                 "league": pred.get("league", ""),
@@ -911,6 +956,27 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "kickoff_local": pred.get("kickoff_local", ""),
                 "category": pred.get("category", "value"),
             })
+            # Also feed the "other good markets" (all_value_bets) into the
+            # safe-stack pool so high-probability alternatives per fixture
+            # are candidates, not just the single headline pick.
+            for vb in (pred.get("all_value_bets") or [])[:4]:
+                vb_prob = vb.get("prob") or 0
+                vb_odds = vb.get("odds") or 0
+                if vb_prob < 0.70 or vb_odds <= 1.0 or not vb.get("market"):
+                    continue
+                acc_pool.append({
+                    "fixture_id": pred["fixture_id"],
+                    "league": pred.get("league", ""),
+                    "home_team": pred.get("home_team", ""),
+                    "away_team": pred.get("away_team", ""),
+                    "market": vb["market"],
+                    "odds": vb_odds,
+                    "model_prob": vb_prob,
+                    "expected_value": vb.get("ev") or 0,
+                    "kickoff_utc": pred.get("kickoff_utc", ""),
+                    "kickoff_local": pred.get("kickoff_local", ""),
+                    "category": pred.get("category", "value"),
+                })
 
     if not predictions:
         _safe_print("[QuantPipeline] No matches could be analyzed today.")
@@ -985,9 +1051,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "away_form": p.get("away_form"),
             "expected_goals_home": p.get("expected_goals_home"),
             "expected_goals_away": p.get("expected_goals_away"),
-            "expected_corners": p.get("expected_corners"),
-            "over65_corners_prob": p.get("over65_corners_prob"),
-            "over75_corners_prob": p.get("over75_corners_prob"),
             "fh_over05_prob": p.get("fh_over05_prob"),
             "fh_over15_prob": p.get("fh_over15_prob"),
             "fh_btts_prob": p.get("fh_btts_prob"),
@@ -1004,14 +1067,9 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "fh_home_win_prob": p.get("fh_home_win_prob"),
             "fh_draw_prob": p.get("fh_draw_prob"),
             "fh_away_win_prob": p.get("fh_away_win_prob"),
-            # Vault / EV fields
-            "ev_pct": p.get("ev_pct"),
-            "expected_value": p.get("expected_value"),
-            "kelly_stake": p.get("kelly_stake"),
-            "inefficiency": p.get("inefficiency"),
+            # Data quality and fresh odds
             "data_quality": p.get("data_quality"),
             "odds_fresh": p.get("odds_fresh"),
-            "vault_eligible": p.get("vault_eligible"),
             "calibration_tier": p.get("calibration_tier"),
             "calibrated_probability": p.get("calibrated_probability"),
             "calibration_tag": p.get("calibration_tag"),
@@ -1049,8 +1107,6 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "under25_prob": p.get("under25_prob"),
             "under35_prob": p.get("under35_prob"),
             "under45_prob": p.get("under45_prob"),
-            "over65_corners_prob": p.get("over65_corners_prob"),
-            "over75_corners_prob": p.get("over75_corners_prob"),
             # Safest bet
             "_safest_bet": p.get("_safest_bet"),
             "hedge_suggestion": p.get("hedge_suggestion"),

@@ -215,7 +215,8 @@ export const triggerTipOfTheDay = async () => {
     logger.info('[Scheduler] Triggering Tip of the Day push...');
     try {
         const db = admin.firestore();
-        const todayKey = new Date().toISOString().split('T')[0];
+        // Use Lagos (Africa/Lagos) date key — UTC split is wrong between 00:00-01:00 WAT
+        const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' });
         
         const snap = await db.collection('quant_predictions').doc(todayKey).get();
         if (!snap.exists || !snap.data().predictions) {
@@ -342,6 +343,8 @@ export const initScheduler = () => {
                     env: { ...process.env },
                     timeout: 60000,
                 });
+                // Never let a missing Python binary crash the whole server (ENOENT on 'error').
+                child.on('error', e => logger.warn({ error: e.message, script: 'banker_summary.py' }, '[Scheduler] Python spawn failed'));
 
                 let stdout = '';
                 child.stdout.on('data', d => stdout += d);
@@ -451,17 +454,36 @@ export const initScheduler = () => {
                         env: { ...process.env },
                         timeout: 120000,
                     });
+                    child.on('error', e => logger.warn({ error: e.message, script: 'live_score_writer.py' }, '[Scheduler] Python spawn failed'));
 
                     let stdout = '';
                     let stderr = '';
                     child.stdout.on('data', d => stdout += d);
                     child.stderr.on('data', d => stderr += d);
 
-                    child.on('close', code => {
+                    child.on('close', async code => {
                         if (code !== 0) {
                             const errMsg = stderr.trim() || stdout.trim() || '(no output)';
                             logger.warn({ code, error: errMsg }, '[LiveScores] Non-zero exit');
                         }
+                        // Merge ESPN's extra leagues/sports into the live feed (no API key, no browser).
+                        try {
+                            const { fetchEspnLive } = await import('./espn_live.js');
+                            const espn = await fetchEspnLive();
+                            if (espn.length) {
+                                const ref = admin.firestore().collection('live_scores').doc('current');
+                                const snap = await ref.get();
+                                const cur = snap.exists ? (snap.data().matches || []) : [];
+                                const key = m => `${(m.homeTeam || '').toLowerCase()}|${(m.awayTeam || '').toLowerCase()}`;
+                                const have = new Set(cur.map(key));
+                                const add = espn.filter(m => !have.has(key(m)));
+                                if (add.length) {
+                                    const merged = [...cur, ...add];
+                                    await ref.set({ matches: merged, count: merged.length, updatedAt: new Date().toISOString() }, { merge: true });
+                                    logger.info(`[LiveScores] ESPN merge +${add.length} (total ${merged.length})`);
+                                }
+                            }
+                        } catch (e) { logger.warn({ error: e.message }, '[LiveScores] ESPN merge failed'); }
                     });
                 } catch (e) {
                     logger.warn({ error: e.message }, '[LiveScores] Spawn error');
@@ -487,6 +509,7 @@ export const initScheduler = () => {
                     env: { ...process.env },
                     timeout: 300000,
                 });
+                child.on('error', e => logger.warn({ error: e.message, script: 'unified_vault.py' }, '[Scheduler] Python spawn failed'));
 
                 let stdout = '';
                 let stderr = '';
@@ -567,6 +590,7 @@ export const initScheduler = () => {
                         env: { ...process.env },
                         timeout: 600000,
                     });
+                    child.on('error', e => logger.warn({ error: e.message, script: 'historical_data_pipeline.py' }, '[Scheduler] Python spawn failed'));
 
                     let stdout = '';
                     child.stdout.on('data', d => stdout += d);
@@ -603,6 +627,15 @@ export const initScheduler = () => {
                 await runLineupSyncer();
             } catch (e) {
                 logger.error({ error: e }, '[Scheduler] Lineup sync error');
+            }
+            // ESPN supplement: fill lineups/{fixtureId} the paid source left empty.
+            try {
+                const { syncEspnLineups } = await import('./espn_lineups.js');
+                const lagos = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 10); // Africa/Lagos = UTC+1
+                const r = await syncEspnLineups(lagos);
+                logger.info(`[Scheduler] ESPN lineups: updated ${r.updated}/${r.checked}`);
+            } catch (e) {
+                logger.warn({ error: e.message }, '[Scheduler] ESPN lineup supplement failed');
             }
         }),
         { timezone: 'Africa/Lagos' }

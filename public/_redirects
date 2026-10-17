@@ -1,9 +1,16 @@
 # Redirect rogue .html request directly to root (301 Permanent) to clear Google Search Console warnings
 /.html / 301
 
-# Allow explicit SEO files to passthrough
-/sitemap.xml /sitemap.xml 200
+# SEO passthrough -> Railway backend (SSR pages + live sitemap)
+/sitemap.xml https://vantage-ai-production-ed4b.up.railway.app/sitemap.xml 200
+/predictions/* https://vantage-ai-production-ed4b.up.railway.app/predictions/:splat 200
+/pronostics/* https://vantage-ai-production-ed4b.up.railway.app/pronostics/:splat 200
+/match/* https://vantage-ai-production-ed4b.up.railway.app/match/:splat 200
+/blog/* https://vantage-ai-production-ed4b.up.railway.app/blog/:splat 200
+
+# Allow the static robots.txt to pass through
 /robots.txt /robots.txt 200
 
-# SPA fallback
+# SPA fallback (must stay LAST - everything above it wins by specificity alone,
+# and _redirects rules are evaluated before netlify.toml rules)
 /* /index.html 200
