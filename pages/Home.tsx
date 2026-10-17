@@ -555,6 +555,22 @@ export const Home: React.FC<HomeProps> = () => {
 
       {/* ─── MATCH LIST ─── */}
       <div className="space-y-6">
+        {!isVip && !loading && (
+          <div onClick={() => navigate('/vip')}
+            className="group flex items-center justify-between gap-3 rounded-2xl border border-vantage-purple/30 bg-gradient-to-r from-vantage-purple/15 via-vantage-purple/5 to-transparent px-4 py-3 cursor-pointer hover:border-vantage-purple/60 transition-all">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Lock size={16} className="text-vantage-purple shrink-0" />
+              <span className="text-xs font-bold text-slate-800 dark:text-white/90 leading-tight">
+                {language === 'fr'
+                  ? 'VIP débloque tous les pronostics + les mises exactes du jour.'
+                  : 'VIP unlocks every pick + today\u2019s exact stakes.'}
+              </span>
+            </div>
+            <span className="shrink-0 text-[10px] font-black uppercase tracking-wide text-white bg-vantage-purple px-2.5 py-1 rounded-lg group-hover:bg-purple-600 transition-colors">
+              {language === 'fr' ? 'Passer VIP' : 'Upgrade'}
+            </span>
+          </div>
+        )}
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(i => (
