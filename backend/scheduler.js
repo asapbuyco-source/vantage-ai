@@ -461,11 +461,29 @@ export const initScheduler = () => {
                     child.stdout.on('data', d => stdout += d);
                     child.stderr.on('data', d => stderr += d);
 
-                    child.on('close', code => {
+                    child.on('close', async code => {
                         if (code !== 0) {
                             const errMsg = stderr.trim() || stdout.trim() || '(no output)';
                             logger.warn({ code, error: errMsg }, '[LiveScores] Non-zero exit');
                         }
+                        // Merge ESPN's extra leagues/sports into the live feed (no API key, no browser).
+                        try {
+                            const { fetchEspnLive } = await import('./espn_live.js');
+                            const espn = await fetchEspnLive();
+                            if (espn.length) {
+                                const ref = admin.firestore().collection('live_scores').doc('current');
+                                const snap = await ref.get();
+                                const cur = snap.exists ? (snap.data().matches || []) : [];
+                                const key = m => `${(m.homeTeam || '').toLowerCase()}|${(m.awayTeam || '').toLowerCase()}`;
+                                const have = new Set(cur.map(key));
+                                const add = espn.filter(m => !have.has(key(m)));
+                                if (add.length) {
+                                    const merged = [...cur, ...add];
+                                    await ref.set({ matches: merged, count: merged.length, updatedAt: new Date().toISOString() }, { merge: true });
+                                    logger.info(`[LiveScores] ESPN merge +${add.length} (total ${merged.length})`);
+                                }
+                            }
+                        } catch (e) { logger.warn({ error: e.message }, '[LiveScores] ESPN merge failed'); }
                     });
                 } catch (e) {
                     logger.warn({ error: e.message }, '[LiveScores] Spawn error');
