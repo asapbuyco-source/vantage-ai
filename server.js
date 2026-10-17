@@ -524,7 +524,50 @@ app.get('/api/espn/scoreboard', async (req, res) => {
     }
 });
 
-// GET /api/espn/summary?league=eng.1&event=401878771  (lineups + stats)
+// GET /api/stats/record?days=30 — real track record from graded predictions:
+// win rate AND flat-stake ROI (odds-weighted) + per-market breakdown. Public, cached.
+app.get('/api/stats/record', async (req, res) => {
+    try {
+        const days = Math.min(Number(req.query.days) || 30, 120);
+        const db = admin.firestore();
+        const snap = await db.collection('quant_predictions').orderBy('date', 'desc').limit(days).get();
+        let won = 0, lost = 0, voided = 0, staked = 0, returned = 0;
+        const byMarket = {};
+        for (const doc of snap.docs) {
+            const preds = (doc.data() || {}).predictions || [];
+            for (const p of preds) {
+                const st = p.status;
+                if (st !== 'won' && st !== 'lost' && st !== 'void') continue;
+                const odds = Number(p.odds || p.pick_time_odds || 0);
+                const key = p.bet_type || p.prediction || 'other';
+                const mm = (byMarket[key] = byMarket[key] || { won: 0, lost: 0, void: 0, staked: 0, returned: 0 });
+                if (st === 'void') { voided++; mm.void++; continue; }
+                staked++; mm.staked++;
+                if (st === 'won') { won++; mm.won++; const r = odds > 1 ? odds : 1; returned += r; mm.returned += r; }
+                else { lost++; mm.lost++; }
+            }
+        }
+        const roi = staked ? ((returned - staked) / staked) * 100 : 0;
+        const winRate = (won + lost) ? (won / (won + lost)) * 100 : 0;
+        for (const k of Object.keys(byMarket)) {
+            const m = byMarket[k];
+            m.roi = m.staked ? +(((m.returned - m.staked) / m.staked) * 100).toFixed(1) : 0;
+            m.winRate = (m.won + m.lost) ? +((m.won / (m.won + m.lost)) * 100).toFixed(1) : 0;
+            m.returned = +m.returned.toFixed(2);
+        }
+        res.set('Cache-Control', 'public, max-age=300');
+        return res.json({
+            ok: true, period_days: days,
+            graded: { won, lost, void: voided, total: won + lost },
+            winRate: +winRate.toFixed(1),
+            staked, returned: +returned.toFixed(2),
+            roi: +roi.toFixed(2),
+            byMarket,
+        });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: String(e).slice(0, 160) });
+    }
+});
 app.get('/api/espn/summary', async (req, res) => {
     try {
         const league = String(req.query.league || 'eng.1');
