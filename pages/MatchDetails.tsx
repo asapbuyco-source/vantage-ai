@@ -324,11 +324,12 @@ fetchDetails();
                         </div>
                     </div>
 
-                    {/* Highest Value Bet — the EV-best pick, with model-vs-market math + method */}
+                    {/* Safe Value Pick — highest ODDS among our safest (>=68%) markets */}
                     {(() => {
-                        const market = match.prediction_en || match.prediction || match.bet_type || '';
-                        const modelProb = Number((match as any).calibrated_probability ?? match.probability ?? 0); // 0..1
-                        const odds = Number(match.odds) || 0;
+                        const sp = (match as any).safe_pick as { market?: string; prob?: number; odds?: number } | null;
+                        const market = (sp && sp.market) || match.prediction_en || match.prediction || match.bet_type || '';
+                        const modelProb = sp && sp.prob != null ? Number(sp.prob) : Number((match as any).calibrated_probability ?? match.probability ?? 0); // 0..1
+                        const odds = sp && sp.odds ? Number(sp.odds) : (Number(match.odds) || 0);
                         if (!market || odds <= 1) return null;
                         const implied = 1 / odds;
                         const edge = modelProb > 0 ? (modelProb * odds - 1) * 100 : null;
@@ -338,7 +339,7 @@ fetchDetails();
                                 <div className="relative z-10 px-4 py-3">
                                     <div className="flex items-center justify-between mb-1.5">
                                         <span className="text-[10px] font-bold text-vantage-purple uppercase tracking-widest flex items-center gap-1.5">
-                                            <Crown size={12} /> {language === 'fr' ? 'MEILLEUR VALUE BET' : 'HIGHEST VALUE BET'}
+                                            <Crown size={12} /> {language === 'fr' ? 'PICK SÛR + MEILLEURE COTE' : 'SAFE VALUE PICK'}
                                         </span>
                                         {isValue && (
                                             <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full">
@@ -360,8 +361,8 @@ fetchDetails();
                                     </div>
                                     <p className="text-[9px] text-gray-500 mt-1.5">
                                         {language === 'fr'
-                                            ? 'Poisson + Elo + forme + xG : la probabilité du modèle comparée à celle implicite des cotes.'
-                                            : 'Poisson + Elo + form + xG ensemble — our model probability vs the probability implied by the odds.'}
+                                            ? 'Notre meilleur pari « sûr » : la cote la plus élevée parmi nos marchés les plus fiables (modèle vs cotes).'
+                                            : 'Our best SAFE pick: the highest odds among our most reliable markets (model vs the odds).'}
                                     </p>
                                 </div>
                             </div>
@@ -823,11 +824,8 @@ fetchDetails();
                                     <div className="flex flex-wrap gap-2 md:gap-3">
                                         {(() => {
                                             const top5 = match.top_scorelines.slice(0, 5);
-                                            const rawSum = top5.reduce((s: number, sl: any) => s + ((sl.prob || sl[1] || 0) * 100), 0) || 1;
                                             return top5.map((sl: any, i: number) => {
-                                                // Normalize displayed shares so visible scorelines sum to 100
-                                                const raw = (sl.prob || sl[1] || 0) * 100;
-                                                const prob = (raw / rawSum) * 100;
+                                                const prob = (sl.prob ?? sl[1] ?? 0) * 100;
                                                 return (
                                                     <div key={i} onClick={() => setSelectedScoreline(i)} className={`cursor-pointer hover:bg-white/10 active:scale-95 flex-1 min-w-[70px] flex flex-col items-center justify-center p-2 rounded-lg border ${selectedScoreline === i ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-slate-900/60 border-white/5'} transition-colors`}>
                                                         <span className="text-sm md:text-base font-bold text-white mb-0.5">{sl.score || sl.scoreline || sl[0] || sl}</span>
@@ -837,7 +835,11 @@ fetchDetails();
                                             });
                                         })()}
                                     </div>
-                                    <p className="text-[9px] text-gray-600 mt-2">Share of the 5 most likely scorelines</p>
+                                    <p className="text-[9px] text-gray-600 mt-2">
+                                {language === 'fr'
+                                    ? 'Probabilité du modèle pour ce score exact. « Plus de 1.5 » gagne dès 2 buts au total, « Moins de 3.5 » gagne jusqu\u2019à 3 buts.'
+                                    : 'Model probability of this exact score. "Over 1.5" wins on any score with 2+ goals; "Under 3.5" wins on ≤3 goals.'}
+                            </p>
                                 </div>
                             )}
 
@@ -899,11 +901,8 @@ fetchDetails();
                             <div className="flex flex-wrap gap-2 md:gap-3">
                                 {(() => {
                                     const top5 = match.top_scorelines.slice(0, 5);
-                                    const rawSum = top5.reduce((s: number, sl: any) => s + ((sl.prob || sl[1] || 0) * 100), 0) || 1;
                                     return top5.map((sl: any, i: number) => {
-                                        // Normalize displayed shares so visible scorelines sum to 100
-                                        const raw = (sl.prob || sl[1] || 0) * 100;
-                                        const prob = (raw / rawSum) * 100;
+                                        const prob = (sl.prob ?? sl[1] ?? 0) * 100;
                                         return (
                                             <div key={i} onClick={() => setSelectedScoreline(i)} className={`cursor-pointer hover:bg-white/10 active:scale-95 flex-1 min-w-[70px] flex flex-col items-center justify-center p-3 rounded-lg border ${selectedScoreline === i ? 'bg-emerald-900/10 border-emerald-500/30' : 'bg-slate-900/60 border-white/5'} transition-colors`}>
                                                 <span className="text-base font-bold text-white mb-0.5">{sl.score || sl.scoreline || sl[0] || sl}</span>
@@ -913,7 +912,11 @@ fetchDetails();
                                     });
                                 })()}
                             </div>
-                            <p className="text-[9px] text-gray-600 mt-2">Share of the 5 most likely scorelines</p>
+                            <p className="text-[9px] text-gray-600 mt-2">
+                                {language === 'fr'
+                                    ? 'Probabilité du modèle pour ce score exact. « Plus de 1.5 » gagne dès 2 buts au total, « Moins de 3.5 » gagne jusqu\u2019à 3 buts.'
+                                    : 'Model probability of this exact score. "Over 1.5" wins on any score with 2+ goals; "Under 3.5" wins on ≤3 goals.'}
+                            </p>
                         </div>
                     )}
 
