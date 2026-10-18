@@ -690,6 +690,13 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 match.home_sidelined_count, match.away_sidelined_count,
                 match.league_id, match.league_tier,
             )
+            # ── SAFE PICK (2026-10): among genuinely SAFE markets (model prob >= 68%,
+            # +EV), choose the one with the BEST ODDS (best payout) — not the shortest-odds
+            # "most likely". Avoids recommending near-certain 1.10-1.20 picks and surfaces
+            # a real safe value (e.g. a home win at 1.80 at 70%) instead of Over 1.5 at 1.20.
+            _safe_pool = [b for b in all_value_bets if b.model_prob >= 0.68 and b.odds > 1.05 and b.expected_value >= 0]
+            safe_pick = max(_safe_pool, key=lambda b: b.odds) if _safe_pool else None
+
             pred = {
                 "fixture_id": match.fixture_id,
                 "league": match.league,
@@ -702,6 +709,14 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "home_team_logo": match.home_logo,
                 "away_team_logo": match.away_logo,
                 "provider_source": getattr(match, "provider_source", "api_football"),
+                # SAFE PICK: highest-payout option among safe (>=68% prob, +EV) markets.
+                "safe_pick": ({
+                    "market": safe_pick.market,
+                    "bet_label": safe_pick.bet_label,
+                    "prob": round(safe_pick.model_prob, 4),
+                    "odds": safe_pick.odds,
+                    "ev": round(safe_pick.expected_value, 4),
+                } if safe_pick else None),
                 "kickoff_utc": match.kickoff_utc,
                 "kickoff_local": match.kickoff_local,
                 # ── Best bet for this match ─────────────────────────────────
@@ -1060,6 +1075,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             "away_win_prob": p.get("away_win_prob"),
             "over25_prob": p.get("over25_prob"),
             "over15_prob": p.get("over15_prob"),
+            "safe_pick": p.get("safe_pick"),
             "btts_prob": p.get("btts_prob"),
             "double_chance_1x": p.get("double_chance_1x"),
             "double_chance_x2": p.get("double_chance_x2"),

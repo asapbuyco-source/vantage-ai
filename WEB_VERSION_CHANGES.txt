@@ -1,0 +1,119 @@
+================================================================================
+ VANTAGE AI — WEB VERSION CHANGELOG (this version)
+ Branch: codex/a-grade-hardening (tip 3d02a8c)  ·  also merged into main (1c0e857)
+ Purpose: reference for replicating these changes in the MOBILE APP
+================================================================================
+
+--------------------------------------------------------------------------------
+1) SEO / INDEXABILITY  (web-only — mostly not needed for the mobile app)
+--------------------------------------------------------------------------------
+- Dynamic sitemap now serves ~460 URLs (was 7): live quant SSR + leagues + blog.
+- Canonicals added everywhere (SSR fallback + index.html).
+- Public routes when logged OUT (no more soft-404 LandingPage shells):
+  /stats, /learn, /guide, /match/:id, /free, /pronostics/:leagueSlug   [App.tsx]
+- League pages: /pronostics/:leagueSlug (public + SSR + sitemap)
+  [pages/LeaguePage.tsx + server.js SEO_LEAGUES]
+- Blog SSR: /blog/:slug unique titles/canonicals + crawler-visible content;
+  /blog listing SSR; /privacy-policy SSR.                                [server.js]
+- Netlify proxies for SSR set in public/_redirects (predictions, pronostics,
+  match, blog, sitemap → Railway). Removed static public/sitemap.xml.
+- FAQPage JSON-LD removed; viewport fixed.                              [index.html]
+
+--------------------------------------------------------------------------------
+2) MATCH DISPLAY & PREDICTIONS  (FRONTEND — applies to the app)
+--------------------------------------------------------------------------------
+- Home: stats + predictions now visible; BANKER / VIP VALUE badges added.
+- Highest Value Bet card (NEW) — under the Safest Pick:
+    · market + odds
+    · MODEL probability vs ODDS-IMPLIED probability
+    · EDGE % (e.g. +26%)
+    · method note "Poisson + Elo + form + xG ensemble"
+  File: pages/MatchDetails.tsx
+- "WHY THIS PICK" reasons (xG, avg goals, model agreement, value) +
+  "RISK FACTORS" (rest, injuries, sharp money, weather, BTTS-blanking) +
+  "WHAT TO AVOID" + "AI REASONS" tab + "TRENDS" tab.   [pages/MatchDetails.tsx]
+- REMOVED the 0.5 and 4.5 goal lines EVERYWHERE (worthless near-certain picks):
+    · frontend pick list                                   [utils.ts]
+    · EV engine market maps                                [backend/quant/ev_engine.py]
+    · safest-bet / accumulator pool                        [backend/quant/quant_pipeline.py]
+  → only meaningful goal lines (1.5 / 2.5 / 3.5) are shown.
+
+--------------------------------------------------------------------------------
+3) FREEMIUM / VIP GATE  (FRONTEND — applies to the app)
+--------------------------------------------------------------------------------
+- PER-MATCH gate on Home cards: 1 pick FREE, the rest shown as LOCKED cards
+  (purple gradient, teaser market name, blurred %, solid "VIP" chip, tap→/vip).
+  A guaranteed locked row ("Exact stake & best odds") appears when a match has
+  only one pick, so EVERY match has a gate.                              [pages/Home.tsx]
+- MatchDetails: first "other market" free, the rest locked + "N markets reserved
+  for VIP" footer.                                            [pages/MatchDetails.tsx]
+- Loss-aversion strip above the Home list (non-VIP): "VIP unlocks every pick +
+  today's exact stakes · [Upgrade]".                                    [pages/Home.tsx]
+- Nurse the funnel but keep it HONEST: free pick is real; VIP gets the rest +
+  staking. (We deliberately do NOT show ROI in the FOMO strip while it's negative.)
+
+--------------------------------------------------------------------------------
+4) TRACK RECORD (win-rate + ROI)  (FRONTEND + BACKEND)
+--------------------------------------------------------------------------------
+- New endpoint: GET /api/stats/record?days=30  → win-rate + odds-weighted ROI +
+  per-market breakdown.                                              [server.js]
+- PublicStats: "30-Day Track Record" card (settled, win-rate, ROI, top markets).
+  Service: services/trackRecord.ts                                    [pages/PublicStats.tsx]
+- Verified: bet_type and odds both come from best_bet → the ROI reading is real,
+  NOT a data artifact.   (Current 30-day ROI was NEGATIVE ~ -17% — see section 8.)
+
+--------------------------------------------------------------------------------
+5) PREDICTION QUALITY / ROI FIX  (BACKEND)
+--------------------------------------------------------------------------------
+- EV-FIRST pick selection (was 50% probability, which favoured short-odds
+  favourites → negative ROI).                                     [quant_pipeline.py]
+- Safety-downgrade GUARD: the pipeline no longer replaces an +EV pick with a
+  short-odds "safe" market (DC 1X, Over 1.5, Under 3.5) unless the safe market
+  stays +EV and within 3pp of the original EV. Otherwise it KEEPS the EV pick.
+- Templates replace slow per-match AI analysis (instant, bilingual EN/FR,
+  thousands of combinations, no API/rate limits).  [backend/analysisTemplates.js
+  + backend/quantService.js]
+
+--------------------------------------------------------------------------------
+6) DATA SOURCES  (BACKEND)
+--------------------------------------------------------------------------------
+- ESPN client (free, no key, no browser): live scores, fixtures, lineups, stats.
+  backend/espn_client.js · endpoints /api/espn/scoreboard, /api/espn/summary,
+  /api/espn/match (lineups).
+- ESPN merged into live scores (scheduler) + used as a GRADING result fallback
+  (fills fixtures API-Football misses).  backend/espn_live.js, backend/espn_lineups.js,
+  backend/quant/grading_engine.py
+- ESPN lineup supplement fills lineups/{fixtureId} when the paid source has none.
+- Weather moved to Open-Meteo (free, no key).  backend/quant/weather_service.py
+- AI provider fallback: Groq (free) first, then OpenRouter.  backend/quantService.js
+- betmines client built but PARKED (Cloudflare blocks our servers).  backend/betmines_client.js
+
+--------------------------------------------------------------------------------
+7) INFRA / OPS
+--------------------------------------------------------------------------------
+- Dockerfile: Node + Python in one image (fixes spawn python3 ENOENT). Added curl.
+- .railwayignore (arb). Deploy from a dedicated dir for the arb service.
+- LineupSyncer Firebase PEM fix (escaped \n in FIREBASE_SERVICE_ACCOUNT).
+- Prediction-engine audit fixes: corners suspended, DC X2 disabled, intl BTTS discount.
+
+--------------------------------------------------------------------------------
+8) NOT DONE / CAVEATS  (important)
+--------------------------------------------------------------------------------
+- *** NETLIFY IS NOT PUBLISHING BUILDS *** (last live build = Oct 12, commit 7480071).
+   → vantageai.online is STALE. The new UI IS live on Railway:
+     https://vantage-ai-production-ed4b.up.railway.app
+   Fix: Netlify dashboard → Deploys (failing?), or give a Netlify token, or point
+   the domain at Railway.
+- ROI is still NEGATIVE (~-17% at flat stake, 30 days). The EV-first fix is
+  deployed but NOT yet measured — needs the next pipeline run + re-grade.
+- GROQ_API_KEY not set (AI text) — templates cover it.
+- Google Search Console: request indexing + resubmit sitemap.
+- Backlinks / Google Business Profile: not started.
+- Autobet: code ready (betpawa/betfrenzy) but not enabled (needs autobet test → live).
+- Social proof (testimonials / "X upgraded today"): intentionally skipped until ROI>0.
+- Free "Safest Pick" is still probability-based (the EV pick is shown separately
+  as "Highest Value Bet").
+
+================================================================================
+ END
+================================================================================
