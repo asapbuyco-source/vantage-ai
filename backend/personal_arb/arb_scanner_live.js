@@ -611,7 +611,10 @@ async function sendBookScreenshot(book, link, caption, oddsValue, hint = {}) {
           const head = t.slice(0, 60);
           if (!titleRe.test(head)) continue;
           if (market === 'ou' && target === 'corners' && !/corner/i.test(head)) continue;
-          if (market === 'ou' && target === 'goals' && /corner/i.test(head)) continue;
+          // ALWAYS exclude cards/corners/booking when the leg is a GOALS total.
+          // A "Cards Over/Under" section also matches /over under/ and was being
+          // mistaken for goals (real-money loss). Goals sections must not be cards.
+          if (market === 'ou' && target === 'goals' && /corner|card|carton|booking|yellow/i.test(head)) continue;
           if (market === '1x2' && /&|\bup\b|both/i.test(head)) continue;
           if (isHalf(t)) continue;
           const btns = oddsButtons(el);

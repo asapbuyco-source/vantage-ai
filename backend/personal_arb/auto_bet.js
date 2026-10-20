@@ -83,7 +83,10 @@ function locateAndClickInPage({ want, wantLine, index, market, titleRe, target }
     const head = t.slice(0, 60);
     if (!titleRe.test(head)) continue;
     if (market === 'ou' && target === 'corners' && !/corner/i.test(head)) continue;
-    if (market === 'ou' && target === 'goals' && /corner/i.test(head)) continue;
+    // ALWAYS exclude cards/corners/booking sections when the leg is a GOALS total:
+    // a "Cards Over/Under" section also matches /over under/ and was being clicked
+    // for goals legs (real-money loss: cards leg placed instead of goals).
+    if (market === 'ou' && target === 'goals' && /corner|card|carton|booking|yellow/i.test(head)) continue;
     if (market === '1x2' && /&|\bup\b|both/i.test(head)) continue;
     if (isHalf(t)) continue;
     const btns = oddsButtons(el);
@@ -252,6 +255,19 @@ async function prepareLeg({ book, ctx, leg, c, stake }) {
     const slip = await fillSlip(page, book, stake);
     if (!slip.filled) { out.why = 'stake input not found on slip'; return out; }
     await page.waitForTimeout(1200);
+    // SAFETY: never confirm if the slip shows a CARDS / CORNERS market for a goals leg.
+    // (The locator now excludes those sections, but this is the last-line guard.)
+    try {
+      const slipTxt = await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('[class*="slip" i],[id*="slip" i],[class*="bet-slip" i],[class*="betslip" i]'));
+        return els.map(e => e.textContent || '').join(' ').toLowerCase().slice(0, 1200);
+      });
+      const legIsCards = /card|carton|corner/i.test(leg.bet || '');
+      if (slipTxt && !legIsCards && /card|carton/.test(slipTxt)) {
+        out.why = 'bet slip shows a CARDS market for a goals leg — aborted (no bet placed)';
+        return out;
+      }
+    } catch (_) { /* best-effort */ }
     out.accepted = await readSlipStake(page); // null = custom keypad (unverified but allowed)
     out.balance = slip.balanceSeen;
     const bal = parseMoney(out.balance);
