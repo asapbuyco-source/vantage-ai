@@ -66,6 +66,34 @@ const loopMin = parseInt(args.find(a => a.startsWith('--loop='))?.split('=')[1] 
 let diagRows = [];
 
 const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/fc$|cf$|sc$|ac$/g, '');
+
+// ── Data-resilience instrumentation (2026-10) ────────────────────────────────
+// 1) Capture a small raw sample per book (on the volume) so a future site change
+//    can be diagnosed from the actual payload instead of guesses.
+// 2) Track per-market counts across cycles; alert if a hardcoded market goes
+//    silent for 3 cycles (book changed its feed / market IDs).
+const DEBUG_DIR = path.join(PROFILE_ROOT, 'debug');
+function captureSample(book, payload) {
+  try {
+    if (!fs.existsSync(DEBUG_DIR)) fs.mkdirSync(DEBUG_DIR, { recursive: true });
+    const s = JSON.stringify(payload);
+    fs.writeFileSync(path.join(DEBUG_DIR, `${book}_latest.json`), s.slice(0, 200000));
+  } catch (_) { /* diagnostics must never break the scan */ }
+}
+const marketHealth = {};
+function noteMarket(key, count) {
+  const h = marketHealth[key] || (marketHealth[key] = { misses: 0, warned: false });
+  if (count > 0) { h.misses = 0; h.warned = false; } else { h.misses += 1; }
+}
+async function checkMarketHealth() {
+  for (const [k, h] of Object.entries(marketHealth)) {
+    if (h.misses >= 3 && !h.warned) {
+      h.warned = true;
+      await sendTelegram(`⚠️ ARB DATA: "${k}" has returned 0 for ${h.misses} cycles — the book may have changed its feed or market IDs. Please check.`);
+      console.log(`[Health] market ${k} silent ${h.misses} cycles — alert sent`);
+    }
+  }
+}
 // Canonical league token — strips generic words so books that name the same
 // competition differently ("UEFA Champions League" vs "Ligue des Champions UEFA")
 // still match, while youth/senior stay distinct ("youth" vs "champions").
@@ -87,6 +115,7 @@ async function fetchBetfrenzy() {
       const r = await fetch('https://betfrenzy.cm/api/v1/sports/matchs?SportId=1&EventStatus=PRE', { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (!r.ok) { await new Promise(r => setTimeout(r, 3000)); continue; }
       const j = await r.json();
+      captureSample('betfrenzy', Array.isArray(j) ? j.slice(0, 3) : j);
       const out = [];
       for (const lg of j) for (const ev of lg.events || []) {
         const o = ev.odds || {};
@@ -160,6 +189,9 @@ async function fetchBetfrenzy() {
           }
         } catch (_) { /* other sports are best-effort */ }
       }
+      noteMarket('betfrenzy:1X2', out.filter(e => e.h).length);
+      noteMarket('betfrenzy:OU', out.filter(e => (e.ou || []).length).length);
+      noteMarket('betfrenzy:AH', out.filter(e => (e.ah || []).length).length);
       if (out.length > 0) return out;
       await new Promise(r => setTimeout(r, 3000));
     } catch (e) { await new Promise(r => setTimeout(r, 3000)); }
@@ -195,6 +227,7 @@ async function fetchBetpawa() {
     } });
     if (!r.ok) { console.log(`[betpawa] HTTP ${r.status}`); return []; }
     const j = await r.json();
+    captureSample('betpawa', j.responses?.[0]?.responses?.slice(0, 3) || j);
     const seen = new Set();
     // ── Runtime label verifier ──
     // betpawa's own market names are the source of truth ("... - FT", "... - 1H").
@@ -205,8 +238,18 @@ async function fetchBetpawa() {
     for (const resp of j.responses || []) for (const ev of resp.responses || []) {
       if (seen.has(ev.id)) continue;
       seen.add(ev.id);
-      const home = ev.participants?.find(p => p.position === 1)?.name;
-      const away = ev.participants?.find(p => p.position === 2)?.name;
+      let home = ev.participants?.find(p => p.position === 1)?.name;
+      let away = ev.participants?.find(p => p.position === 2)?.name;
+      // ORIENTATION VERIFICATION (2026-10): betpawa's event name is "Home vs Away".
+      // If the position fields disagree with the name, trust the name (an inverted
+      // home/away pair would create phantom arbs and lose money).
+      try {
+        const parts = String(ev.name || '').split(/\s+vs\.?\s+/i);
+        if (parts.length === 2 && home && away && norm(parts[0]) === norm(away) && norm(parts[1]) === norm(home)) {
+          const tmp = home; home = away; away = tmp;
+          console.log('[betpawa] orientation corrected via event name');
+        }
+      } catch (_) {}
       // label verifier bound to THIS event (team names give scope context)
       const verified = (m) => {
         if (!m) return null; // market not present for this event — not a rejection
@@ -261,6 +304,9 @@ async function fetchBetpawa() {
         dnb: dnbM && px(dnbM, '1') ? { home: px(dnbM, '1'), away: px(dnbM, '2'), scope: 'MATCH' } : null });
     }
     console.log(`[betpawa] ${events.length} events (1X2+DC+BTTS+O/U+AH+DNB, label-verified${rejectedLabels ? `, ${rejectedLabels} labels rejected` : ''})`);
+    noteMarket('betpawa:1X2', events.filter(e => e.h).length);
+    noteMarket('betpawa:OU', events.filter(e => (e.ou || []).length).length);
+    noteMarket('betpawa:AH', events.filter(e => (e.ah || []).length).length);
   } catch (e) {
     console.log(`[betpawa] fetch fail: ${e.message.slice(0, 90)}`);
   }
@@ -1335,6 +1381,7 @@ async function scan() {
     }
   }
   const first = await collectCandidates();
+  await checkMarketHealth();
   if (first.length === 0) { console.log('[Verify] 0 candidates — nothing to verify.'); return; }
   // Two-pass verification: wait 20s, re-fetch, only report arbs that PERSIST with stable odds
   console.log(`[Verify] ${first.length} candidates — re-fetching in 20s to confirm...`);
