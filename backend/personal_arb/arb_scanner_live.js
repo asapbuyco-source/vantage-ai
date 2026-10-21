@@ -1401,7 +1401,10 @@ async function scan() {
         : `▪ ${r.book}: ${r.ok ? `OK @ ${r.foundOdds} | slip+balance: ${r.balanceSeen || 'n/a'}` : `FAIL — ${r.why || '?'}`}`)].join('\n');
       await sendTelegram(text);
       console.log(`[AutoBet] dry run done: ${results.map(r => `${r.book}:${r.ok ? 'OK' : 'FAIL'}`).join(' ')}`);
-    } else if (botConfig.autobet === 'live' && aligned.length) {
+    } else if (botConfig.autobet === 'live' && process.env.AUTOBET_ENABLED === '1' && aligned.length) {
+      // HARD KILL-SWITCH (2026-10): live placement additionally requires
+      // AUTOBET_ENABLED=1 in the environment. Without it, nothing is ever placed
+      // even if the bot config still says 'live'. Alerts/dry-runs are unaffected.
       const today = new Date().toISOString().slice(0, 10);
       if (botConfig.autoDay !== today) { botConfig.autoDay = today; botConfig.autoPlacedToday = 0; botConfig.autoLimitWarned = false; saveConfig(); }
       if (botConfig.autoPlacedToday >= botConfig.autoDailyLimit) {
