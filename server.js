@@ -16,6 +16,7 @@ import sanitizeHtml from 'sanitize-html';
 import jwt from 'jsonwebtoken';
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerBankerOfTheDay, triggerVipTeaser, triggerTelegramResults, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
+import { seedEvergreenBlogs } from './backend/evergreenBlogs.js';
 import { sendTelegramTestMessage } from './backend/telegramService.js';
 import { requireFirebaseUser } from './backend/authMiddleware.js';
 import { assertValidPlan, inferPlanFromAmount } from './backend/paymentPlans.js';
@@ -88,6 +89,10 @@ try {
 
         // Start the automated cron scheduler now that Admin is ready
         initScheduler();
+
+        // Seed keyword-targeted evergreen articles once (idempotent) so the blog
+        // has crawlable content even before the first daily generation run.
+        seedEvergreenBlogs().catch((e) => logger.warn({ error: e.message }, '[Evergreen] Seed failed'));
     } else {
         logger.warn('[Server] FIREBASE_SERVICE_ACCOUNT not found. Auto-generation scheduler will not work.');
     }
@@ -690,6 +695,17 @@ app.post('/api/admin/generate-blog', adminAuth, async (req, res) => {
         logger.error({ error: e }, '[API] Blog generation error');
         Sentry.captureException(e);
         res.status(500).json({ error: 'Blog generation failed', details: e.message });
+    }
+});
+
+app.post('/api/admin/seed-evergreen', adminAuth, async (req, res) => {
+    try {
+        const result = await seedEvergreenBlogs();
+        res.json(result);
+    } catch (e) {
+        logger.error({ error: e }, '[API] Evergreen seed error');
+        Sentry.captureException(e);
+        res.status(500).json({ error: 'Evergreen seed failed', details: e.message });
     }
 });
 

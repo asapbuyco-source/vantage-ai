@@ -22,7 +22,7 @@ export const BlogIndex: React.FC = () => {
     useEffect(() => {
         document.title = language === 'fr'
             ? 'Blog Pronostics IA | Vantage AI Cameroun'
-            : 'AI Predictions Blog | Vantage AI';
+            : 'AI Football Predictions Blog | Vantage AI Cameroon';
 
         getRecentBlogPosts(30).then(data => {
             setPosts(data);
@@ -30,7 +30,7 @@ export const BlogIndex: React.FC = () => {
         });
 
         return () => {
-            document.title = 'Vantage AI Cameroun - Pronostics Foot 1xBet & Premier Bet (IA)';
+            document.title = 'Vantage AI Cameroon - AI Football Predictions for 1xBet & Premier Bet';
         };
     }, [language]);
 
