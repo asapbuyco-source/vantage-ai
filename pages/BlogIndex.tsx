@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, ChevronRight, Loader2, BookOpen, Zap } from 'lucide-react';
 import { getRecentBlogPosts } from '../services/blogService';
+import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { useAppContext } from '../context/AppContext';
 
 type PostMeta = {
@@ -133,6 +134,9 @@ export const BlogIndex: React.FC = () => {
                         );
                     })
                 )}
+            </div>
+            <div className="px-4 max-w-2xl mx-auto mt-4">
+                <PlayStoreCTA variant="banner" />
             </div>
         </div>
     );

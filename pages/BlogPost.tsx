@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, Loader2, AlertCircle, BookOpen, Tag } from 'lucide-react';
 import { getBlogPost, BlogPost as IBlogPost } from '../services/blogService';
+import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { useAppContext } from '../context/AppContext';
 import DOMPurify from 'isomorphic-dompurify';
 
@@ -169,6 +170,7 @@ export const BlogPost: React.FC = () => {
                         </div>
                     </motion.article>
                 ) : null}
+                <PlayStoreCTA variant="card" className="mt-6" />
             </div>
         </div>
     );
