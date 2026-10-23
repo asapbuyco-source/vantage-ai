@@ -37,7 +37,7 @@ export const BlogPost: React.FC = () => {
             } else {
                 setPost(data);
                 // Inject dynamic SEO tags
-                document.title = data.title || `Pronostics ${targetDate} | Vantage AI`;
+                document.title = data.title || `Football Predictions ${targetDate} | Vantage AI`;
                 const metaDesc = document.querySelector('meta[name="description"]');
                 if (metaDesc && data.excerpt) metaDesc.setAttribute('content', data.excerpt);
             }
