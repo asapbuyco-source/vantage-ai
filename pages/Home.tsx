@@ -17,6 +17,8 @@ import { TeamLogo } from '../components/TeamLogo';
 import { getAppSettings } from '../services/db';
 import { TicketWizard } from '../components/TicketWizard';
 import { MotionDiv } from '../components/MotionDiv';
+import { ToolsHub } from '../components/ToolsHub';
+import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { getTopProbPicks, getPrimaryPredictionText, getPrimaryPredictionProb, getTopPickText, plainMarket } from '../utils';
 import { db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
@@ -302,6 +304,7 @@ export const Home: React.FC<HomeProps> = () => {
           <p className="text-[10px] text-gray-500 dark:text-gray-400 tracking-widest font-semibold">{t('home.system')}</p>
         </div>
         <div className="flex items-center space-x-2">
+          <PlayStoreCTA variant="button" />
           <button
             onClick={() => setLanguage(language === 'fr' ? 'en' : 'fr')}
             title={language === 'fr' ? 'Switch to English' : 'Passer au français'}
@@ -449,6 +452,9 @@ export const Home: React.FC<HomeProps> = () => {
         </div>
         <ChevronRight size={16} className="text-gray-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
       </button>
+
+      {/* ── Play Store CTA ── */}
+      <PlayStoreCTA variant="banner" />
 
       {/* ── Date Bar ── */}
       <div className="flex items-center justify-between bg-black/5 dark:bg-white/5 px-4 py-2.5 rounded-xl border border-black/5 dark:border-white/5 text-xs">
@@ -815,6 +821,9 @@ export const Home: React.FC<HomeProps> = () => {
           ))
         )}
       </div>
+
+      {/* ─── BETTING TOOLS ─── */}
+      <ToolsHub className="mt-6" />
 
       {/* Floating Action Button — Smart Ticket (VIP only) */}
       {isVip && (

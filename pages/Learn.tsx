@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Lightbulb, GraduationCap, ChevronDown, ChevronRight, ExternalLink, TrendingUp, Target, BarChart3, Activity, PlayCircle } from 'lucide-react';
 import { BettingGuide } from './BettingGuide';
+import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { useAppContext } from '../context/AppContext';
 
 const trainingModules = [
@@ -163,6 +164,7 @@ export const Learn: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      <PlayStoreCTA variant="card" className="mt-4" />
     </div>
   );
 };

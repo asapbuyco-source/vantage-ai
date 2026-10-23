@@ -21,6 +21,7 @@ import { BlogPost } from './pages/BlogPost';
 import { MatchDetails } from './pages/MatchDetails';
 import { LeaguePage } from './pages/LeaguePage';
 import { Privacy } from './pages/Privacy';
+import { ToolsPage } from './pages/ToolsPage';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -250,6 +251,7 @@ function AppContent() {
         } />
         <Route path="/match/:id" element={<MatchDetails />} />
         <Route path="/free" element={<Home />} />
+        <Route path="/tools" element={<ToolsPage />} />
         <Route path="/pronostics/:leagueSlug" element={<LeaguePage />} />
         <Route path="*" element={
           <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans">
@@ -468,6 +470,7 @@ function AppContent() {
                     <Route path="/pronostics/:leagueSlug" element={<LeaguePage />} />
                     <Route path="/learn" element={<Learn />} />
                     <Route path="/guide" element={<Learn />} />
+                    <Route path="/tools" element={<ToolsPage />} />
                     <Route path="/concierge" element={<TicketWizard />} />
                     <Route path="/research" element={
                       <Suspense fallback={<div className="min-h-screen flex flex-col items-center justify-center"><Loader2 className="animate-spin text-vantage-cyan mb-4" size={40} /></div>}>

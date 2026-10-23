@@ -1553,7 +1553,7 @@ app.get('/sitemap.xml', async (req, res) => {
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
         // Static routes aligned with the real SPA routes
-        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip'];
+        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip', '/tools'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
         });
@@ -1904,12 +1904,43 @@ app.use(async (req, res, next) => {
             }
         }
 
+        // ── SPECIFIC ROUTE: /tools (free betting calculators — SEO landing) ──
+        if (req.path === '/tools' || req.path === '/tools/') {
+            try {
+                const toolsUrl = `${baseUrl}/tools`;
+                const title = `Free Football Betting Tools: Odds Converter, Value & Kelly Calculator | Vantage AI`;
+                const description = `Free football betting calculators from Vantage AI: decimal/fractional odds converter, accumulator calculator, expected value (EV), dutching, Kelly criterion and bankroll management.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${toolsUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${toolsUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+                const toolsList = [
+                    'Decimal, fractional and American odds converter with implied probability',
+                    'Accumulator (acca) odds and potential return calculator',
+                    'Expected value (EV) and value betting calculator',
+                    'Dutching calculator for splitting stakes across outcomes',
+                    'Kelly criterion staking calculator',
+                    'Bankroll management and unit-size planner',
+                ].map(t => `<li>${t}</li>`).join('');
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Free Football Betting Tools</h1><p>${description}</p><ul>${toolsList}</ul></div>\n<!-- REACT_ROOT -->`);
+            } catch (toolsErr) {
+                console.warn('[SSR] Tools SSR error:', toolsErr.message);
+            }
+        }
+
         // ── SPECIFIC ROUTE: /privacy-policy (distinct static page) ──
         if (req.path === '/privacy-policy' || req.path === '/privacy-policy/') {
             try {
                 const ppUrl = `${baseUrl}/privacy-policy`;
-                const title = `Politique de Confidentialité | Vantage AI`;
-                const description = `Politique de confidentialité de Vantage AI : quelles données nous collectons, comment nous les utilisons et vos droits.`;
+                const title = `Privacy Policy | Vantage AI`;
+                const description = `Vantage AI privacy policy: what data we collect, how we use it, and your rights.`;
                 const seoTags = `
     <title>${title}</title>
     <meta name="description" content="${description}" />

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, TrendingUp, ShieldCheck, Trophy, Users, Star, ArrowUpRight, CheckCircle2, History, Loader2 } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
+import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { useData } from '../context/DataContext';
 import { useAppContext } from '../context/AppContext';
 import { getUserCount, getWinRateStats } from '../services/db';
@@ -232,6 +233,8 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
                 <History size={18} />
                 {language === 'fr' ? 'Voir l\'Archive Complète des Résultats' : 'View Full Results Archive'}
             </button>
+
+            <PlayStoreCTA variant="card" className="mt-3" />
         </div>
     );
 };
