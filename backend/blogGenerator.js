@@ -13,7 +13,11 @@ const KEYWORDS_EN = [
     'football betting tips', 'value bets today', 'data-driven predictions',
     'soccer picks', 'betting tips', 'football predictions today',
     'best bets', 'premier league picks', 'liga predictions',
-    'accumulator tips', 'sure wins', 'football analysis'
+    'accumulator tips', 'sure wins', 'football analysis',
+    'over 2.5 goals tips', 'both teams to score predictions', 'correct score predictions',
+    'champions league predictions', 'african football predictions', 'elite one predictions',
+    'cameroon football betting', '1xbet predictions', 'premier bet tips',
+    'daily football tips', 'weekend football predictions', 'bankroll management betting'
 ];
 
 const KEYWORDS_FR = [
@@ -280,7 +284,13 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
 
     if (leagueOverride) {
         const inLeague = picks.filter(p => String(p.league || '').toLowerCase().includes(leagueOverride.toLowerCase()));
-        if (inLeague.length >= 2) picks = inLeague;
+        // Only publish a per-league page when we actually have picks in it — avoids
+        // near-duplicate articles carrying another league's matches under the wrong name.
+        if (inLeague.length >= 2) {
+            picks = inLeague;
+        } else {
+            return { status: 'skipped', reason: 'insufficient_league_matches' };
+        }
     }
     const topPicks = picks.slice(0, 5);
 
@@ -352,7 +362,7 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
         title,
         content,
         excerpt,
-        tags: ['football', 'predictions', 'betting', leagueSlug].concat(language === 'fr' ? ['pronostics'] : ['soccer tips']),
+        tags: ['football', 'predictions', 'betting', leagueSlug, `${leagueSlug} predictions`, 'football betting tips'].concat(language === 'fr' ? ['pronostics', 'paris sportifs'] : ['soccer tips', 'value bets', 'football predictions today']),
         generatedAt: new Date().toISOString(),
         generatedBy: 'programmatic-v2',
         updatedAt: new Date().toISOString(),
@@ -376,22 +386,32 @@ export const generateBlogPost = async (language = 'en', leagueOverride = null) =
 export const triggerBlogGeneration = async () => {
     logger.info('[BlogGenerator] Starting programmatic blog generation...');
     try {
-        const topLeagues = ['Premier League', 'La Liga', 'Serie A', 'Champions League'];
+        // Broad keyword footprint: one page per league that actually has picks,
+        // plus a general "football predictions today" roundup.
+        const topLeagues = [
+            'Premier League', 'La Liga', 'Serie A', 'Bundesliga', 'Ligue 1',
+            'Champions League', 'Europa League', 'Eredivisie', 'Primeira Liga',
+            'Championship', 'MLS', 'Liga MX', 'Saudi Pro League', 'Brasileirao',
+            'Super Lig', 'Elite One', 'Nigeria Premier League', 'Ghana Premier League',
+            'South Africa Premier League', 'Egypt Premier League', 'Morocco Botola Pro',
+        ];
+        const jobs = [null, ...topLeagues];
+        const label = (league) => league || 'top-roundup';
 
         // Generate English blogs for multiple leagues — use allSettled so one league failure doesn't block others
         const results = await Promise.allSettled(
-            topLeagues.map(league => generateBlogPost('en', league))
+            jobs.map(league => generateBlogPost('en', league))
         );
 
         const succeeded = [];
         const failed = [];
         results.forEach((res, i) => {
             if (res.status === 'fulfilled') {
-                succeeded.push(topLeagues[i]);
-                logger.info(`[BlogGenerator] Generated English blog for ${topLeagues[i]} (${res.value.status})`);
+                succeeded.push(label(jobs[i]));
+                logger.info(`[BlogGenerator] Generated English blog for ${label(jobs[i])} (${res.value.status})`);
             } else {
-                failed.push(topLeagues[i]);
-                logger.warn(`[BlogGenerator] Failed to generate blog for ${topLeagues[i]}: ${res.reason?.message}`);
+                failed.push(label(jobs[i]));
+                logger.warn(`[BlogGenerator] Failed to generate blog for ${label(jobs[i])}: ${res.reason?.message}`);
             }
         });
 
