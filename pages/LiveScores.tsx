@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Activity, RefreshCw, Clock, Zap, Radio, ChevronRight } from 'lucide-react';
 import { getLiveMatchesFromDB } from '../services/sportsData';
-import { LiveMatch, NavigationTab } from '../types';
+import { LiveMatch, Match, NavigationTab } from '../types';
 import { TeamLogo } from '../components/TeamLogo';
 import { useAppContext } from '../context/AppContext';
+import { useData } from '../context/DataContext';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 
@@ -82,27 +83,62 @@ function getStateConfig(short: string, language: string) {
   return config;
 }
 
-const LiveMatchCard: React.FC<{ match: LiveMatch; idx: number; language: string }> = ({ match, idx, language }) => {
+// Best leagues are pinned to the top of the live feed, in this order.
+const TOP_LEAGUES = [
+  'uefa champions league', 'champions league', 'uefa europa league', 'europa league',
+  'premier league', 'la liga', 'serie a', 'bundesliga', 'ligue 1',
+  'eredivisie', 'primeira liga', 'championship',
+  'caf champions league', 'africa cup of nations', 'world cup',
+  'mls', 'liga mx', 'brasileirao', 'saudi pro league', 'super lig',
+  'elite one', 'nigeria premier league',
+];
+
+const leagueRank = (league?: string): number => {
+  const l = (league || '').toLowerCase();
+  const i = TOP_LEAGUES.findIndex(x => l.includes(x));
+  return i === -1 ? TOP_LEAGUES.length + 1 : i;
+};
+
+const normTeam = (s?: string): string =>
+  (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const LiveMatchCard: React.FC<{ match: LiveMatch; idx: number; language: string; prediction?: Match | null }> = ({ match, idx, language, prediction }) => {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const stateConf = getStateConfig(match.stateShort, language);
   const isLive = !['FT', 'NS', 'POSTP', 'ABD', 'CANC', 'TBD'].includes(match.stateShort?.toUpperCase());
+  // Backend writes homeLogo/awayLogo; older clients expect homeTeamLogo/awayTeamLogo.
+  const homeLogo = match.homeTeamLogo || (match as any).homeLogo || (match as any).home_team_logo || '';
+  const awayLogo = match.awayTeamLogo || (match as any).awayLogo || (match as any).away_team_logo || '';
+  const pickText = prediction ? (prediction.prediction_en || prediction.prediction || '') : '';
+  const pickOdds = prediction && Number(prediction.odds) > 0 ? Number(prediction.odds) : 0;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: idx * 0.05 }}
-      className="rounded-2xl border border-white/8 bg-[#1a1d26] overflow-hidden cursor-pointer hover:border-vantage-cyan/40 transition-colors"
+      className={`rounded-2xl border ${prediction ? 'border-emerald-500/40' : 'border-white/8'} bg-[#1a1d26] overflow-hidden cursor-pointer hover:border-vantage-cyan/40 transition-colors`}
       onClick={() => navigate(`/match/${match.id}`)}
     >
       {/* Score row */}
       <div className="px-4 py-3.5">
         {/* League + state */}
         <div className="flex items-center justify-between mb-3">
-          <span className="text-[10px] text-gray-500 font-semibold truncate max-w-[60%]">
-            {match.league}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0 max-w-[62%]">
+            <span className="text-[10px] text-gray-500 font-semibold truncate">
+              {match.league}
+            </span>
+            {prediction && (
+              <span className="shrink-0 inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-emerald-400">
+                <Zap size={8} /> {language === 'fr' ? 'Pronostic' : 'Pick'}
+              </span>
+            )}
+          </div>
           <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${stateConf.bg} ${stateConf.color}`}>
             {isLive && (
               <span className="relative flex h-1.5 w-1.5">
@@ -120,7 +156,7 @@ const LiveMatchCard: React.FC<{ match: LiveMatch; idx: number; language: string 
           {/* Home Team */}
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="w-9 h-9 shrink-0 rounded-xl bg-white/5 flex items-center justify-center border border-white/8 p-1.5">
-              <TeamLogo src={match.homeTeamLogo} teamName={match.homeTeam} className="w-full h-full" />
+              <TeamLogo src={homeLogo} teamName={match.homeTeam} className="w-full h-full" />
             </div>
             <span className="text-sm font-bold text-white leading-tight line-clamp-1">{match.homeTeam}</span>
           </div>
@@ -151,11 +187,23 @@ const LiveMatchCard: React.FC<{ match: LiveMatch; idx: number; language: string 
           {/* Away Team */}
           <div className="flex items-center gap-2.5 flex-1 min-w-0 flex-row-reverse">
             <div className="w-9 h-9 shrink-0 rounded-xl bg-white/5 flex items-center justify-center border border-white/8 p-1.5">
-              <TeamLogo src={match.awayTeamLogo} teamName={match.awayTeam} className="w-full h-full" />
+              <TeamLogo src={awayLogo} teamName={match.awayTeam} className="w-full h-full" />
             </div>
             <span className="text-sm font-bold text-white leading-tight line-clamp-1 text-right">{match.awayTeam}</span>
           </div>
         </div>
+
+        {/* AI prediction strip */}
+        {prediction && (
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-wide text-emerald-400 shrink-0">
+              {language === 'fr' ? 'IA' : 'AI'}
+            </span>
+            <span className="text-[11px] font-bold text-white truncate flex-1">{pickText}</span>
+            {pickOdds > 0 && <span className="text-[11px] font-mono font-bold text-vantage-cyan shrink-0">{pickOdds.toFixed(2)}</span>}
+            {prediction.confidence > 0 && <span className="text-[9px] font-mono text-gray-400 shrink-0">{Math.round(prediction.confidence)}%</span>}
+          </div>
+        )}
 
         {/* Goals summary row */}
         <div className="mt-3 flex items-center justify-between pt-3 border-t border-white/5">
@@ -172,6 +220,7 @@ const LiveMatchCard: React.FC<{ match: LiveMatch; idx: number; language: string 
 
 export const LiveScores: React.FC<LiveScoresProps> = () => {
   const { language } = useAppContext();
+  const { predictions } = useData();
   const [matches, setMatches] = useState<LiveMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -211,15 +260,53 @@ export const LiveScores: React.FC<LiveScoresProps> = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Group by league option
-  const grouped = groupByLeague
-    ? matches.reduce<Record<string, LiveMatch[]>>((acc, m) => {
-        const key = m.league || 'Unknown';
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(m);
-        return acc;
-      }, {})
-    : { 'All Matches': matches };
+  // Index today's predictions so live matches can show an AI-pick badge.
+  const predIndex = useMemo(() => {
+    const map = new Map<string, Match>();
+    for (const p of predictions || []) {
+      map.set(`${normTeam(p.homeTeam)}|${normTeam(p.awayTeam)}`, p);
+      if (p.fixtureId) map.set(`id:${String(p.fixtureId)}`, p);
+      if (p.id) map.set(`id:${String(p.id)}`, p);
+    }
+    return map;
+  }, [predictions]);
+
+  const getPrediction = useCallback((m: LiveMatch): Match | null => {
+    return (
+      predIndex.get(`id:${String(m.id)}`) ||
+      predIndex.get(`${normTeam(m.homeTeam)}|${normTeam(m.awayTeam)}`) ||
+      null
+    );
+  }, [predIndex]);
+
+  // Top leagues always first, then live matches before upcoming ones.
+  const sortedMatches = useMemo(() => {
+    const liveRank = (s?: string) => (['FT', 'NS', 'POSTP', 'ABD', 'CANC', 'TBD'].includes((s || '').toUpperCase()) ? 1 : 0);
+    return [...matches].sort((a, b) => {
+      const lr = leagueRank(a.league) - leagueRank(b.league);
+      if (lr !== 0) return lr;
+      const stateRank = liveRank(a.stateShort) - liveRank(b.stateShort);
+      if (stateRank !== 0) return stateRank;
+      return (a.league || '').localeCompare(b.league || '');
+    });
+  }, [matches]);
+
+  // Group by league option (groups ordered by league priority)
+  const grouped = useMemo(() => {
+    if (!groupByLeague) return { 'All Matches': sortedMatches };
+    const base = sortedMatches.reduce<Record<string, LiveMatch[]>>((acc, m) => {
+      const key = m.league || 'Unknown';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(m);
+      return acc;
+    }, {});
+    return Object.fromEntries(
+      Object.entries(base).sort(([a], [b]) => {
+        const r = leagueRank(a) - leagueRank(b);
+        return r !== 0 ? r : a.localeCompare(b);
+      })
+    );
+  }, [groupByLeague, sortedMatches]);
 
   return (
     <div className="space-y-4 pb-28">
@@ -316,7 +403,7 @@ export const LiveScores: React.FC<LiveScoresProps> = () => {
               )}
               <AnimatePresence>
                 {leagueMatches.map((m, idx) => (
-                  <LiveMatchCard key={m.id} match={m} idx={idx} language={language} />
+                  <LiveMatchCard key={m.id} match={m} idx={idx} language={language} prediction={getPrediction(m)} />
                 ))}
               </AnimatePresence>
             </div>

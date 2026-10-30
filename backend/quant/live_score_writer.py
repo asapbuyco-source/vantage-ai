@@ -87,6 +87,8 @@ def main():
             "awayTeam": teams.get("away", {}).get("name", ""),
             "homeLogo": teams.get("home", {}).get("logo", ""),
             "awayLogo": teams.get("away", {}).get("logo", ""),
+            "homeTeamLogo": teams.get("home", {}).get("logo", ""),
+            "awayTeamLogo": teams.get("away", {}).get("logo", ""),
             "homeScore": goals.get("home"),
             "awayScore": goals.get("away"),
             "league": league.get("name", ""),

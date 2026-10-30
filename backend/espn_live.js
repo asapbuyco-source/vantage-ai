@@ -10,7 +10,7 @@ function toLive(e, leagueName) {
     id: `espn-${e.id}`,
     homeTeam: e.home || '',
     awayTeam: e.away || '',
-    homeLogo: '', awayLogo: '',
+    homeLogo: e.homeLogo || '', awayLogo: e.awayLogo || '',
     homeScore: e.homeScore,
     awayScore: e.awayScore,
     league: leagueName,
