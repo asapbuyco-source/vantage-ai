@@ -1553,7 +1553,7 @@ app.get('/sitemap.xml', async (req, res) => {
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
         // Static routes aligned with the real SPA routes
-        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip', '/tools'];
+        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip', '/tools', '/about', '/contact', '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
         });
@@ -1932,6 +1932,59 @@ app.use(async (req, res, next) => {
                     `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Free Football Betting Tools</h1><p>${description}</p><ul>${toolsList}</ul></div>\n<!-- REACT_ROOT -->`);
             } catch (toolsErr) {
                 console.warn('[SSR] Tools SSR error:', toolsErr.message);
+            }
+        }
+
+        // ── Static marketing/legal pages (About, Contact, Download, FAQ, …) ──
+        const STATIC_PAGE_SEO = {
+            '/about': {
+                title: 'About Vantage AI | Data-Driven Football Predictions for Cameroon',
+                description: 'Learn how Vantage AI builds transparent, data-driven football predictions for Cameroon using odds, form, xG and injuries — and why we publish our track record.',
+            },
+            '/contact': {
+                title: 'Contact Vantage AI | Support & Partnerships',
+                description: 'Contact the Vantage AI team for support, feedback or partnerships. Email, Telegram and WhatsApp support for our football prediction platform.',
+            },
+            '/download': {
+                title: 'Download Vantage AI for Android | Free Football Predictions App',
+                description: 'Download the free Vantage AI Android app on Google Play: daily AI football predictions, live scores with prediction badges, free betting tools and a transparent track record.',
+            },
+            '/faq': {
+                title: 'Vantage AI FAQ | Football Predictions Questions Answered',
+                description: 'Frequently asked questions about Vantage AI: free picks, accuracy, supported bookmakers, track record and how to download the Android app.',
+            },
+            '/terms': {
+                title: 'Terms of Service | Vantage AI',
+                description: 'Vantage AI terms of service: service scope, no guarantee of winnings, 18+ responsible gambling and liability.',
+            },
+            '/responsible-gambling': {
+                title: 'Responsible Gambling | Vantage AI',
+                description: 'Responsible gambling guidance from Vantage AI: warning signs, control tools and where to get help. 18+ only.',
+            },
+            '/how-it-works': {
+                title: 'How Vantage AI Works | From Data to Graded Predictions',
+                description: 'How Vantage AI turns odds, form, expected goals and injuries into value football predictions — and how every pick is graded against official results.',
+            },
+        };
+        const staticPagePath = req.path.replace(/\/$/, '') || '/';
+        if (STATIC_PAGE_SEO[staticPagePath]) {
+            try {
+                const seo = STATIC_PAGE_SEO[staticPagePath];
+                const pageUrl = `${baseUrl}${staticPagePath}`;
+                const seoTags = `
+    <title>${seo.title}</title>
+    <meta name="description" content="${seo.description}" />
+    <link rel="canonical" href="${pageUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${seo.title}" />
+    <meta property="og:description" content="${seo.description}" />
+    <meta property="og:url" content="${pageUrl}" />
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${seo.title}</h1><p>${seo.description}</p></div>\n<!-- REACT_ROOT -->`);
+            } catch (staticErr) {
+                console.warn('[SSR] Static page SSR error:', staticErr.message);
             }
         }
 
