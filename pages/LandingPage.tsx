@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle, Bell } from 'lucide-react';
+import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle, Bell, Calculator, HelpCircle, Smartphone, FileText } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { TeamLogo } from '../components/TeamLogo';
+import { SiteFooter } from '../components/SiteFooter';
 import { getFirestorePredictionsOnly, getPredictionsForDate } from '../services/db';
 import { Match } from '../types';
 
@@ -82,6 +84,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                     <button onClick={() => window.location.href = '/blog'} className="text-xs md:text-sm font-bold text-slate-600 dark:text-gray-300 hover:text-vantage-cyan transition-colors">
                         Free Blog
                     </button>
+                    <Link to="/tools" className="text-xs md:text-sm font-bold text-slate-600 dark:text-gray-300 hover:text-vantage-cyan transition-colors">
+                        Tools
+                    </Link>
+                    <Link to="/about" className="hidden md:inline text-xs md:text-sm font-bold text-slate-600 dark:text-gray-300 hover:text-vantage-cyan transition-colors">
+                        About
+                    </Link>
                     <button onClick={onShowStats} className="text-xs md:text-sm font-bold text-slate-600 dark:text-gray-300 hover:text-vantage-cyan transition-colors flex items-center gap-1">
                         <TrendingUp size={14} />
                         <span className="hidden md:inline">Track Record</span>
@@ -387,6 +395,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                 </div>
             </div>
 
+            {/* 7b. Company & Resources */}
+            <div className="max-w-5xl mx-auto px-4 mb-20">
+                <div className="text-center mb-8">
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3">Explore Vantage AI</h2>
+                    <p className="text-gray-500 max-w-xl mx-auto text-sm">Tools, guides and company information — everything you need before you sign up.</p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                        { to: '/tools', icon: <Calculator size={18} />, label: 'Betting Tools', desc: 'Odds, EV, Kelly' },
+                        { to: '/how-it-works', icon: <Target size={18} />, label: 'How It Works', desc: 'Our pipeline' },
+                        { to: '/about', icon: <Briefcase size={18} />, label: 'About Us', desc: 'Our mission' },
+                        { to: '/contact', icon: <Bell size={18} />, label: 'Contact Us', desc: 'Get support' },
+                        { to: '/faq', icon: <HelpCircle size={18} />, label: 'FAQ', desc: 'Common questions' },
+                        { to: '/download', icon: <Smartphone size={18} />, label: 'Android App', desc: 'Free on Play Store' },
+                        { to: '/responsible-gambling', icon: <ShieldCheck size={18} />, label: 'Responsible', desc: 'Play safe (18+)' },
+                        { to: '/terms', icon: <FileText size={18} />, label: 'Terms', desc: 'Service terms' },
+                    ].map(item => (
+                        <Link
+                            key={item.to}
+                            to={item.to}
+                            className="group rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-4 hover:border-vantage-cyan/50 transition-colors"
+                        >
+                            <span className="text-vantage-cyan">{item.icon}</span>
+                            <p className="text-xs font-black text-slate-900 dark:text-white mt-2">{item.label}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5">{item.desc}</p>
+                        </Link>
+                    ))}
+                </div>
+            </div>
+
             {/* 8. Download App Section */}
             <div className="max-w-4xl mx-auto px-4 mb-20 w-full">
                 <motion.div
@@ -439,18 +477,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                 </motion.div>
             </div>
 
-            {/* Footer Minimal */}
-            <footer className="text-center py-8 border-t border-gray-200 dark:border-white/5">
-                <h3 className="text-lg font-bold font-orbitron text-slate-900 dark:text-white mb-2">
-                    VANTAGE<span className="text-vantage-cyan">AI</span>
-                </h3>
-                <p className="text-xs text-gray-500 max-w-md mx-auto mb-4 px-4">
-                    Sports trading involves significant risk. Our platform provides data and mathematical models, not financial advice. Past performance does not guarantee future results.
-                </p>
-                <div className="flex justify-center gap-4 text-xs text-gray-400">
-                    <a href="/privacy-policy" className="hover:text-vantage-cyan transition-colors">Privacy Policy</a>
-                </div>
-            </footer>
+            <SiteFooter />
         </div>
     );
 };
