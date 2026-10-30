@@ -37,21 +37,28 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// ── Activate: purge ALL old caches and take control of all tabs ─────────────
+// ── Activate: purge old caches but keep one previous generation ─────────────
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating version:', CACHE_VERSION);
-  const activeCaches = new Set([SHELL_CACHE, FONT_CACHE, LOGO_CACHE]);
+  const current = new Set([SHELL_CACHE, FONT_CACHE, LOGO_CACHE]);
+  const tsOf = (k) => {
+    const m = String(k).match(/(\d{8,})$/);
+    return m ? Number(m[1]) : 0;
+  };
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => !activeCaches.has(k))
-          .map((k) => {
-            console.log('[SW] Purging old cache:', k);
-            return caches.delete(k);
-          })
-      )
-    ).then(() => {
+    caches.keys().then((keys) => {
+      const old = keys.filter((k) => !current.has(k));
+      // Keep the immediately-previous generation so tabs still running the old
+      // build can finish loading chunks the new deploy removed from the server.
+      const prevTs = old.reduce((max, k) => Math.max(max, tsOf(k)), 0);
+      const toDelete = prevTs === 0 ? old : old.filter((k) => tsOf(k) < prevTs);
+      return Promise.all(
+        toDelete.map((k) => {
+          console.log('[SW] Purging old cache:', k);
+          return caches.delete(k);
+        })
+      );
+    }).then(() => {
       // Take control of ALL open tabs immediately
       return self.clients.claim();
     }).then(() => {
@@ -138,9 +145,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── JS/CSS hashed assets → Cache-First (they have unique hashes) ──────
+  // ── JS/CSS hashed assets → cache-first, with previous-generation fallback ──
   if (url.origin === self.location.origin && url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(request, SHELL_CACHE, 365 * 24 * 60 * 60));
+    event.respondWith(assetFetch(request));
     return;
   }
 
@@ -179,6 +186,39 @@ async function networkFirst(request, cacheName, maxAgeSec) {
   } catch {
     const cached = await cache.match(request);
     return cached || caches.match(OFFLINE_URL);
+  }
+}
+
+// Hashed assets: serve from the current cache, otherwise fetch. If the server
+// no longer has the file (old deploy removed it) fall back to ANY cache — this
+// rescues tabs still running a previous build so lazy chunks don't 404.
+async function assetFetch(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const fromOtherCaches = async () => {
+    const keys = await caches.keys();
+    for (const k of keys) {
+      if (k === SHELL_CACHE) continue;
+      const c = await caches.open(k);
+      const hit = await c.match(request);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
+  try {
+    const fresh = await fetch(request);
+    if (fresh.ok) {
+      cache.put(request, fresh.clone());
+      return fresh;
+    }
+    const fallback = await fromOtherCaches();
+    return fallback || fresh;
+  } catch {
+    const fallback = await fromOtherCaches();
+    return fallback || new Response('Offline', { status: 503 });
   }
 }
 
