@@ -36,6 +36,8 @@ function normalize(ev, league) {
     date: ev.date || c.date || null,
     home: home.team ? (home.team.displayName || home.team.name) : '',
     away: away.team ? (away.team.displayName || away.team.name) : '',
+    homeLogo: home.team && home.team.logo ? home.team.logo : '',
+    awayLogo: away.team && away.team.logo ? away.team.logo : '',
     homeScore: home.score != null ? Number(home.score) : null,
     awayScore: away.score != null ? Number(away.score) : null,
     status: (st.type && (st.type.description || st.type.name)) || '',
