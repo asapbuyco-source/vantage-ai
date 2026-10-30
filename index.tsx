@@ -10,6 +10,22 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
+// Vite fires `vite:preloadError` when a lazily-imported chunk fails to load —
+// typically because a new deploy removed the old hashed chunk while this tab was
+// still running the previous build ("Failed to fetch dynamically imported
+// modules"). Reload once to pick up the new build, guarded to avoid a reload loop.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  try {
+    const last = Number(sessionStorage.getItem('vantage_chunk_reload_at') || 0);
+    if (Date.now() - last < 15000) return;
+    sessionStorage.setItem('vantage_chunk_reload_at', String(Date.now()));
+  } catch {
+    /* sessionStorage unavailable — fall through to a single reload */
+  }
+  window.location.reload();
+});
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
