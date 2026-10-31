@@ -41,28 +41,66 @@ export async function fulfillVipPayment({
     }
 
     const paidAmount = Number(amount || planCfg.amount) || 0;
+    const firstPayment = !(Number(user.totalPaid) > 0);
+
+    // ── Reads first (Firestore requires all reads before writes) ───────────────
+    // Promo code / influencer code stored on the buyer's profile (from signup or
+    // from the code entered at payment in the app).
+    const promoCode = String(user.appliedPromoCode || "").trim().toUpperCase();
+    let promoRef = null;
+    let promoDoc = null;
+    if (promoCode) {
+      promoRef = db.collection("referral_codes").doc(promoCode);
+      const promoSnap = await tx.get(promoRef);
+      if (promoSnap.exists) promoDoc = promoSnap.data() || {};
+    }
+
+    // Referrer: signup attribution wins; otherwise the code entered at payment.
+    let referrerUid = user.referredBy || (promoDoc && promoDoc.ownerUid) || null;
+    if (referrerUid === uid) referrerUid = null; // no self-referral
+
+    let referrerRef = null;
+    let referrerSnap = null;
+    if (referrerUid) {
+      referrerRef = db.collection("profiles").doc(referrerUid);
+      referrerSnap = await tx.get(referrerRef);
+    }
 
     // Renewal must EXTEND from the current expiry, not reset from today —
     // otherwise a user renewing with 20 days left loses them.
     const now = new Date();
     const stillVip = user.isVip && user.vipExpiry && new Date(user.vipExpiry) > now;
-    const expiry = getVipExpiry(plan, stillVip ? new Date(user.vipExpiry) : now);
+    let expiryDate = new Date(getVipExpiry(plan, stillVip ? new Date(user.vipExpiry) : now));
 
-    // Read the referrer BEFORE any writes (Firestore transactions require reads first).
-    let referrerRef = null;
-    let referrerSnap = null;
-    if (user.referredBy) {
-      referrerRef = db.collection("profiles").doc(user.referredBy);
-      referrerSnap = await tx.get(referrerRef);
+    // Promo bonus: +N days on the FIRST paid subscription, once per account.
+    // (Bonus access days are Play-policy compliant — the Play price is untouched.)
+    const canRedeemPromo = firstPayment && !user.promoRedeemed && Boolean(referrerUid);
+    const bonusDays = canRedeemPromo ? (Number(promoDoc && promoDoc.bonusDays) || 7) : 0;
+    if (bonusDays > 0) {
+      expiryDate = new Date(expiryDate.getTime() + bonusDays * 24 * 60 * 60 * 1000);
     }
+    const expiry = expiryDate.toISOString();
 
-    tx.update(userRef, {
+    // ── Writes ────────────────────────────────────────────────────────────────
+    const userUpdate = {
       isVip: true,
       vipExpiry: expiry,
       vipPlan: plan,
       totalPaid: admin.firestore.FieldValue.increment(paidAmount),
       updatedAt: new Date().toISOString(),
-    });
+    };
+    if (referrerUid && !user.referredBy) {
+      // Attribute the influencer when the code was entered at payment time.
+      userUpdate.referredBy = referrerUid;
+    }
+    if (canRedeemPromo) {
+      userUpdate.promoRedeemed = true;
+    }
+    tx.update(userRef, userUpdate);
+
+    if (canRedeemPromo && bonusDays > 0 && promoRef && promoDoc) {
+      tx.update(promoRef, { redemptions: admin.firestore.FieldValue.increment(1) });
+    }
 
     if (referrerRef && referrerSnap && referrerSnap.exists) {
       const referrer = referrerSnap.data() || {};
@@ -73,14 +111,18 @@ export async function fulfillVipPayment({
       const rate = Number.isFinite(rawRate) ? Math.max(0, Math.min(80, rawRate)) : 40;
       const commission = Math.floor(paidAmount * (rate / 100));
       if (commission > 0) {
-        tx.update(referrerRef, {
+        const referrerUpdate = {
           referralEarnings: admin.firestore.FieldValue.increment(commission),
           lifetimeEarnings: admin.firestore.FieldValue.increment(commission),
-          referralPurchases: admin.firestore.FieldValue.increment(1),
-        });
+        };
+        if (firstPayment) {
+          // Unique paying customers (renewals don't inflate this count)
+          referrerUpdate.referralPurchases = admin.firestore.FieldValue.increment(1);
+        }
+        tx.update(referrerRef, referrerUpdate);
         // Audit ledger — one doc per commission (disputes / accounting)
         tx.set(db.collection("referral_commissions").doc(`${provider}_${transactionId}`), {
-          referrerUid: user.referredBy,
+          referrerUid,
           buyerUid: uid,
           provider,
           transactionId,
@@ -88,6 +130,7 @@ export async function fulfillVipPayment({
           amount: paidAmount,
           rate,
           commission,
+          bonusDays,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       }
@@ -104,6 +147,6 @@ export async function fulfillVipPayment({
       fulfilledAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    return { alreadyProcessed: false, plan, vipExpiry: expiry };
+    return { alreadyProcessed: false, plan, vipExpiry: expiry, bonusDays };
   });
 }
