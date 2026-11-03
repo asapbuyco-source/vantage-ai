@@ -1543,6 +1543,50 @@ const SEO_LEAGUES = {
 
 const distPath = path.join(__dirname, 'dist');
 
+// Known SPA routes — anything else returns a real 404 (avoids soft-404 indexing).
+const KNOWN_EXACT_PATHS = new Set([
+    '/', '/free', '/vip', '/arb', '/learn', '/guide', '/tools', '/about', '/contact',
+    '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works', '/stats',
+    '/results', '/profile', '/admin', '/concierge', '/research', '/blog', '/privacy-policy', '/privacy',
+]);
+
+function isKnownAppPath(p) {
+    const clean = (p || '/').replace(/\/+$/, '') || '/';
+    if (KNOWN_EXACT_PATHS.has(clean)) return true;
+    if (/^\/blog\/[a-zA-Z0-9\-_.]+$/.test(clean)) return true;
+    if (/^\/match\/[^/]+$/.test(clean)) return true;
+    if (/^\/pronostics\/[a-z0-9-]+$/.test(clean)) return true;
+    if (/^\/predictions\/\d{4}-\d{2}-\d{2}$/.test(clean)) return true;
+    if (/^\/intel\//.test(clean)) return true;
+    return false;
+}
+
+function renderNotFoundPage(pathname) {
+    const safePath = String(pathname || '/').replace(/</g, '&lt;').slice(0, 120);
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, follow" />
+<title>Page Not Found | Vantage AI</title>
+<meta name="description" content="The page you are looking for does not exist. Browse today's football predictions, betting tools and guides on Vantage AI." />
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;background:#0a0f1c;color:#e2e8f0;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.box{max-width:520px;text-align:center}
+h1{font-size:56px;margin:0 0 8px;color:#22d3ee}
+h2{font-size:20px;margin:0 0 12px}
+p{color:#94a3b8;line-height:1.6;margin:0 0 24px}
+a{display:inline-block;margin:6px;padding:10px 16px;border-radius:10px;background:#22d3ee;color:#001018;font-weight:700;text-decoration:none}
+a.alt{background:#1e293b;color:#e2e8f0}
+code{color:#64748b;font-size:12px}
+</style></head><body><div class="box">
+<h1>404</h1><h2>Page not found</h2>
+<p>We couldn't find <code>${safePath}</code>. It may have moved or never existed.</p>
+<a href="/">Today's predictions</a>
+<a href="/blog" class="alt">Blog</a>
+<a href="/tools" class="alt">Betting tools</a>
+<a href="/contact" class="alt">Contact</a>
+</div></body></html>`;
+}
+
 // 1. Dynamic Sitemap Generator — registered BEFORE express.static so the static
 // dist/sitemap.xml (7 hand-written URLs) never shadows the live Firestore-fed map.
 app.get('/sitemap.xml', async (req, res) => {
@@ -1553,7 +1597,7 @@ app.get('/sitemap.xml', async (req, res) => {
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
         // Static routes aligned with the real SPA routes
-        const staticRoutes = ['/', '/blog', '/learn', '/guide', '/free', '/stats', '/vip', '/tools', '/about', '/contact', '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works'];
+        const staticRoutes = ['/', '/blog', '/learn', '/stats', '/vip', '/tools', '/about', '/contact', '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
         });
@@ -1620,12 +1664,26 @@ app.get('/sitemap.xml', async (req, res) => {
     }
 });
 
-// 2. Serve static files from the React dist directory (except index.html)
-app.use(express.static(distPath, { index: false }));
+// 2. Serve static files from the React dist directory (except index.html).
+// Hashed files under /assets are immutable — cache them for a year.
+app.use(express.static(distPath, {
+    index: false,
+    setHeaders: (res, filePath) => {
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+    },
+}));
 
 // 3. Catch-all for rendering HTML
 app.use(async (req, res, next) => {
-    if (req.method !== 'GET') return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+
+    // Canonicalise duplicate routes so Google only sees one URL.
+    if (req.path === '/free' || req.path === '/free/') return res.redirect(301, '/');
+    if (req.path === '/guide' || req.path === '/guide/') return res.redirect(301, '/learn');
+
+    let notFound = false;
     try {
         const indexPath = path.join(distPath, 'index.html');
         // Check if dist exists (important for dev environments before build)
@@ -1659,6 +1717,74 @@ app.use(async (req, res, next) => {
             html = html.replace('<!-- GOOGLE_VERIFICATION -->', googleTag);
         } else {
             html = html.replace('<!-- GOOGLE_VERIFICATION -->', ''); // Clean up
+        }
+
+        // ── HOMEPAGE: server-rendered intro so crawlers see real content ──
+        if (req.path === '/' || req.path === '') {
+            const homeDesc = "AI football predictions for Cameroon: data-driven analysis, odds, expected value and transparent performance tracking. Free and VIP picks, live scores, daily accumulators and bankroll tools for 1xBet, Premier Bet and Supergoal.";
+            // LCP: preload the hero image only on the marketing homepage.
+            html = html.replace('</head>', `    <link rel="preload" as="image" href="/images/football-hero.jpg" fetchpriority="high" />\n  </head>`);
+            html = html.replace('<!-- REACT_ROOT -->',
+                `<div id="vantage-seo-content" style="display:none;" aria-hidden="true">` +
+                `<h1>AI Football Predictions for Cameroon</h1>` +
+                `<p>${homeDesc}</p>` +
+                `<h2>What you get with Vantage AI</h2><ul>` +
+                `<li><a href="/blog">Daily football predictions and match analysis</a></li>` +
+                `<li><a href="/tools">Free betting tools: odds converter, EV, Kelly and bankroll</a></li>` +
+                `<li><a href="/stats">Transparent public track record (win rate and ROI)</a></li>` +
+                `<li><a href="/download">Free Android app on Google Play</a></li>` +
+                `<li><a href="/learn">Learning centre for value betting</a></li>` +
+                `<li><a href="/pronostics/premier-league">Premier League predictions</a></li>` +
+                `</ul></div>\n<!-- REACT_ROOT -->`);
+        }
+
+        // ── /learn (was serving the homepage title/canonical) ──
+        if (req.path === '/learn' || req.path === '/learn/') {
+            const learnUrl = `${baseUrl}/learn`;
+            const title = 'Football Betting Learning Centre | Vantage AI';
+            const description = "Learn value betting, expected value (EV), the Kelly criterion, bankroll management and how to read football form and xG with Vantage AI's free guides.";
+            const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${learnUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${learnUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Learning Centre","item":"${learnUrl}"}]}
+    </script>
+                `;
+            html = html.replace(/<title>.*?<\/title>/, seoTags);
+            html = html.replace('<!-- REACT_ROOT -->',
+                `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Football Betting Learning Centre</h1><p>${description}</p><h2>Topics</h2><ul>` +
+                `<li>What is expected value (+EV) betting?</li><li>How the Kelly criterion works</li><li>Closing line value (CLV)</li>` +
+                `<li>Which football markets are most reliable</li><li>Bankroll management and staking plans</li>` +
+                `</ul><p><a href="/tools">Try the free betting tools</a> · <a href="/blog">Read the guides</a></p></div>\n<!-- REACT_ROOT -->`);
+        }
+
+        // ── /stats (public track record) ──
+        if (req.path === '/stats' || req.path === '/stats/') {
+            const statsUrl = `${baseUrl}/stats`;
+            const title = 'Vantage AI Public Track Record | Win Rate & ROI';
+            const description = "See Vantage AI's verified football prediction track record: win rate, ROI and performance by market. Transparent results, including losing runs.";
+            const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${statsUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${statsUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Track Record","item":"${statsUrl}"}]}
+    </script>
+                `;
+            html = html.replace(/<title>.*?<\/title>/, seoTags);
+            html = html.replace('<!-- REACT_ROOT -->',
+                `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Vantage AI Public Track Record</h1><p>${description}</p>` +
+                `<p>Every pick is graded against official results. We publish the win rate and ROI by market, including the bad runs.</p>` +
+                `<p><a href="/">See today's predictions</a> · <a href="/blog">Read the analysis</a></p></div>\n<!-- REACT_ROOT -->`);
         }
 
         // --- SPECIFIC ROUTE: /predictions/:date ---
@@ -1713,6 +1839,9 @@ app.use(async (req, res, next) => {
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"ItemList","name":"${title}","itemListElement":[${topPicks}]}
     </script>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Predictions ${dateKey}","item":"${baseUrl}/predictions/${dateKey}"}]}
+    </script>
                 `;
 
                 // Replace the default title and placeholders
@@ -1747,6 +1876,16 @@ app.use(async (req, res, next) => {
                     <!-- REACT_ROOT -->
                     `;
                     html = html.replace('<!-- REACT_ROOT -->', blogInjection);
+                } else {
+                    const esc = (s) => String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const picksHtml = preds.slice(0, 10).map(p => {
+                        const home = esc(p.home_team || p.homeTeam || 'Home');
+                        const away = esc(p.away_team || p.awayTeam || 'Away');
+                        const market = esc(p.prediction || p.bet_type || 'Pick');
+                        return `<li>${home} vs ${away} — ${market}</li>`;
+                    }).join('');
+                    html = html.replace('<!-- REACT_ROOT -->',
+                        `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Football Predictions ${dateKey}</h1><p>${description}</p><ul>${picksHtml}</ul><p><a href="/">See today's predictions</a></p></div>\n<!-- REACT_ROOT -->`);
                 }
             }
         }
@@ -1771,8 +1910,17 @@ app.use(async (req, res, next) => {
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"ItemList","name":"${title}"}
     </script>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"${league.nameEn || league.nameFr} Predictions","item":"${url}"}]}
+    </script>
                 `;
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
+                const leagueH1 = `${league.nameEn || league.nameFr} Predictions Today`;
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${leagueH1}</h1><p>${description}</p>` +
+                    `<p>Browse <a href="/blog">daily football analysis</a>, use the <a href="/tools">free betting tools</a>, or check the <a href="/stats">public track record</a>.</p></div>\n<!-- REACT_ROOT -->`);
+            } else {
+                notFound = true;
             }
         }
 
@@ -1847,13 +1995,16 @@ app.use(async (req, res, next) => {
     <meta property="og:description" content="${description}" />
     <meta property="og:url" content="${blogUrl}" />
     <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"Article","headline":"${postTitle}","description":"${description}"}
+    {"@context":"https://schema.org","@type":"Article","headline":"${postTitle}","description":"${description}","datePublished":"${bd.generatedAt || ''}","dateModified":"${bd.updatedAt || bd.generatedAt || ''}","author":{"@type":"Organization","name":"Vantage AI"},"publisher":{"@type":"Organization","name":"Vantage AI"}}
+    </script>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Blog","item":"${baseUrl}/blog"},{"@type":"ListItem","position":3,"name":"${postTitle.replace(/"/g, '\\"')}","item":"${blogUrl}"}]}
     </script>
                 `;
                     html = html.replace(/<title>.*?<\/title>/, seoTags);
                     // Let crawlers read the post body without JS
                     const sanitizedContent = sanitizeHtml(String(bd.content || ''), {
-                        allowedTags: ['p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'a', 'blockquote'],
+                        allowedTags: ['h1', 'p', 'h2', 'h3', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'a', 'blockquote'],
                         allowedAttributes: { 'a': ['href'], 'span': ['style'] },
                         transformTags: {
                             'a': (tagName, attribs) => {
@@ -1865,6 +2016,8 @@ app.use(async (req, res, next) => {
                     });
                     html = html.replace('<!-- REACT_ROOT -->',
                         `<div id="vantage-seo-content" style="display:none;" aria-hidden="true">${sanitizedContent}</div>\n<!-- REACT_ROOT -->`);
+                } else {
+                    notFound = true;
                 }
             } catch (bErr) {
                 console.warn('[SSR] Blog SSR error:', bErr.message);
@@ -1885,6 +2038,12 @@ app.use(async (req, res, next) => {
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:url" content="${blogUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"CollectionPage","name":"${title}","description":"${description}","url":"${blogUrl}"}
+    </script>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Blog","item":"${blogUrl}"}]}
+    </script>
                 `;
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
                 const postsSnap = await admin.firestore()
@@ -1983,6 +2142,32 @@ app.use(async (req, res, next) => {
                 html = html.replace(/<title>.*?<\/title>/, seoTags);
                 html = html.replace('<!-- REACT_ROOT -->',
                     `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${seo.title}</h1><p>${seo.description}</p></div>\n<!-- REACT_ROOT -->`);
+
+                // Breadcrumb for every static page
+                const crumbName = String(seo.title).split('|')[0].trim().replace(/"/g, '\\"');
+                const crumb = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"${crumbName}","item":"${pageUrl}"}]}</script>`;
+                html = html.replace('</head>', `${crumb}\n</head>`);
+
+                // FAQPage rich result for /faq
+                if (staticPagePath === '/faq') {
+                    const faqs = [
+                        ['What is Vantage AI?', 'Vantage AI is a data-driven football prediction platform for Cameroon.'],
+                        ['Are the predictions free?', 'Yes — free picks are available every day, plus a public track record. VIP unlocks every pick and the exact stakes.'],
+                        ['Do you guarantee wins?', 'No. Nobody can guarantee betting profits. We focus on positive expected value and long-term discipline.'],
+                        ['Which bookmakers are supported?', 'The picks work with any bookmaker, and we optimise for 1xBet, Premier Bet and BetPawa in Cameroon.'],
+                        ['How do I download the app?', 'The app is free on Google Play. Search Vantage AI or use the download button on this site.'],
+                    ];
+                    const faqLd = {
+                        '@context': 'https://schema.org',
+                        '@type': 'FAQPage',
+                        mainEntity: faqs.map(([q, a]) => ({
+                            '@type': 'Question',
+                            name: q,
+                            acceptedAnswer: { '@type': 'Answer', text: a },
+                        })),
+                    };
+                    html = html.replace('</head>', `<script type="application/ld+json">${JSON.stringify(faqLd)}</script>\n</head>`);
+                }
             } catch (staticErr) {
                 console.warn('[SSR] Static page SSR error:', staticErr.message);
             }
@@ -2013,6 +2198,11 @@ app.use(async (req, res, next) => {
         if (!html.includes('rel="canonical"')) {
             const canonicalUrl = `${baseUrl}${req.path.replace(/\/+$/, '') || '/'}`;
             html = html.replace('</head>', `    <link rel="canonical" href="${canonicalUrl}" />\n  </head>`);
+        }
+
+        // Real 404 for unknown paths / missing blog+league docs (avoids soft-404 indexing).
+        if (notFound || !isKnownAppPath(req.path)) {
+            return res.status(404).type('html').send(renderNotFoundPage(req.path));
         }
 
         res.send(html);
