@@ -12,6 +12,7 @@ const GROUPS = [
             { to: '/', en: 'Home', fr: 'Accueil' },
             { to: '/blog', en: 'Blog', fr: 'Blog' },
             { to: '/tools', en: 'Betting Tools', fr: 'Outils de paris' },
+            { to: '/football-betting', en: 'Betting by City', fr: 'Paris par ville' },
             { to: '/learn', en: 'Learning Centre', fr: 'Centre d\u2019apprentissage' },
             { to: '/stats', en: 'Results', fr: 'Résultats' },
         ],

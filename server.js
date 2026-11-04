@@ -1549,6 +1549,20 @@ const SEO_LEAGUES = {
     'fifa-world-cup': { nameEn: 'World Cup', nameFr: 'Coupe du Monde' },
 };
 
+// City landing pages (local SEO). Keep in sync with locations.ts.
+const SEO_CITIES = {
+    douala: { name: 'Douala', region: 'Littoral', intro: "Douala is Cameroon's economic capital and busiest football betting market, with strong Elite One, 1xBet, Premier Bet and BetPawa coverage." },
+    yaounde: { name: 'Yaoundé', region: 'Centre', intro: "Yaoundé is Cameroon's political capital and a historic football city, home to Canon and Tonnerre and a passionate Elite One following." },
+    bafoussam: { name: 'Bafoussam', region: 'West', intro: "Bafoussam is the heart of Western Cameroon football, with competitive local clubs and a strong Elite One betting culture." },
+    bamenda: { name: 'Bamenda', region: 'North West', intro: "Bamenda is the football capital of the North West and home to PWD, one of Cameroon's best-supported clubs." },
+    garoua: { name: 'Garoua', region: 'North', intro: "Garoua is home to Coton Sport, Cameroon's most successful club and a regular in the CAF Champions League." },
+    maroua: { name: 'Maroua', region: 'Far North', intro: "Maroua represents the Far North in Cameroon's top flight, where long travel gives home teams a real edge." },
+    buea: { name: 'Buea', region: 'South West', intro: "Buea has a young, English-speaking football audience following local South West football, the Premier League and the Champions League." },
+    limbe: { name: 'Limbe', region: 'South West', intro: "Limbe is a coastal football town with a growing betting community and niche South West league markets." },
+    kribi: { name: 'Kribi', region: 'South', intro: "Kribi is a fast-growing coastal city with a young football scene and early-season betting value." },
+    ngaoundere: { name: 'Ngaoundéré', region: 'Adamawa', intro: "Ngaoundéré is the gateway to Cameroon's Adamawa region, where home advantage and travel distance drive local results." },
+};
+
 const distPath = path.join(__dirname, 'dist');
 
 // Known SPA routes — anything else returns a real 404 (avoids soft-404 indexing).
@@ -1605,9 +1619,12 @@ app.get('/sitemap.xml', async (req, res) => {
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
         // Static routes aligned with the real SPA routes
-        const staticRoutes = ['/', '/blog', '/learn', '/stats', '/vip', '/tools', '/about', '/contact', '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works'];
+        const staticRoutes = ['/', '/blog', '/learn', '/stats', '/vip', '/tools', '/about', '/contact', '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works', '/football-betting'];
         staticRoutes.forEach(route => {
             xml += `  <url>\n    <loc>${baseUrl}${route}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === '/' ? '1.0' : route === '/blog' ? '0.9' : '0.8'}</priority>\n  </url>\n`;
+        });
+        Object.keys(SEO_CITIES).forEach(slug => {
+            xml += `  <url>\n    <loc>${baseUrl}/football-betting/${slug}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
         });
 
         if (admin.apps.length > 0) {
@@ -1745,7 +1762,26 @@ app.use(async (req, res, next) => {
                 `<li><a href="/download">Free Android app on Google Play</a></li>` +
                 `<li><a href="/learn">Learning centre for value betting</a></li>` +
                 `<li><a href="/pronostics/premier-league">Premier League predictions</a></li>` +
+                `<li><a href="/football-betting">Football betting by city in Cameroon</a></li>` +
                 `</ul></div>\n<!-- REACT_ROOT -->`);
+
+            const homeFaqs = [
+                ['What is Vantage AI?', 'Vantage AI is a data-driven football prediction platform for Cameroon, covering Elite One and major leagues.'],
+                ['Does Vantage AI cover Cameroonian football?', 'Yes — we cover Elite One, Elite Two and the CAF Champions League alongside the Premier League, La Liga, Serie A and more.'],
+                ['Which bookmakers can I use?', 'Our picks work with any bookmaker, and we optimise for 1xBet, Premier Bet, BetPawa, PMUC and Supergoal in Cameroon.'],
+                ['Is Vantage AI free?', 'Free picks are available every day, with a public track record. VIP unlocks every pick and the exact stakes.'],
+                ['Which cities do you cover?', 'We publish local betting guides for Douala, Yaoundé, Bafoussam, Bamenda, Garoua, Maroua, Buea, Limbe, Kribi and Ngaoundéré.'],
+            ];
+            const homeFaqLd = {
+                '@context': 'https://schema.org',
+                '@type': 'FAQPage',
+                mainEntity: homeFaqs.map(([q, a]) => ({
+                    '@type': 'Question',
+                    name: q,
+                    acceptedAnswer: { '@type': 'Answer', text: a },
+                })),
+            };
+            html = html.replace('</head>', `<script type="application/ld+json">${JSON.stringify(homeFaqLd)}</script>\n</head>`);
         }
 
         // ── /learn (was serving the homepage title/canonical) ──
@@ -2101,6 +2137,57 @@ app.use(async (req, res, next) => {
                     `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Free Football Betting Tools</h1><p>${description}</p><ul>${toolsList}</ul></div>\n<!-- REACT_ROOT -->`);
             } catch (toolsErr) {
                 console.warn('[SSR] Tools SSR error:', toolsErr.message);
+            }
+        }
+
+        // ── Location landing pages (/football-betting) ──
+        if (req.path === '/football-betting' || req.path === '/football-betting/') {
+            const locUrl = `${baseUrl}/football-betting`;
+            const title = 'Football Betting by City in Cameroon | Vantage AI';
+            const description = 'Football predictions and betting tips for every major Cameroonian city — Douala, Yaoundé, Bafoussam, Bamenda, Garoua and more. Elite One, 1xBet, Premier Bet and BetPawa.';
+            const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${locUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${locUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Football Betting by City","item":"${locUrl}"}]}
+    </script>
+                `;
+            const cityLinks = Object.entries(SEO_CITIES).map(([slug, c]) => `<li><a href="/football-betting/${slug}">${c.name} football betting</a></li>`).join('');
+            html = html.replace(/<title>.*?<\/title>/, seoTags);
+            html = html.replace('<!-- REACT_ROOT -->',
+                `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>Football Betting by City in Cameroon</h1><p>${description}</p><ul>${cityLinks}</ul></div>\n<!-- REACT_ROOT -->`);
+        }
+
+        const cityMatch = req.path.match(/^\/football-betting\/([a-z0-9-]+)$/);
+        if (cityMatch) {
+            const city = SEO_CITIES[cityMatch[1]];
+            if (city) {
+                const cityUrl = `${baseUrl}/football-betting/${cityMatch[1]}`;
+                const title = `${city.name} Football Predictions & Betting Tips | Vantage AI`;
+                const description = `Football predictions and betting tips for ${city.name}, ${city.region} (Cameroon): Elite One, 1xBet, Premier Bet and BetPawa. Compare odds and use our free tools.`;
+                const seoTags = `
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${cityUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${cityUrl}" />
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"${baseUrl}/"},{"@type":"ListItem","position":2,"name":"Football Betting by City","item":"${baseUrl}/football-betting"},{"@type":"ListItem","position":3,"name":"${city.name}","item":"${cityUrl}"}]}
+    </script>
+                `;
+                html = html.replace(/<title>.*?<\/title>/, seoTags);
+                html = html.replace('<!-- REACT_ROOT -->',
+                    `<div id="vantage-seo-content" style="display:none;" aria-hidden="true"><h1>${city.name} Football Predictions</h1><p>${city.intro}</p>` +
+                    `<p>Compare 1xBet, Premier Bet and BetPawa odds, follow Elite One and the big European leagues, and use our <a href="/tools">free betting tools</a>. See <a href="/">today's predictions</a> and our <a href="/stats">public track record</a>.</p></div>\n<!-- REACT_ROOT -->`);
+            } else {
+                notFound = true;
             }
         }
 

@@ -338,6 +338,175 @@ export const EVERGREEN_POSTS = [
 <h2>Track your results</h2>
 <p>Measure ROI by market, not just win rate. See how Vantage AI performs on the <a href="/stats">public record</a> and browse <a href="/predictions">today's Champions League picks</a>.</p>`,
     },
+    {
+        slug: '1xbet-cameroon-betting-guide',
+        title: '1xBet Cameroon Guide: How to Bet, Deposit and Find Value',
+        description: 'A practical 1xBet Cameroon guide: registration, Mobile Money deposits, reading odds, markets and how to find value with data-driven picks.',
+        keywords: ['1xbet cameroun', '1xbet cameroon', '1xbet deposit mobile money', '1xbet betting tips', '1xbet predictions cameroon'],
+        tags: ['1xbet', 'cameroon', 'bookmaker guide'],
+        content: `<h1>1xBet Cameroon Guide: How to Bet, Deposit and Find Value</h1>
+<p>1xBet is the most searched betting brand in Cameroon. Its deep market coverage and Mobile Money support make it the default choice for many fans — but wide coverage also means wide margins, so price discipline matters.</p>
+<h2>Register and deposit</h2>
+<p>Sign up with your real name and phone number, verify your account, then deposit with MTN Mobile Money or Orange Money. Start small and set a weekly limit before you place your first bet.</p>
+<h2>Markets to focus on</h2>
+<ul>
+<li><strong>Over/Under goals</strong> — data-friendly and easy to model.</li>
+<li><strong>Both Teams to Score</strong> — strong when both sides attack and defend poorly.</li>
+<li><strong>Double chance</strong> — lower risk when the win price is too short.</li>
+<li><strong>Asian handicap</strong> — often a smaller margin than 1X2.</li>
+</ul>
+<h2>Finding value on 1xBet</h2>
+<p>Compare 1xBet prices with Premier Bet and BetPawa. A 1.85 vs 1.95 difference is real money over a season. Our <a href="/predictions">daily predictions</a> show the odds we model against and the expected value of each pick.</p>
+<h2>Avoid the traps</h2>
+<p>Long accumulators multiply the bookmaker margin. Keep accas short, avoid chasing losses, and treat betting as entertainment. See our <a href="/learn">learning centre</a> and <a href="/stats">public track record</a>.</p>`,
+    },
+    {
+        slug: 'premier-bet-cameroon-guide',
+        title: 'Premier Bet Cameroon Guide: Shops, App and Online Betting',
+        description: 'Premier Bet Cameroon guide: how the retail network and app work, how to deposit, and how to use data-driven predictions to bet smarter.',
+        keywords: ['premier bet cameroun', 'premier bet cameroon', 'premier bet app', 'premier bet zone', 'premier bet predictions'],
+        tags: ['premier bet', 'cameroon', 'bookmaker guide'],
+        content: `<h1>Premier Bet Cameroon Guide: Shops, App and Online Betting</h1>
+<p>Premier Bet combines a huge retail network with an online app, making it one of the most trusted brands in Cameroon. Many bettors start in a shop and move online for better odds and live markets.</p>
+<h2>Shops vs online</h2>
+<p>Shops are convenient for cash bets and printed coupons. Online gives you live odds, cash-out and the ability to compare prices before staking. Use the app for research and the shop for discipline if that helps you stay in control.</p>
+<h2>Popular markets</h2>
+<ul>
+<li>1X2 and double chance for match results.</li>
+<li>Over/Under goals and BTTS for data-driven picks.</li>
+<li>Correct score for small-stake precision bets.</li>
+</ul>
+<h2>Bet smarter with data</h2>
+<p>Premier Bet prices are not always the sharpest. Compare with 1xBet and BetPawa, and check the implied probability against your own estimate. Our <a href="/tools">free tools</a> convert odds and calculate expected value instantly.</p>
+<h2>Responsible betting</h2>
+<p>Set deposit limits and never bet money you need. See our <a href="/responsible-gambling">responsible gambling guide</a> and our <a href="/stats">transparent results</a>.</p>`,
+    },
+    {
+        slug: 'betpawa-cameroon-guide',
+        title: 'BetPawa Cameroon Guide: Low-Stake Betting and Features',
+        description: 'BetPawa Cameroon guide: how the app works, low-stake markets, jackpots and how to use predictions and bankroll tools responsibly.',
+        keywords: ['betpawa cameroun', 'betpawa cameroon', 'betpawa app', 'betpawa login', 'betpawa predictions'],
+        tags: ['betpawa', 'cameroon', 'bookmaker guide'],
+        content: `<h1>BetPawa Cameroon Guide: Low-Stake Betting and Features</h1>
+<p>BetPawa is built around low-stake, high-accessibility betting. It is popular with younger fans and casual bettors because you can start with very small amounts and follow live markets on your phone.</p>
+<h2>How it works</h2>
+<p>Register with your phone number, deposit via Mobile Money, and choose from football, basketball and more. The interface is simple, which makes it easy to place a quick bet — and easy to over-bet, so set limits first.</p>
+<h2>Where BetPawa fits</h2>
+<ul>
+<li>Small singles on goals markets.</li>
+<li>Short accumulators with 2–3 legs.</li>
+<li>Live betting when you already understand the match.</li>
+</ul>
+<h2>Price comparison matters</h2>
+<p>BetPawa margins can be higher than 1xBet or Premier Bet on some markets. Always compare before staking. Our <a href="/tools">odds converter and EV calculator</a> show whether a price is worth taking.</p>
+<h2>Keep records</h2>
+<p>Track stake, odds and result. Our <a href="/stats">public track record</a> shows how we grade every pick, including losing runs. Bet responsibly — 18+.</p>`,
+    },
+    {
+        slug: 'pmuc-cameroon-betting-guide',
+        title: 'PMUC Cameroon Betting Guide: Local Sports Betting',
+        description: 'PMUC Cameroon betting guide: how the local operator works, what sports and markets it covers, and how to compare it with 1xBet and Premier Bet.',
+        keywords: ['pmuc cameroun', 'pmuc betting', 'pmuc cameroun paris', 'pmuc football', 'pmuc predictions'],
+        tags: ['pmuc', 'cameroon', 'bookmaker guide'],
+        content: `<h1>PMUC Cameroon Betting Guide: Local Sports Betting</h1>
+<p>PMUC is one of Cameroon's home-grown betting operators, with a strong presence in local sports and a familiar brand for many bettors. It covers football, basketball and other sports, with a focus on the Cameroonian market.</p>
+<h2>Why local operators matter</h2>
+<p>Local operators often support local leagues and payment methods that international brands handle less smoothly. That can make them a good option for Elite One and regional football.</p>
+<h2>What to compare</h2>
+<ul>
+<li><strong>Odds</strong> — local books can be shorter than 1xBet on big matches.</li>
+<li><strong>Markets</strong> — check whether Asian handicap and goals lines are available.</li>
+<li><strong>Payments</strong> — confirm Mobile Money deposit and withdrawal speed.</li>
+</ul>
+<h2>Use predictions as a starting point</h2>
+<p>Whatever book you use, the edge comes from price vs probability. See our <a href="/predictions">daily picks</a>, compare the odds at PMUC and 1xBet, and use the <a href="/tools">EV calculator</a> before staking.</p>
+<h2>Stay disciplined</h2>
+<p>Local leagues have thinner data, so stake smaller and keep records. Read our <a href="/responsible-gambling">responsible gambling guide</a>.</p>`,
+    },
+    {
+        slug: 'douala-football-betting-guide',
+        title: 'Football Betting in Douala: Local Tips and Bookmakers',
+        description: 'Football betting in Douala: Elite One clubs, the best bookmakers, local derby tips and how to find value in Cameroon\'s biggest betting market.',
+        keywords: ['football betting douala', 'douala betting tips', 'elite one douala', '1xbet douala', 'betting cameroon douala'],
+        tags: ['douala', 'cameroon', 'local betting'],
+        content: `<h1>Football Betting in Douala: Local Tips and Bookmakers</h1>
+<p>Douala is Cameroon's economic capital and its busiest betting market. With Elite One clubs, a huge football fan base and deep bookmaker coverage, the city offers more liquidity — and more temptation — than anywhere else in the country.</p>
+<h2>Local football</h2>
+<p>Clubs like Astres, Union de Douala and New Star give the city a strong local football identity. Local derbies are often tight, physical and low-scoring, so goals markets need careful pricing.</p>
+<h2>Bookmakers in Douala</h2>
+<p>1xBet, Premier Bet, BetPawa, PMUC and Supergoal are all widely used. Compare odds across at least two books before staking — the difference on a 1.85 vs 1.95 pick is significant over a season.</p>
+<h2>Douala betting tips</h2>
+<ul>
+<li>Home advantage is real in local fixtures; consider Asian handicap +0.5.</li>
+<li>Under 2.5 and Double Chance are safer than outright winners in derbies.</li>
+<li>Keep stakes flat and use Mobile Money limits.</li>
+</ul>
+<h2>Use data</h2>
+<p>See <a href="/predictions">today's predictions</a>, check the <a href="/stats">public track record</a>, and use the <a href="/tools">free betting tools</a> to price your bets.</p>`,
+    },
+    {
+        slug: 'yaounde-football-betting-guide',
+        title: 'Football Betting in Yaoundé: Elite One and European Tips',
+        description: 'Football betting in Yaoundé: Canon, Tonnerre, Elite One tips, bookmaker comparison and how to find value in Cameroon\'s capital.',
+        keywords: ['football betting yaounde', 'yaounde betting tips', 'canon yaounde', 'elite one yaounde', 'betting cameroon yaounde'],
+        tags: ['yaounde', 'cameroon', 'local betting'],
+        content: `<h1>Football Betting in Yaoundé: Elite One and European Tips</h1>
+<p>Yaoundé is the political capital and a historic football city. Canon and Tonnerre carry decades of tradition, and fans follow both Elite One and the big European leagues with equal passion.</p>
+<h2>Local football culture</h2>
+<p>Home advantage is strong in Yaoundé. Crowd support, travel fatigue for visitors and familiar pitches all matter. Squad depth is thinner than in Europe, so a single injury or suspension can shift the balance.</p>
+<h2>Markets that fit the capital</h2>
+<ul>
+<li>Asian handicap +0.5 for strong home sides.</li>
+<li>Double chance when the win price is too short.</li>
+<li>Under 2.5 in tight, tactical fixtures.</li>
+</ul>
+<h2>Compare bookmakers</h2>
+<p>1xBet, Premier Bet and BetPawa all cover Elite One. Compare prices, check the implied probability, and only bet when your estimate is higher. Our <a href="/tools">EV calculator</a> does the maths.</p>
+<h2>Follow the record</h2>
+<p>We publish our <a href="/stats">win rate and ROI by market</a>, including the bad runs. See <a href="/predictions">today's picks</a> and the <a href="/learn">learning centre</a>.</p>`,
+    },
+    {
+        slug: 'caf-champions-league-betting-guide',
+        title: 'CAF Champions League Betting Guide: African Football Tips',
+        description: 'CAF Champions League betting guide: how African continental football differs, home advantage, travel, goals trends and the best markets.',
+        keywords: ['caf champions league predictions', 'caf betting tips', 'african football betting', 'coton sport betting', 'caf champions league today'],
+        tags: ['caf', 'africa', 'strategy'],
+        content: `<h1>CAF Champions League Betting Guide: African Football Tips</h1>
+<p>The CAF Champions League is one of the most under-priced competitions in world football. Data is thinner, travel is brutal and home advantage is huge — which can create real value for disciplined bettors.</p>
+<h2>Home advantage is massive</h2>
+<p>Long flights, climate differences and hostile crowds make away wins rare. Backing strong home sides on Asian handicap or double chance is a common starting point.</p>
+<h2>Goals trends</h2>
+<p>Many CAF knockout ties are cautious and low-scoring. Under 2.5 and BTTS No often fit better than Over 2.5, especially in two-legged ties where teams protect leads.</p>
+<h2>Teams to know</h2>
+<p>Cameroon's Coton Sport, Egypt's Al Ahly and Zamalek, Morocco's Wydad and Raja, and South Africa's Mamelodi Sundowns are regular contenders. Check squad news — depth matters across continental travel.</p>
+<h2>Discipline</h2>
+<p>Thin data means bigger variance. Stake smaller, keep records and avoid long accumulators. See our <a href="/predictions">daily predictions</a> and <a href="/stats">public track record</a>.</p>`,
+    },
+    {
+        slug: 'live-betting-football-guide',
+        title: 'Live Betting Guide: How to Bet In-Play on Football',
+        description: 'Live football betting guide: how in-play odds move, when to bet, cash-out, common mistakes and how to stay disciplined.',
+        keywords: ['live betting football', 'in-play betting tips', 'football live betting strategy', 'cash out betting', 'live odds football'],
+        tags: ['live betting', 'strategy'],
+        content: `<h1>Live Betting Guide: How to Bet In-Play on Football</h1>
+<p>Live betting is exciting, but it is also where bookmakers hold the biggest edge. Odds move in seconds, and emotion pushes bettors into bad decisions. A simple process keeps you in control.</p>
+<h2>How in-play odds work</h2>
+<p>Prices update with the score, time, red cards, shots and momentum. A team losing 1-0 at half-time may still be the better side on xG — and therefore value if the market overreacts.</p>
+<h2>When live betting makes sense</h2>
+<ul>
+<li>You already researched the match before kick-off.</li>
+<li>The price moves further than the underlying probability justifies.</li>
+<li>You have a clear exit plan (cash-out or hold).</li>
+</ul>
+<h2>Common mistakes</h2>
+<ul>
+<li>Betting on every goal or highlight.</li>
+<li>Chasing a loss with a bigger live stake.</li>
+<li>Ignoring red cards and tactical changes.</li>
+</ul>
+<h2>Stay disciplined</h2>
+<p>Set a live-betting budget, use flat stakes and stop when you hit your limit. Read our <a href="/responsible-gambling">responsible gambling guide</a> and see our <a href="/predictions">pre-match picks</a> first.</p>`,
+    },
 ];
 
 export async function seedEvergreenBlogs() {

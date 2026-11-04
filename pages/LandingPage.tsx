@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle, Bell, Calculator, HelpCircle, Smartphone, FileText } from 'lucide-react';
+import { ChevronRight, Zap, TrendingUp, ShieldCheck, ArrowRight, CheckCircle, XCircle, Target, Briefcase, ChevronDown, Lock, AlertTriangle, Bell, Calculator, HelpCircle, Smartphone, FileText, MapPin, Trophy } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { TeamLogo } from '../components/TeamLogo';
 import { SiteFooter } from '../components/SiteFooter';
@@ -129,7 +129,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                 </motion.h1>
 
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="relative z-10 text-base md:text-xl text-slate-200 max-w-2xl mx-auto mb-10 leading-relaxed">
-                    Vantage AI uses quantitative modeling and fractional Kelly staking to find <span className="font-bold text-white">Positive EV (+EV)</span> bets. We tell you what to bet, and exactly how much to stake to grow your bankroll safely.
+                    AI football predictions for Cameroon — 1xBet, Premier Bet, BetPawa and Elite One. Our quantitative model finds <span className="font-bold text-white">Positive EV (+EV)</span> bets, and fractional Kelly staking tells you exactly how much to stake.
                 </motion.p>
 
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
@@ -392,6 +392,67 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                                     </motion.div>
                                 )}
                             </AnimatePresence>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* 7a. Coverage: cities, leagues, markets */}
+            <div className="max-w-5xl mx-auto px-4 mb-20">
+                <div className="text-center mb-8">
+                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3">Football Betting Across Cameroon</h2>
+                    <p className="text-gray-500 max-w-2xl mx-auto text-sm">
+                        Local guides for every major city, Elite One and the world's biggest leagues — with 1xBet, Premier Bet and BetPawa odds.
+                    </p>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <MapPin size={16} className="text-vantage-cyan" />
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">Cities we cover</h3>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {[
+                                ['douala', 'Douala'], ['yaounde', 'Yaoundé'], ['bafoussam', 'Bafoussam'],
+                                ['bamenda', 'Bamenda'], ['garoua', 'Garoua'], ['maroua', 'Maroua'],
+                                ['buea', 'Buea'], ['limbe', 'Limbe'], ['kribi', 'Kribi'], ['ngaoundere', 'Ngaoundéré'],
+                            ].map(([slug, name]) => (
+                                <Link key={slug} to={`/football-betting/${slug}`} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-slate-700 dark:text-gray-300 hover:border-vantage-cyan/50 transition-colors">
+                                    {name}
+                                </Link>
+                            ))}
+                        </div>
+                        <Link to="/football-betting" className="inline-block mt-3 text-[11px] font-bold text-vantage-cyan">
+                            All city betting guides →
+                        </Link>
+                    </div>
+
+                    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Trophy size={16} className="text-vantage-purple" />
+                            <h3 className="text-sm font-black text-slate-900 dark:text-white">Leagues we analyse</h3>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {[
+                                ['premier-league', 'Premier League'], ['la-liga', 'La Liga'], ['serie-a', 'Serie A'],
+                                ['bundesliga', 'Bundesliga'], ['ligue-1', 'Ligue 1'], ['champions-league', 'Champions League'],
+                                ['elite-one', 'Elite One'], ['fifa-world-cup', 'World Cup'],
+                            ].map(([slug, name]) => (
+                                <Link key={slug} to={`/pronostics/${slug}`} className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-white/70 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-slate-700 dark:text-gray-300 hover:border-vantage-purple/50 transition-colors">
+                                    {name}
+                                </Link>
+                            ))}
+                        </div>
+                        <Link to="/blog" className="inline-block mt-3 text-[11px] font-bold text-vantage-cyan">
+                            Daily league analysis →
+                        </Link>
+                    </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {['1X2 & Double Chance', 'Over/Under Goals', 'Both Teams to Score', 'Asian Handicap', 'Correct Score', 'Accumulators', 'Live Betting', 'Value & EV'].map(m => (
+                        <div key={m} className="rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-white/[0.02] px-3 py-2 text-[10px] font-bold text-slate-600 dark:text-gray-400 text-center">
+                            {m}
                         </div>
                     ))}
                 </div>
