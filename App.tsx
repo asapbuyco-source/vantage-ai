@@ -29,6 +29,8 @@ import { Faq } from './pages/Faq';
 import { Terms } from './pages/Terms';
 import { ResponsibleGambling } from './pages/ResponsibleGambling';
 import { HowItWorks } from './pages/HowItWorks';
+import { Locations } from './pages/Locations';
+import { LocationPage } from './pages/LocationPage';
 import { AppProvider, useAppContext } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -266,6 +268,8 @@ function AppContent() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/responsible-gambling" element={<ResponsibleGambling />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
+        <Route path="/football-betting" element={<Locations />} />
+        <Route path="/football-betting/:city" element={<LocationPage />} />
         <Route path="/pronostics/:leagueSlug" element={<LeaguePage />} />
         <Route path="*" element={
           <div className="min-h-screen overflow-x-hidden selection:bg-vantage-cyan/30 font-sans">
@@ -491,7 +495,9 @@ function AppContent() {
         <Route path="/faq" element={<Faq />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/responsible-gambling" element={<ResponsibleGambling />} />
-        <Route path="/how-it-works" element={<HowItWorks />} />
+                    <Route path="/how-it-works" element={<HowItWorks />} />
+                    <Route path="/football-betting" element={<Locations />} />
+                    <Route path="/football-betting/:city" element={<LocationPage />} />
                     <Route path="/concierge" element={<TicketWizard />} />
                     <Route path="/research" element={
                       <Suspense fallback={<div className="min-h-screen flex flex-col items-center justify-center"><Loader2 className="animate-spin text-vantage-cyan mb-4" size={40} /></div>}>

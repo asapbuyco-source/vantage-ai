@@ -169,6 +169,8 @@ class OddsData:
     # Correct Score & Asian Handicap (Phase 2.2-2.3) — dict fields
     correct_score_odds: dict = field(default_factory=dict)
     asian_handicap_odds: dict = field(default_factory=dict)
+    # Multi-bookmaker comparison (Bet365 / Pinnacle / 1xBet / ... main markets)
+    bookmaker_odds: dict = field(default_factory=dict)
     # Line movement tracking (Upgrade #3)
     opening_home_odds: float = 0.0
     opening_away_odds: float = 0.0
@@ -407,6 +409,7 @@ def fetch_matches(date_str: str | None = None) -> list[MatchData]:
                     # Phase 2: Correct Score & Asian Handicap
                     correct_score_odds=odds_dict.get("correct_score_odds", {}),
                     asian_handicap_odds=odds_dict.get("asian_handicap_odds", {}),
+                    bookmaker_odds=odds_dict.get("bookmaker_odds", {}),
                     odds_fetched_at=datetime.now(timezone.utc).isoformat()
                 )
         except Exception as e:

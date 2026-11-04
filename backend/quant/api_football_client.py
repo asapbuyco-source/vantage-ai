@@ -193,21 +193,30 @@ def fetch_live_fixtures() -> list:
 def fetch_odds_for_fixture(fixture_id: int, bookmaker_id: int = 8) -> dict:
     """
     Fetch pre-match odds for a fixture.
-    bookmaker_id=8 is Bet365 (standard reliable bookie).
-    Cached for 5-15 minutes pre-match.
+
+    ONE unfiltered API call returns every bookmaker for the fixture (same credit
+    cost as filtering). We use:
+      - the requested bookmaker (default 8 = Bet365) for the model odds
+      - all bookmakers to build `bookmaker_odds` (multi-book comparison in the app)
+    Cached for 10 minutes pre-match.
     """
     cache_key = f"odds_{fixture_id}_{bookmaker_id}"
     cached = _cache_get(cache_key, ttl_minutes=10)
     if cached is not None:
         return cached
 
-    data = _get("odds", {"fixture": fixture_id, "bookmaker": bookmaker_id}, call_type="odds")
+    data = _get("odds", {"fixture": fixture_id}, call_type="odds")
     odds_data = {}
     
     if not data or not data.get("response"):
         return odds_data
 
-    bets = data["response"][0].get("bookmakers", [{}])[0].get("bets", [])
+    bookmakers = data["response"][0].get("bookmakers", []) or []
+    chosen = next(
+        (bm for bm in bookmakers if str(bm.get("id")) == str(bookmaker_id)),
+        bookmakers[0] if bookmakers else {},
+    )
+    bets = chosen.get("bets", [])
     
     for bet in bets:
         market_name = bet.get("name")
@@ -274,6 +283,35 @@ def fetch_odds_for_fixture(fixture_id: int, bookmaker_id: int = 8) -> dict:
             for v in values:
                 cs_data[str(v.get("value"))] = float(v["odd"])
             odds_data["correct_score_odds"] = cs_data
+
+    # ── Multi-bookmaker comparison (main markets only, max 6 books) ──────────
+    comparison = {}
+    for bm in bookmakers:
+        row = {}
+        for bet in (bm.get("bets", []) or []):
+            market_name = bet.get("name")
+            if market_name == "Match Winner":
+                for v in bet.get("values", []):
+                    val = str(v.get("value"))
+                    if val == "Home": row["home_odds"] = float(v["odd"])
+                    elif val == "Draw": row["draw_odds"] = float(v["odd"])
+                    elif val == "Away": row["away_odds"] = float(v["odd"])
+            elif market_name == "Goals Over/Under":
+                for v in bet.get("values", []):
+                    val = str(v.get("value"))
+                    if val == "Over 2.5": row["over25_odds"] = float(v["odd"])
+                    elif val == "Under 2.5": row["under25_odds"] = float(v["odd"])
+            elif market_name == "Both Teams Score":
+                for v in bet.get("values", []):
+                    val = str(v.get("value"))
+                    if val == "Yes": row["btts_yes_odds"] = float(v["odd"])
+                    elif val == "No": row["btts_no_odds"] = float(v["odd"])
+        if row:
+            comparison[str(bm.get("name") or bm.get("id"))] = row
+        if len(comparison) >= 6:
+            break
+    if comparison:
+        odds_data["bookmaker_odds"] = comparison
 
     if odds_data:
         _cache_set(cache_key, odds_data)

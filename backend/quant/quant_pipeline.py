@@ -747,6 +747,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                 "odds_fetched_at": odds_fetched_at,
                 "odds_age_minutes": round(odds_age_min, 1) if odds_age_min is not None else None,
                 "odds_fresh": odds_fresh,
+                # Multi-bookmaker odds comparison (main markets) for the app
+                "bookmaker_odds": getattr(match.odds, "bookmaker_odds", {}) if getattr(match, "odds", None) else {},
                 "vault_eligible": vault_eligible,
                 "vault_priority_boost": vault_priority_boost,
                 "btts_blanking_risk": btts_blanking,
@@ -1087,6 +1089,7 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
             # Data quality and fresh odds
             "data_quality": p.get("data_quality"),
             "odds_fresh": p.get("odds_fresh"),
+            "bookmaker_odds": p.get("bookmaker_odds"),
             "calibration_tier": p.get("calibration_tier"),
             "calibrated_probability": p.get("calibrated_probability"),
             "calibration_tag": p.get("calibration_tag"),
