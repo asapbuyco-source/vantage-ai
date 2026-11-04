@@ -197,7 +197,10 @@ def init_firebase():
     if not sa_json:
         print("[Cricket] FIREBASE_SERVICE_ACCOUNT not set; skipping Firestore.", file=sys.stderr)
         return None
-    cred = credentials.Certificate(json.loads(sa_json))
+    sa_dict = json.loads(sa_json)
+    if "private_key" in sa_dict:
+        sa_dict["private_key"] = sa_dict["private_key"].replace('\\n', '\n')
+    cred = credentials.Certificate(sa_dict)
     firebase_admin.initialize_app(cred)
     return fs.client()
 

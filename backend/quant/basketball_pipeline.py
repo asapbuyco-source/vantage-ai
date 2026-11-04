@@ -243,6 +243,8 @@ def init_firebase():
         return None
     try:
         sa_dict = json.loads(sa_json)
+        if "private_key" in sa_dict:
+            sa_dict["private_key"] = sa_dict["private_key"].replace('\\n', '\n')
         cred = credentials.Certificate(sa_dict)
         firebase_admin.initialize_app(cred)
         return fs.client()

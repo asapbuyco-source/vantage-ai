@@ -374,26 +374,34 @@ const aiLimiter = rateLimit({
 
 async function generateLeagueRadar(predictions) {
     if (!predictions || predictions.length === 0) return null;
+
+    const leagueStats = {};
+    for (const pred of predictions) {
+        const league = pred.league || 'Unknown';
+        if (!leagueStats[league]) leagueStats[league] = { name: league, picks: [], totalEv: 0, highValueCount: 0 };
+        leagueStats[league].picks.push(pred);
+        leagueStats[league].totalEv += (pred.expected_value || 0) * 100;
+        if ((pred.expected_value || 0) >= 0.06) leagueStats[league].highValueCount++;
+    }
+    const sortedLeagues = Object.values(leagueStats)
+        .map(l => ({ ...l, avgEv: l.totalEv / l.picks.length }))
+        .sort((a, b) => b.avgEv - a.avgEv)
+        .slice(0, 5);
+    const leagueSummary = sortedLeagues.map(l => ({ name: l.name, picks: l.picks.length, avgEv: l.avgEv.toFixed(1), highValue: l.highValueCount }));
+
+    // Deterministic fallback so the feature always returns a usable summary,
+    // even when every AI provider/model is unavailable or rate-limited.
+    const fallbackInsight = sortedLeagues.length
+        ? `Best value today: ${sortedLeagues.slice(0, 3).map(l => `${l.name} (avg EV ${l.avgEv.toFixed(1)}%)`).join(', ')}. Prioritise leagues with multiple +EV picks and keep stakes flat.`
+        : 'No league shows a clear edge today — consider passing or staking smaller.';
+
     try {
-        const leagueStats = {};
-        for (const pred of predictions) {
-            const league = pred.league || 'Unknown';
-            if (!leagueStats[league]) leagueStats[league] = { name: league, picks: [], totalEv: 0, highValueCount: 0 };
-            leagueStats[league].picks.push(pred);
-            leagueStats[league].totalEv += (pred.expected_value || 0) * 100;
-            if ((pred.expected_value || 0) >= 0.06) leagueStats[league].highValueCount++;
-        }
-        const sortedLeagues = Object.values(leagueStats)
-            .map(l => ({ ...l, avgEv: l.totalEv / l.picks.length }))
-            .sort((a, b) => b.avgEv - a.avgEv)
-            .slice(0, 5);
-        const leagueSummary = sortedLeagues.map(l => ({ name: l.name, picks: l.picks.length, avgEv: l.avgEv.toFixed(1), highValue: l.highValueCount }));
         const prompt = `You are a betting analyst. Based on this data, give a 3-sentence summary of the best leagues for betting today:\n\n${JSON.stringify(leagueSummary, null, 2)}\n\nFocus on: Which leagues have the most value? What's the best strategy today? Keep it concise and actionable. Max 60 words.`;
         const insight = await callGroq([{ role: 'user', content: prompt }], 0.2, 100);
         return { leagues: leagueSummary, insight, generatedAt: new Date().toISOString() };
     } catch (e) {
-        logger.error(`[AI] League Radar failed: ${e.message}`);
-        return null;
+        logger.warn(`[AI] League Radar AI failed, using deterministic fallback: ${e.message}`);
+        return { leagues: leagueSummary, insight: fallbackInsight, generatedAt: new Date().toISOString(), fallback: true };
     }
 }
 
