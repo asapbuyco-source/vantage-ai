@@ -1570,6 +1570,7 @@ const KNOWN_EXACT_PATHS = new Set([
     '/', '/free', '/vip', '/arb', '/learn', '/guide', '/tools', '/about', '/contact',
     '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works', '/stats',
     '/results', '/profile', '/admin', '/concierge', '/research', '/blog', '/privacy-policy', '/privacy',
+    '/football-betting',
 ]);
 
 function isKnownAppPath(p) {
@@ -1579,6 +1580,7 @@ function isKnownAppPath(p) {
     if (/^\/match\/[^/]+$/.test(clean)) return true;
     if (/^\/pronostics\/[a-z0-9-]+$/.test(clean)) return true;
     if (/^\/predictions\/\d{4}-\d{2}-\d{2}$/.test(clean)) return true;
+    if (/^\/football-betting\/[a-z0-9-]+$/.test(clean)) return true;
     if (/^\/intel\//.test(clean)) return true;
     return false;
 }
