@@ -17,14 +17,17 @@ service cloud.firestore {
     }
 
     function isVip() {
+      let profile = get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
       return signedIn()
         && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.isVip == true;
+        && profile.isVip == true
+        && (!(profile.vipExpiry is timestamp) || profile.vipExpiry >= request.time);
     }
 
     function doesNotTouchProtectedFields() {
       let protectedKeys = ['isVip', 'vipExpiry', 'vipPlan', 'totalPaid', 'isAdmin', 'isBlocked',
-        'referralEarnings', 'lifetimeEarnings', 'referralCount'];
+        'referralEarnings', 'lifetimeEarnings', 'referralCount',
+        'isInfluencer', 'commissionRate', 'referralPurchases', 'promoRedeemed'];
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(protectedKeys);
     }
 
@@ -36,7 +39,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly([
           "uid", "email", "displayName", "isVip", "isAdmin", "isBlocked",
           "referralCode", "referralCount", "referralEarnings", "lifetimeEarnings",
-          "createdAt"
+          "appliedPromoCode", "referredBy", "createdAt"
         ])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.isVip == false
@@ -50,7 +53,8 @@ service cloud.firestore {
         isOwner(userId)
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           "isVip", "vipExpiry", "vipPlan", "totalPaid", "isAdmin", "isBlocked",
-          "referralEarnings", "lifetimeEarnings", "referralCount"
+          "referralEarnings", "lifetimeEarnings", "referralCount",
+          "isInfluencer", "commissionRate", "referralPurchases", "promoRedeemed"
         ])
       ) || isAdmin();
     }
@@ -59,7 +63,9 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks'])
+        && request.resource.data.clicks == resource.data.clicks + 1;
+      allow delete: if false;
     }
 
     match /daily_predictions/{dateStr} {

@@ -78,7 +78,7 @@ export async function sendPushToUser(uid, notification) {
                             title: notification.title,
                             body: notification.body,
                         },
-                        data: notification.data || {},
+                        data: { ...(notification.data || {}), url: notification.url || '/' },
                         webpush: {
                             fcm_options: { link: notification.url || '/' }
                         }
@@ -86,7 +86,8 @@ export async function sendPushToUser(uid, notification) {
                     sentCount++;
                 } catch (err) {
                     logger.warn(`[PushService] FCM send failed for ${doc.id}: ${err.message}`);
-                    if (err.message.includes('invalid registration token') || err.message.includes('not registered')) {
+                    if (err.code === 'messaging/registration-token-not-registered' ||
+                        err.message.includes('invalid registration token') || err.message.includes('not registered')) {
                         await doc.ref.delete();
                     }
                     failCount++;
@@ -139,7 +140,7 @@ export async function broadcastPush(notification) {
                 title: notification.title,
                 body: notification.body,
             },
-            data: notification.data || {},
+            data: { ...(notification.data || {}), url: notification.url || '/' },
             webpush: {
                 fcm_options: { link: notification.url || '/' }
             }
@@ -160,7 +161,8 @@ export async function broadcastPush(notification) {
             failureCount += result.failureCount;
 
             for (const failure of result.failureList) {
-                if (failure.error?.message?.includes('Invalid registration token') ||
+                if (failure.error?.code === 'messaging/registration-token-not-registered' ||
+                    failure.error?.message?.includes('Invalid registration token') ||
                     failure.error?.message?.includes('not registered')) {
                     const docId = fcmSnapshot.docs.find(d => d.data().fcmToken === failure.token)?.id;
                     if (docId) {
