@@ -604,7 +604,8 @@ def run_pipeline(date_str: str | None = None, dry_run: bool = False, weights_ove
                             _safe_print(f"[QuantPipeline]   🛡️ Safety Downgrade [{reason_str}]: {best_bet.market} → {safe_target} (EV kept {safe_bet.expected_value:.1%})")
                             best_bet = safe_bet
                         else:
-                            _safe_print(f"[QuantPipeline]   ⚖️ Downgrade skipped for {best_bet.market} (safe {safe_target} would drop EV {best_bet.expected_value:.1%} → {safe_bet.expected_value:.1%} if safe_bet else 'n/a')")
+                            safe_ev_label = f"{safe_bet.expected_value:.1%}" if safe_bet else "n/a"
+                            _safe_print(f"[QuantPipeline]   ⚖️ Downgrade skipped for {best_bet.market} (safe {safe_target} would drop EV {best_bet.expected_value:.1%} → {safe_ev_label})")
 
             # ── Odds Staleness Guard ────────────────────────────────────────
             odds_fetched_at = match.odds.odds_fetched_at if match.odds else ""
