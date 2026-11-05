@@ -1584,7 +1584,7 @@ const KNOWN_EXACT_PATHS = new Set([
     '/', '/free', '/vip', '/arb', '/learn', '/guide', '/tools', '/about', '/contact',
     '/download', '/faq', '/terms', '/responsible-gambling', '/how-it-works', '/stats',
     '/results', '/profile', '/admin', '/concierge', '/research', '/blog', '/privacy-policy', '/privacy',
-    '/football-betting',
+    '/football-betting', '/live',
 ]);
 
 function isKnownAppPath(p) {
