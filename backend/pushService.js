@@ -48,11 +48,45 @@ export async function generateDailyTipFromPredictions(predictions) {
     }
 }
 
+// Map notification `type` -> the app's preferences.notifications key.
+const PREF_KEY = {
+    tip_of_day: 'dailyPicks',
+    daily_picks: 'dailyPicks',
+    results: 'results',
+    match_result: 'results',
+    live_goals: 'liveGoals',
+    vip_expiry: 'vipExpiry',
+};
+
+async function filterUidsByPreference(uids, type) {
+    const prefKey = PREF_KEY[type];
+    const unique = [...new Set((uids || []).filter(Boolean))];
+    if (!prefKey || unique.length === 0) return unique;
+    const db = admin.firestore();
+    const snaps = [];
+    // Firestore getAll is capped — batch to support large audiences.
+    for (let i = 0; i < unique.length; i += 500) {
+        const batch = unique.slice(i, i + 500);
+        snaps.push(...await db.getAll(...batch.map(uid => db.collection('profiles').doc(uid))));
+    }
+    const optedOut = new Set();
+    for (const snap of snaps) {
+        if (!snap.exists) continue;
+        const prefs = snap.data()?.preferences?.notifications;
+        if (prefs && prefs[prefKey] === false) optedOut.add(snap.id);
+    }
+    return unique.filter(uid => !optedOut.has(uid));
+}
+
 export async function sendPushToUser(uid, notification) {
     if (!admin.apps.length) {
         logger.warn('[PushService] Firebase not initialized');
         return { success: false, error: 'Firebase not initialized' };
     }
+
+    const type = notification.data?.type || 'generic';
+    const allowed = await filterUidsByPreference([uid], type);
+    if (allowed.length === 0) return { success: true, skipped: 'preference' };
 
     try {
         const db = admin.firestore();
@@ -121,12 +155,15 @@ export async function broadcastPush(notification) {
             return { success: true, sentCount: 0 };
         }
 
+        const type = notification.data?.type || 'generic';
+        const uids = fcmSnapshot.docs.map(d => d.data().uid).filter(Boolean);
+        const allowed = new Set(await filterUidsByPreference(uids, type));
         const tokens = [];
-        const invalidDocIds = [];
 
         for (const doc of fcmSnapshot.docs) {
             const data = doc.data();
-            if (data.fcmToken) {
+            // Include legacy tokens without a uid (can't check preference).
+            if (data.fcmToken && (!data.uid || allowed.has(data.uid))) {
                 tokens.push(data.fcmToken);
             }
         }
