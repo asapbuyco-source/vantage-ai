@@ -1,12 +1,12 @@
 # Redirect rogue .html request directly to root (301 Permanent) to clear Google Search Console warnings
 /.html / 301
 
-# SEO passthrough -> Railway backend (SSR pages + live sitemap)
-/sitemap.xml https://vantage-ai-production-ed4b.up.railway.app/sitemap.xml 200
-/predictions/* https://vantage-ai-production-ed4b.up.railway.app/predictions/:splat 200
-/pronostics/* https://vantage-ai-production-ed4b.up.railway.app/pronostics/:splat 200
-/match/* https://vantage-ai-production-ed4b.up.railway.app/match/:splat 200
-/blog/* https://vantage-ai-production-ed4b.up.railway.app/blog/:splat 200
+# SEO passthrough -> VPS backend (SSR pages + live sitemap)
+/sitemap.xml https://vantageai.82.38.4.172.sslip.io/sitemap.xml 200
+/predictions/* https://vantageai.82.38.4.172.sslip.io/predictions/:splat 200
+/pronostics/* https://vantageai.82.38.4.172.sslip.io/pronostics/:splat 200
+/match/* https://vantageai.82.38.4.172.sslip.io/match/:splat 200
+/blog/* https://vantageai.82.38.4.172.sslip.io/blog/:splat 200
 
 # Allow the static robots.txt to pass through
 /robots.txt /robots.txt 200
