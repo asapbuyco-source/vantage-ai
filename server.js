@@ -18,6 +18,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { initScheduler, stopScheduler, triggerFootballGeneration, triggerBasketballGeneration, triggerCricketGeneration, triggerGrading, triggerBlogGen, triggerAccumulatorGeneration, triggerTelegramBroadcast, triggerBankerOfTheDay, triggerVipTeaser, triggerTelegramResults, triggerQuantPipeline, triggerQuantGrading, triggerQuantPerformance, repairCorruptedPredictions, triggerTipOfTheDay } from './backend/scheduler.js';
 import { seedEvergreenBlogs } from './backend/evergreenBlogs.js';
 import { sendTelegramTestMessage } from './backend/telegramService.js';
+import { broadcastPush, sendPushToUser } from './backend/pushService.js';
 import { requireFirebaseUser } from './backend/authMiddleware.js';
 import { assertValidPlan, inferPlanFromAmount } from './backend/paymentPlans.js';
 import { fulfillVipPayment } from './backend/paymentFulfillment.js';
@@ -714,6 +715,19 @@ app.post('/api/admin/seed-evergreen', adminAuth, async (req, res) => {
         logger.error({ error: e }, '[API] Evergreen seed error');
         Sentry.captureException(e);
         res.status(500).json({ error: 'Evergreen seed failed', details: e.message });
+    }
+});
+
+app.post('/api/admin/push-test', adminAuth, async (req, res) => {
+    try {
+        const { uid, title, body, type = 'daily_picks', url = '/' } = req.body || {};
+        if (!title || !body) return res.status(400).json({ error: 'title and body are required' });
+        const notification = { title, body, data: { type, url }, url };
+        const result = uid ? await sendPushToUser(uid, notification) : await broadcastPush(notification);
+        res.json(result);
+    } catch (e) {
+        logger.error({ error: e }, '[API] Push test error');
+        res.status(500).json({ error: e.message });
     }
 });
 

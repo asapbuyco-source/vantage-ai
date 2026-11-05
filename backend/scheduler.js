@@ -12,7 +12,8 @@ import {
     runLineupSyncer,
     runArbScanner
 } from './quantService.js';
-import { sendTipOfTheDayPush, generateDailyTipFromPredictions } from './pushService.js';
+import { sendTipOfTheDayPush, generateDailyTipFromPredictions, broadcastPush, sendPushToUser } from './pushService.js';
+import { getLagosTodayKey } from './dateUtils.js';
 import { sendDailyFreePicks, sendMemberPicksMessage, sendDailyResultsMessage, sendBankerOfTheDay as sendTopSelection, sendVipTeaser as sendMemberTeaser } from './telegramMessaging.js';
 
 // ESM-compatible __dirname
@@ -323,6 +324,25 @@ export const initScheduler = () => {
         withLock('quant_grading', 30, async () => {
             logger.info('[Scheduler] Running quant grading...');
             await triggerQuantGrading();
+            // Results alert: tell users the day's picks were graded.
+            try {
+                const todayKey = getLagosTodayKey();
+                const settleSnap = await db.collection('quant_predictions').doc(todayKey).get();
+                const picks = settleSnap.exists ? (settleSnap.data().predictions || []) : [];
+                const graded = picks.filter(p => p.status === 'won' || p.status === 'lost');
+                const wins = graded.filter(p => p.status === 'won').length;
+                const losses = graded.filter(p => p.status === 'lost').length;
+                if (graded.length > 0) {
+                    await broadcastPush({
+                        title: `Results graded: ${wins}W - ${losses}L`,
+                        body: `${graded.length} picks settled today. Tap to see the full record.`,
+                        data: { type: 'results', url: '/results' },
+                        url: '/results',
+                    });
+                }
+            } catch (e) {
+                logger.warn({ error: e.message }, '[Scheduler] Results push failed');
+            }
         }),
         { timezone: 'Africa/Lagos' }
     );
@@ -431,6 +451,59 @@ export const initScheduler = () => {
     );
     tasks.set('tipOfDay', tipTask);
     logger.info('💡 Tip of the Day push scheduled at 08:00 Lagos');
+
+    // VIP expiry reminders at 09:00 Lagos (3 days before expiry)
+    const vipExpiryTask = cron.schedule('0 9 * * *',
+        withLock('vip_expiry_push', 15, async () => {
+            const now = Date.now();
+            const in3d = now + 3 * 24 * 60 * 60 * 1000;
+            const snap = await db.collection('profiles').limit(500).get();
+            for (const doc of snap.docs) {
+                const expiryRaw = doc.data().vipExpiry;
+                if (!expiryRaw) continue;
+                const expiry = expiryRaw?.toDate ? expiryRaw.toDate().getTime() : new Date(expiryRaw).getTime();
+                if (!isFinite(expiry) || expiry < now || expiry > in3d) continue;
+                const daysLeft = Math.ceil((expiry - now) / 86400000);
+                await sendPushToUser(doc.id, {
+                    title: 'VIP expires soon',
+                    body: `Your VIP access ends in ${daysLeft} day${daysLeft > 1 ? 's' : ''}. Renew to keep every pick.`,
+                    data: { type: 'vip_expiry', url: '/vip' },
+                    url: '/vip',
+                });
+            }
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('vipExpiryPush', vipExpiryTask);
+    logger.info('⏳ VIP expiry reminders scheduled at 09:00 Lagos');
+
+    // Live goal alerts — every minute, deduped by goal signature.
+    let liveGoalSeen = null;
+    const liveGoalTask = cron.schedule('* * * * *',
+        withLock('live_goal_push', 1, async () => {
+            const snap = await db.collection('live_scores').doc('current').get();
+            if (!snap.exists) return;
+            const matches = snap.data().matches || [];
+            const next = new Map();
+            for (const m of matches) {
+                const goals = (m.events || []).filter(e => String(e.type || '').toLowerCase() === 'goal');
+                const sig = `${m.id}:${goals.length}:${m.homeScore}-${m.awayScore}`;
+                next.set(m.id, sig);
+                if (!liveGoalSeen) continue;
+                if (liveGoalSeen.get(m.id) === sig) continue;
+                await broadcastPush({
+                    title: `GOAL! ${m.homeTeam} ${m.homeScore}-${m.awayScore} ${m.awayTeam}`,
+                    body: `${m.league} · ${m.minute ? m.minute + "'" : 'Live'}`,
+                    data: { type: 'live_goals', url: '/live' },
+                    url: '/live',
+                });
+            }
+            liveGoalSeen = next;
+        }),
+        { timezone: 'Africa/Lagos' }
+    );
+    tasks.set('liveGoalPush', liveGoalTask);
+    logger.info('⚽ Live goal alerts scheduled every minute');
 
     // NOTE: Live momentum engine and player stats client have been disabled.
     // They consumed ~15,000+ API-Football credits/day running every 2-5 minutes,
