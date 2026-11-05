@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Refreshing Vantage AI…</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0a0f1c; color: #e2e8f0; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .box { text-align: center; max-width: 420px; }
+    h1 { color: #22d3ee; font-size: 20px; margin: 0 0 10px; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 8px; }
+    a { color: #22d3ee; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Refreshing Vantage AI…</h1>
+    <p>Clearing the old app cache and service worker. You'll be redirected automatically.</p>
+    <p id="status">Starting…</p>
+    <p><a href="/?fresh=1">Tap here if it doesn't redirect</a></p>
+  </div>
+  <script>
+    (async () => {
+      const set = (m) => { document.getElementById('status').textContent = m; };
+      try {
+        set('Unregistering service workers…');
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+      } catch (e) {}
+      try {
+        set('Clearing caches…');
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch (e) {}
+      try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}
+      set('Done. Reloading…');
+      setTimeout(() => { window.location.replace('/?fresh=' + Date.now()); }, 900);
+    })();
+  </script>
+</body>
+</html>

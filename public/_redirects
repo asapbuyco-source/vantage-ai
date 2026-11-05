@@ -7,5 +7,8 @@
 # Allow the static robots.txt to pass through
 /robots.txt /robots.txt 200
 
+# Cache/service-worker reset page (must be served as a real file)
+/reset.html /reset.html 200
+
 # SPA fallback — all app routes are served by the Netlify build.
 /* /index.html 200
