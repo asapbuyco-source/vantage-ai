@@ -46,26 +46,6 @@
 
 
 [[redirects]]
-  from = "/predictions/*"
-  to = "https://vantageai.82.38.4.172.sslip.io/predictions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/pronostics/*"
-  to = "https://vantageai.82.38.4.172.sslip.io/pronostics/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/match/*"
-  to = "https://vantageai.82.38.4.172.sslip.io/match/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/blog/*"
-  to = "https://vantageai.82.38.4.172.sslip.io/blog/:splat"
-  status = 200
-
-[[redirects]]
   from = "/sitemap.xml"
   to = "https://vantageai.82.38.4.172.sslip.io/sitemap.xml"
   status = 200

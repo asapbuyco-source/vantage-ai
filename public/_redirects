@@ -1,16 +1,11 @@
 # Redirect rogue .html request directly to root (301 Permanent) to clear Google Search Console warnings
 /.html / 301
 
-# SEO passthrough -> VPS backend (SSR pages + live sitemap)
+# Live sitemap from the backend (SSR-fed)
 /sitemap.xml https://vantageai.82.38.4.172.sslip.io/sitemap.xml 200
-/predictions/* https://vantageai.82.38.4.172.sslip.io/predictions/:splat 200
-/pronostics/* https://vantageai.82.38.4.172.sslip.io/pronostics/:splat 200
-/match/* https://vantageai.82.38.4.172.sslip.io/match/:splat 200
-/blog/* https://vantageai.82.38.4.172.sslip.io/blog/:splat 200
 
 # Allow the static robots.txt to pass through
 /robots.txt /robots.txt 200
 
-# SPA fallback (must stay LAST - everything above it wins by specificity alone,
-# and _redirects rules are evaluated before netlify.toml rules)
+# SPA fallback — all app routes are served by the Netlify build.
 /* /index.html 200
