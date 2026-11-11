@@ -82,11 +82,9 @@ export const Learn: React.FC = () => {
   return (
     <div className="space-y-4 pb-24">
       {!user && <SiteNav />}
-      {!user && (
-        <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
-          <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
-        </button>
-      )}
+      <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
+        <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
+      </button>
       <motion.div className="flex flex-col space-y-1 mb-4" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-black font-orbitron text-slate-900 dark:text-white uppercase tracking-tight">
           {language === 'fr' ? 'Centre' : 'Learning'} <span className="text-vantage-cyan">{language === 'fr' ? "d'Apprentissage" : 'Center'}</span>

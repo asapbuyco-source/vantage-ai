@@ -82,11 +82,9 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
     return (
         <div className="space-y-5 pb-24">
             {!user && <SiteNav />}
-            {!user && (
-                <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
-                    <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
-                </button>
-            )}
+            <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
+                <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
+            </button>
             {/* Header */}
             <div className="flex flex-col space-y-1">
                 <h1 className="text-2xl font-bold font-orbitron text-slate-900 dark:text-white">
