@@ -71,9 +71,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
     ];
 
     return (
-        <div className="flex flex-col min-h-screen pb-10">
+        <div className="relative flex flex-col min-h-screen pb-10 overflow-x-hidden bg-[radial-gradient(ellipse_at_top,rgba(34,211,238,0.10),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(168,85,247,0.10),transparent_55%)]">
             {/* 1. Header Navigation */}
-            <div className="flex justify-between items-center py-4 px-2 md:px-8 mb-8 md:mb-12 sticky top-0 z-50 bg-slate-50/80 dark:bg-[#0a0f1c]/80 backdrop-blur-lg border-b border-gray-200 dark:border-white/5">
+            <div className="flex justify-between items-center py-4 px-2 md:px-8 mb-8 md:mb-12 sticky top-0 z-50 bg-slate-950/55 backdrop-blur-xl border-b border-white/10 shadow-lg shadow-black/20">
                 <h1 className="text-xl md:text-2xl font-bold font-orbitron text-slate-900 dark:text-white">
                     VANTAGE<span className="text-vantage-cyan">AI</span>
                 </h1>
@@ -134,36 +134,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                     AI football predictions for Cameroon — 1xBet, Premier Bet, BetPawa and Elite One. Our quantitative model finds <span className="font-bold text-white">Positive EV (+EV)</span> bets, and fractional Kelly staking tells you exactly how much to stake.
                 </motion.p>
 
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto">
-                    <button onClick={onGetStarted} className="w-full sm:w-auto py-4 px-10 bg-vantage-cyan text-slate-900 font-black text-lg rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:scale-105 hover:shadow-[0_0_40px_rgba(34,211,238,0.5)] transition-all flex items-center justify-center gap-2">
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="relative z-10 flex flex-col sm:flex-row items-center justify-center gap-3 w-full sm:w-auto">
+                    <button onClick={onGetStarted} className="w-full sm:w-auto py-4 px-10 bg-gradient-to-r from-vantage-cyan to-cyan-400 text-slate-950 font-black text-lg rounded-xl shadow-[0_0_40px_-5px_rgba(34,211,238,0.6)] hover:scale-[1.03] transition-all flex items-center justify-center gap-2">
                         Get Started Free
                         <ArrowRight size={20} />
                     </button>
-                    <button onClick={scrollToPricing} className="w-full sm:w-auto py-4 px-8 bg-white/10 border border-white/20 text-white font-bold text-lg rounded-xl hover:bg-white/15 transition-all flex items-center justify-center gap-2 backdrop-blur-md">
+                    <button onClick={scrollToPricing} className="w-full sm:w-auto py-4 px-8 bg-white/10 border border-white/15 text-white font-bold text-lg rounded-xl hover:bg-white/15 transition-all flex items-center justify-center gap-2 backdrop-blur-xl">
                         <Lock size={18} className="text-slate-300" />
                         View VIP Plans
                     </button>
+                    <a href="https://play.google.com/store/apps/details?id=com.vantageai.app&hl=en" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto py-4 px-6 bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-bold text-lg rounded-xl hover:bg-emerald-500/25 transition-all flex items-center justify-center gap-2 backdrop-blur-xl">
+                        <Smartphone size={18} /> Get the app
+                    </a>
                 </motion.div>
-                <p className="relative z-10 text-xs text-slate-300 mt-4 font-medium uppercase tracking-widest">No credit card required for free picks</p>
+                <p className="relative z-10 text-[11px] text-slate-300 mt-4 font-semibold uppercase tracking-[0.18em]">No credit card required for free picks</p>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="relative z-10 mt-10 grid grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl">
+                    {[{ v: '1,000+', l: 'Bets tracked' }, { v: '67.4%', l: 'Hit rate*' }, { v: '7.9%', l: 'Avg ROI*' }].map(s => (
+                        <div key={s.l} className="rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur-xl px-2 py-3 text-center shadow-lg shadow-black/20">
+                            <p className="text-xl sm:text-2xl font-black font-orbitron text-white">{s.v}</p>
+                            <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-cyan-200/80">{s.l}</p>
+                        </div>
+                    ))}
+                </motion.div>
             </div>
 
-            {/* 3. Social Proof Ticker */}
-            <div className="w-full bg-slate-900 dark:bg-black/40 border-y border-white/10 py-6 mb-4 overflow-hidden relative">
-                <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-white/10">
-                    <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
-                        <span className="text-4xl font-black text-white font-orbitron mb-1">1,000+</span>
-                        <span className="text-xs font-bold text-vantage-cyan uppercase tracking-widest">Bets Tracked</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
-                        <span className="text-4xl font-black text-white font-orbitron mb-1">67.4%</span>
-                        <span className="text-xs font-bold text-vantage-cyan uppercase tracking-widest">Historical Performance*</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
-                        <span className="text-4xl font-black text-white font-orbitron mb-1">7.9%</span>
-                        <span className="text-xs font-bold text-green-400 uppercase tracking-widest">Avg. ROI*</span>
-                    </div>
-                </div>
-            </div>
             <p className="text-[10px] text-gray-500 dark:text-gray-600 text-center px-4 mb-16 max-w-2xl mx-auto">
                 *Past performance is not indicative of future results. All betting involves risk. Our data-driven predictions identify positive expected value but do not guarantee wins. 18+
             </p>
@@ -171,34 +166,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             {/* 4. Education: The 3-Step Blueprint */}
             <div className="max-w-6xl mx-auto px-4 mb-24">
                 <div className="text-center mb-12">
-                    <h2 className="text-2xl md:text-4xl font-bold text-slate-900 dark:text-white mb-4">How You Actually Win Money</h2>
-                    <p className="text-gray-500 max-w-xl mx-auto">It's not about guessing the winner. It's about math, probabilities, and bankroll management.</p>
+                    <span className="inline-block text-[10px] font-black uppercase tracking-[0.25em] text-vantage-cyan/80 mb-3">The method</span>
+                    <h2 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white mb-4">
+                        How You Actually <span className="text-transparent bg-clip-text bg-gradient-to-r from-vantage-cyan to-vantage-purple">Win Money</span>
+                    </h2>
+                    <p className="text-gray-500 dark:text-gray-400 max-w-xl mx-auto">It's not about guessing the winner. It's about math, probabilities, and bankroll management.</p>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <GlassCard className="flex flex-col items-center text-center p-8 hover:border-vantage-cyan/50 transition-colors">
-                        <div className="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center mb-6 border border-blue-500/20">
-                            <Zap size={32} className="text-blue-500" />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                    {[
+                        { icon: <Zap size={30} className="text-cyan-300" />, tile: 'from-cyan-400/25 to-cyan-400/5 border-cyan-400/30', title: '1. The Quant Engine', desc: 'Our AI analyzes thousands of data points including Expected Goals (xG), injuries, and line movement to calculate the true mathematical probability of a match.' },
+                        { icon: <Target size={30} className="text-purple-300" />, tile: 'from-purple-400/25 to-purple-400/5 border-purple-400/30', title: '2. Positive EV (+EV)', desc: 'When the bookmaker sets odds higher than our calculated true probability, it creates a value opportunity. Over a large sample, consistently finding +EV is how disciplined bettors build an edge.' },
+                        { icon: <Briefcase size={30} className="text-emerald-300" />, tile: 'from-emerald-400/25 to-emerald-400/5 border-emerald-400/30', title: '3. Kelly Sizing', desc: "We don't just give you the pick. Our built-in risk manager calculates exactly how much to stake using the Kelly Criterion to maximize growth and prevent ruin." },
+                    ].map(c => (
+                        <div key={c.title} className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-7 text-center transition-all hover:-translate-y-1 hover:border-white/20">
+                            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+                            <div className={`w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br ${c.tile} border flex items-center justify-center mb-6 shadow-lg shadow-black/30`}>{c.icon}</div>
+                            <h3 className="text-lg font-black text-slate-900 dark:text-white mb-2">{c.title}</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{c.desc}</p>
                         </div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">1. The Quant Engine</h3>
-                        <p className="text-sm text-gray-500">Our AI analyzes thousands of data points including Expected Goals (xG), injuries, and line movement to calculate the true mathematical probability of a match.</p>
-                    </GlassCard>
-                    
-                    <GlassCard className="flex flex-col items-center text-center p-8 hover:border-purple-500/50 transition-colors">
-                        <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-6 border border-purple-500/20">
-                            <Target size={32} className="text-purple-500" />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">2. Positive EV (+EV)</h3>
-                        <p className="text-sm text-gray-500">When the bookmaker sets odds higher than our calculated true probability, it creates a value opportunity. Over a large sample, consistently finding +EV is how disciplined bettors build an edge.</p>
-                    </GlassCard>
-                    
-                    <GlassCard className="flex flex-col items-center text-center p-8 hover:border-green-500/50 transition-colors">
-                        <div className="w-16 h-16 rounded-2xl bg-green-500/10 flex items-center justify-center mb-6 border border-green-500/20">
-                            <Briefcase size={32} className="text-green-500" />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3">3. Kelly Sizing</h3>
-                        <p className="text-sm text-gray-500">We don't just give you the pick. Our built-in risk manager calculates exactly how much to stake using the Kelly Criterion to maximize growth and prevent ruin.</p>
-                    </GlassCard>
+                    ))}
                 </div>
             </div>
 
@@ -206,7 +193,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
 
             {/* 5b. Arbitrage Finder Teaser */}
             <div className="max-w-6xl mx-auto px-4 mb-24">
-                <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/20 rounded-3xl p-8 md:p-12">
+                <div className="relative overflow-hidden rounded-3xl border border-amber-400/20 bg-slate-900/60 backdrop-blur-xl p-8 md:p-12 shadow-2xl shadow-black/30">
+                    <div className="absolute -top-32 -right-24 w-80 h-80 rounded-full bg-amber-400/10 blur-[110px] pointer-events-none" />
                     <div className="flex flex-col md:flex-row items-center gap-10">
                         <div className="flex-1 relative z-10 space-y-6 text-center md:text-left">
                             <div className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-full">
@@ -241,7 +229,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
 
                         {/* Mockup UI */}
                         <div className="flex-1 w-full max-w-md relative z-10">
-                            <div className="bg-slate-800 border border-yellow-500/20 rounded-2xl p-5 shadow-2xl">
+                            <div className="rounded-2xl border border-white/10 bg-white/[0.05] backdrop-blur-xl p-5 shadow-2xl">
                                 <div className="flex justify-between items-center mb-4">
                                     <div className="flex items-center gap-2">
                                         <Zap size={18} className="text-yellow-400" />
@@ -285,8 +273,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             {/* 6. Pricing Section */}
             <div id="pricing-section" className="max-w-6xl mx-auto px-4 mb-24">
                 <div className="text-center mb-12">
-                    <h2 className="text-3xl font-bold font-orbitron text-slate-900 dark:text-white mb-4">Join the Syndicate</h2>
-                    <p className="text-gray-500">Skip guesswork. Use verified quantitative data and disciplined staking.</p>
+                    <span className="inline-block text-[10px] font-black uppercase tracking-[0.25em] text-vantage-cyan/80 mb-3">Plans</span>
+                    <h2 className="text-3xl md:text-4xl font-black font-orbitron text-slate-900 dark:text-white mb-4">Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-vantage-cyan to-vantage-purple">Syndicate</span></h2>
+                    <p className="text-gray-500 dark:text-gray-400">Skip guesswork. Use verified quantitative data and disciplined staking.</p>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
@@ -314,7 +303,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                     </GlassCard>
 
                     {/* VIP Monthly (Popular) */}
-                    <GlassCard className="flex flex-col p-8 border-vantage-cyan/50 relative transform md:-translate-y-4 shadow-2xl">
+                    <GlassCard className="flex flex-col p-8 border-vantage-cyan/40 relative md:-translate-y-4 shadow-[0_0_70px_-20px_rgba(34,211,238,0.5)] bg-gradient-to-b from-vantage-cyan/10 to-transparent">
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-vantage-cyan text-slate-900 text-[10px] font-black uppercase tracking-widest px-4 py-1 rounded-full">
                             Most Popular
                         </div>
@@ -334,7 +323,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                                 <CheckCircle size={16} className="text-vantage-cyan" /> Kelly Sizing Calculator
                             </li>
                         </ul>
-                        <button onClick={onLogin} className="w-full py-4 bg-vantage-cyan text-slate-900 font-bold rounded-xl hover:scale-105 transition-transform shadow-[0_0_20px_rgba(34,211,238,0.3)]">
+                        <button onClick={onLogin} className="w-full py-4 bg-gradient-to-r from-vantage-cyan to-cyan-400 text-slate-950 font-black rounded-xl hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_rgba(34,211,238,0.6)]">
                             Upgrade to VIP
                         </button>
                     </GlassCard>
@@ -368,11 +357,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             {/* 7. FAQ Section */}
             <div className="max-w-3xl mx-auto px-4 mb-24 w-full">
                 <div className="text-center mb-10">
-                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Frequently Asked Questions</h2>
+                    <span className="inline-block text-[10px] font-black uppercase tracking-[0.25em] text-vantage-cyan/80 mb-3">FAQ</span>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white">Frequently Asked <span className="text-transparent bg-clip-text bg-gradient-to-r from-vantage-cyan to-vantage-purple">Questions</span></h2>
                 </div>
                 <div className="space-y-3">
                     {faqs.map((faq, i) => (
-                        <div key={i} className="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden transition-all">
+                        <div key={i} className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl overflow-hidden transition-all hover:border-white/20">
                             <button 
                                 onClick={() => setOpenFaq(openFaq === i ? null : i)}
                                 className="w-full px-6 py-4 flex items-center justify-between font-bold text-slate-900 dark:text-white text-left"
@@ -402,13 +392,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             {/* 7a. Coverage: cities, leagues, markets */}
             <div className="max-w-5xl mx-auto px-4 mb-20">
                 <div className="text-center mb-8">
-                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3">Football Betting Across Cameroon</h2>
-                    <p className="text-gray-500 max-w-2xl mx-auto text-sm">
+                    <span className="inline-block text-[10px] font-black uppercase tracking-[0.25em] text-vantage-cyan/80 mb-3">Coverage</span>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-3">Football Betting <span className="text-transparent bg-clip-text bg-gradient-to-r from-vantage-cyan to-vantage-purple">Across Cameroon</span></h2>
+                    <p className="text-gray-500 dark:text-gray-400 max-w-2xl mx-auto text-sm">
                         Local guides for every major city, Elite One and the world's biggest leagues — with 1xBet, Premier Bet and BetPawa odds.
                     </p>
                 </div>
                 <div className="grid md:grid-cols-2 gap-4">
-                    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-5">
                         <div className="flex items-center gap-2 mb-3">
                             <MapPin size={16} className="text-vantage-cyan" />
                             <h3 className="text-sm font-black text-slate-900 dark:text-white">Cities we cover</h3>
@@ -429,7 +420,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                         </Link>
                     </div>
 
-                    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-5">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-5">
                         <div className="flex items-center gap-2 mb-3">
                             <Trophy size={16} className="text-vantage-purple" />
                             <h3 className="text-sm font-black text-slate-900 dark:text-white">Leagues we analyse</h3>
@@ -453,7 +444,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
 
                 <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
                     {['1X2 & Double Chance', 'Over/Under Goals', 'Both Teams to Score', 'Asian Handicap', 'Correct Score', 'Accumulators', 'Live Betting', 'Value & EV'].map(m => (
-                        <div key={m} className="rounded-xl border border-gray-200 dark:border-white/10 bg-white/50 dark:bg-white/[0.02] px-3 py-2 text-[10px] font-bold text-slate-600 dark:text-gray-400 text-center">
+                        <div key={m} className="rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md px-3 py-2 text-[10px] font-bold text-slate-600 dark:text-gray-400 text-center">
                             {m}
                         </div>
                     ))}
@@ -463,8 +454,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             {/* 7b. Company & Resources */}
             <div className="max-w-5xl mx-auto px-4 mb-20">
                 <div className="text-center mb-8">
-                    <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3">Explore Vantage AI</h2>
-                    <p className="text-gray-500 max-w-xl mx-auto text-sm">Tools, guides and company information — everything you need before you sign up.</p>
+                    <span className="inline-block text-[10px] font-black uppercase tracking-[0.25em] text-vantage-cyan/80 mb-3">Resources</span>
+                    <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white mb-3">Explore <span className="text-transparent bg-clip-text bg-gradient-to-r from-vantage-cyan to-vantage-purple">Vantage AI</span></h2>
+                    <p className="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-sm">Tools, guides and company information — everything you need before you sign up.</p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -480,7 +472,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                         <Link
                             key={item.to}
                             to={item.to}
-                            className="group rounded-2xl border border-gray-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] p-4 hover:border-vantage-cyan/50 transition-colors"
+                            className="group rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl p-4 hover:border-vantage-cyan/50 hover:-translate-y-0.5 transition-all"
                         >
                             <span className="text-vantage-cyan">{item.icon}</span>
                             <p className="text-xs font-black text-slate-900 dark:text-white mt-2">{item.label}</p>
@@ -497,7 +489,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.3 }}
                     transition={{ duration: 0.5 }}
-                    className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-vantage-purple/15 via-vantage-purple/5 to-vantage-cyan/10 border border-vantage-purple/20 p-8 md:p-12 text-center"
+                    className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-vantage-purple/15 via-vantage-purple/5 to-vantage-cyan/10 border border-vantage-purple/25 backdrop-blur-xl p-8 md:p-12 text-center shadow-2xl shadow-black/30"
                 >
                     {/* decorative glow */}
                     <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full bg-vantage-cyan/10 blur-[90px] pointer-events-none" />
