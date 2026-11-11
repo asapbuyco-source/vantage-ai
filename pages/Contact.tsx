@@ -5,7 +5,7 @@ import { PublicLayout } from '../components/PublicLayout';
 import { PlayStoreCTA } from '../components/PlayStoreCTA';
 import { useAppContext } from '../context/AppContext';
 
-const SUPPORT_EMAIL = 'support@vantageai.online';
+const SUPPORT_EMAIL = 'asapbuyco@gmail.com';
 
 export const Contact: React.FC = () => {
     const { language } = useAppContext();
@@ -48,7 +48,7 @@ export const Contact: React.FC = () => {
                     <p className="text-xs font-black text-white">Telegram</p>
                     <p className="text-[11px] text-gray-500">@vantageai</p>
                 </a>
-                <a href="https://wa.me/237670000000" target="_blank" rel="noopener noreferrer" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 hover:border-vantage-cyan/40 transition-colors">
+                <a href="https://wa.me/237688203629" target="_blank" rel="noopener noreferrer" className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 hover:border-vantage-cyan/40 transition-colors">
                     <MessageCircle size={18} className="text-emerald-500 mb-2" />
                     <p className="text-xs font-black text-white">WhatsApp</p>
                     <p className="text-[11px] text-gray-500">{fr ? 'Support communautaire' : 'Community support'}</p>

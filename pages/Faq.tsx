@@ -45,8 +45,8 @@ const FAQS = [
     {
         qEn: 'How do I contact support?',
         qFr: 'Comment contacter le support ?',
-        aEn: 'Use the Contact page or email support@vantageai.online. We reply within 24–48 hours.',
-        aFr: 'Utilisez la page Contact ou écrivez à support@vantageai.online. Réponse sous 24–48h.',
+        aEn: 'Use the Contact page or email asapbuyco@gmail.com. We reply within 24–48 hours.',
+        aFr: 'Utilisez la page Contact ou écrivez à asapbuyco@gmail.com. Réponse sous 24–48h.',
     },
 ];
 
