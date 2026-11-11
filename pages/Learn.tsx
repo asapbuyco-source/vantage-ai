@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Lightbulb, GraduationCap, ChevronDown, ChevronRight, ExternalLink, TrendingUp, Target, BarChart3, Activity, PlayCircle } from 'lucide-react';
+import { BookOpen, Lightbulb, GraduationCap, ChevronDown, ChevronRight, ExternalLink, TrendingUp, Target, BarChart3, Activity, PlayCircle, ArrowLeft } from 'lucide-react';
 import { BettingGuide } from './BettingGuide';
 import { PlayStoreCTA } from '../components/PlayStoreCTA';
+import { SiteNav } from '../components/SiteNav';
+import { SiteFooter } from '../components/SiteFooter';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 
 const trainingModules = [
   {
@@ -42,6 +46,8 @@ const trainingModules = [
 
 export const Learn: React.FC = () => {
   const { t, language } = useAppContext();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<'guide' | 'concepts' | 'faq'>('guide');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [openConcept, setOpenConcept] = useState<string | null>(null);
@@ -75,6 +81,12 @@ export const Learn: React.FC = () => {
 
   return (
     <div className="space-y-4 pb-24">
+      {!user && <SiteNav />}
+      {!user && (
+        <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
+          <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
+        </button>
+      )}
       <motion.div className="flex flex-col space-y-1 mb-4" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-black font-orbitron text-slate-900 dark:text-white uppercase tracking-tight">
           {language === 'fr' ? 'Centre' : 'Learning'} <span className="text-vantage-cyan">{language === 'fr' ? "d'Apprentissage" : 'Center'}</span>
@@ -165,6 +177,7 @@ export const Learn: React.FC = () => {
         )}
       </AnimatePresence>
       <PlayStoreCTA variant="card" className="mt-4" />
+      {!user && <SiteFooter />}
     </div>
   );
 };

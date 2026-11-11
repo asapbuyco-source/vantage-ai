@@ -65,7 +65,7 @@ export const ResponsibleGambling: React.FC = () => {
                     </p>
                     <p className="text-[12px] text-gray-400 mt-2">
                         {fr ? 'Contactez-nous à ' : 'Contact us at '}
-                        <a href="mailto:support@vantageai.online" className="text-vantage-cyan">support@vantageai.online</a>
+                        <a href="mailto:asapbuyco@gmail.com" className="text-vantage-cyan">asapbuyco@gmail.com</a>
                         {fr ? ' pour être orienté.' : ' for guidance.'}
                     </p>
                 </section>

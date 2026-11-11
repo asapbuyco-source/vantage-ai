@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, TrendingUp, ShieldCheck, Trophy, Users, Star, ArrowUpRight, CheckCircle2, History, Loader2 } from 'lucide-react';
+import { BarChart3, TrendingUp, ShieldCheck, Trophy, Users, Star, ArrowUpRight, CheckCircle2, History, Loader2, ArrowLeft } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { PlayStoreCTA } from '../components/PlayStoreCTA';
+import { SiteNav } from '../components/SiteNav';
+import { SiteFooter } from '../components/SiteFooter';
 import { useData } from '../context/DataContext';
 import { useAppContext } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { getUserCount, getWinRateStats } from '../services/db';
 import { getTrackRecord, TrackRecord } from '../services/trackRecord';
 
@@ -15,6 +18,7 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
     const navigate = useNavigate();
     const { winRateStats, predictions } = useData();
     const { language } = useAppContext();
+    const { user } = useAuth();
     const [memberCount, setMemberCount] = useState<{ total: number; vip: number } | null>(null);
     const [totalWins, setTotalWins] = useState<number | null>(null);
     const [loadingCounts, setLoadingCounts] = useState(true);
@@ -77,6 +81,12 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
 
     return (
         <div className="space-y-5 pb-24">
+            {!user && <SiteNav />}
+            {!user && (
+                <button onClick={() => navigate('/')} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-vantage-cyan transition-colors">
+                    <ArrowLeft size={14} /> {language === 'fr' ? 'Retour' : 'Back'}
+                </button>
+            )}
             {/* Header */}
             <div className="flex flex-col space-y-1">
                 <h1 className="text-2xl font-bold font-orbitron text-slate-900 dark:text-white">
@@ -235,6 +245,7 @@ export const PublicStats: React.FC<PublicStatsProps> = () => {
             </button>
 
             <PlayStoreCTA variant="card" className="mt-3" />
+            {!user && <SiteFooter />}
         </div>
     );
 };

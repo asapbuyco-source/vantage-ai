@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Mail, Send } from 'lucide-react';
+import { Play, Mail, Send, MessageCircle } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { PLAY_STORE_URL } from './PlayStoreCTA';
 
@@ -90,8 +90,11 @@ export const SiteFooter: React.FC = () => {
                         © {new Date().getFullYear()} Vantage AI. {fr ? 'Tous droits réservés.' : 'All rights reserved.'}
                     </p>
                     <div className="flex items-center gap-3 text-gray-500">
-                        <a href="mailto:support@vantageai.online" className="hover:text-vantage-cyan transition-colors" aria-label="Email">
+                        <a href="mailto:asapbuyco@gmail.com" className="hover:text-vantage-cyan transition-colors" aria-label="Email">
                             <Mail size={14} />
+                        </a>
+                        <a href="https://wa.me/237688203629" target="_blank" rel="noopener noreferrer" className="hover:text-vantage-cyan transition-colors" aria-label="WhatsApp">
+                            <MessageCircle size={14} />
                         </a>
                         <a href="https://t.me/vantageai" target="_blank" rel="noopener noreferrer" className="hover:text-vantage-cyan transition-colors" aria-label="Telegram">
                             <Send size={14} />

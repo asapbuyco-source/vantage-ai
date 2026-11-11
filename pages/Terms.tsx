@@ -73,7 +73,7 @@ export const Terms: React.FC = () => {
                 <Section title={fr ? '7. Contact' : '7. Contact'}>
                     <p>
                         {fr ? 'Questions : ' : 'Questions: '}
-                        <a href="mailto:support@vantageai.online" className="text-vantage-cyan">support@vantageai.online</a>
+                        <a href="mailto:asapbuyco@gmail.com" className="text-vantage-cyan">asapbuyco@gmail.com</a>
                     </p>
                 </Section>
             </div>
