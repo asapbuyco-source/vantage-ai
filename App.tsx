@@ -227,15 +227,10 @@ function AppContent() {
     checkPayments();
   }, [authLoading, user, verifyTransaction, showToast, language, navigate]);
 
-  // Auth loading spinner
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-vantage-bg">
-        <Loader2 className="animate-spin text-vantage-cyan mb-4" size={40} />
-        <p className="text-gray-500 text-sm font-medium animate-pulse">Establishing Secure Connection...</p>
-      </div>
-    );
-  }
+  // NOTE: We intentionally do NOT block the whole site behind an auth spinner.
+  // While Firebase Auth initializes, `user` is null, so the public/landing routes
+  // render immediately. If a session exists, the app swaps in as soon as auth
+  // resolves. This removes the multi-second "Establishing Secure Connection" wait.
 
   // Unauthenticated flow — public pages stay indexable (SEO, no soft-404 shells);
   // everything else falls back to the marketing/landing view.

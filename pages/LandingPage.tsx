@@ -104,6 +104,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onLogin,
             <div className="relative -mx-4 md:-mx-8 mb-16 min-h-[620px] overflow-hidden px-4 py-20 text-center md:min-h-[680px] md:px-8 md:py-24 flex flex-col items-center justify-center">
                 <img
                     src="/images/football-hero.jpg"
+                    srcSet="/images/football-hero-800.jpg 800w, /images/football-hero.jpg 1600w"
+                    sizes="100vw"
                     alt=""
                     aria-hidden="true"
                     width={1600}
