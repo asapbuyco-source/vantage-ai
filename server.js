@@ -1766,7 +1766,7 @@ app.use(async (req, res, next) => {
         if (req.path === '/' || req.path === '') {
             const homeDesc = "AI football predictions for Cameroon: data-driven analysis, odds, expected value and transparent performance tracking. Free and VIP picks, live scores, daily accumulators and bankroll tools for 1xBet, Premier Bet and Supergoal.";
             // LCP: preload the hero image only on the marketing homepage.
-            html = html.replace('</head>', `    <link rel="preload" as="image" href="/images/football-hero.jpg" fetchpriority="high" />\n  </head>`);
+            html = html.replace('</head>', `    <link rel="preload" as="image" href="/images/football-hero.jpg" imagesrcset="/images/football-hero-800.jpg 800w, /images/football-hero.jpg 1600w" imagesizes="100vw" fetchpriority="high" />\n  </head>`);
             html = html.replace('<!-- REACT_ROOT -->',
                 `<div id="vantage-seo-content" style="display:none;" aria-hidden="true">` +
                 `<h1>AI Football Predictions for Cameroon</h1>` +

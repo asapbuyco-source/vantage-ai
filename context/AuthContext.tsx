@@ -12,6 +12,8 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, increment, addDoc, orderBy, runTransaction, limit, getDocs, query, where, startAfter } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
+import { verifyFapshiPayment } from "../services/fapshi";
+import { verifyTchokopayOrder } from "../services/tchokopay";
 import { UserProfile, PayoutRequest } from '../types';
 
 interface AuthContextType {
@@ -465,8 +467,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const verifyTransaction = async (transId: string): Promise<boolean> => {
-        console.warn("[Payments] External transaction verification is disabled. VIP is fulfilled by RevenueCat webhooks.", transId);
-        return false;
+        if (!user) return false;
+        const cleanTransId = transId.split(',')[0].trim();
+        try {
+            // TchokoPay (web card/crypto) — re-verify so the profile/VIP state refreshes.
+            if (cleanTransId.startsWith('TCHOKOPAY_')) {
+                const ref = cleanTransId.replace(/^TCHOKOPAY_/, '');
+                const ok = await verifyTchokopayOrder(ref);
+                if (ok) { await fetchProfile(user); return true; }
+                return false;
+            }
+            // Selar (legacy global) — only grant if the token was atomically marked used.
+            if (cleanTransId.startsWith('SELAR_')) {
+                const selarRef = cleanTransId.replace(/^SELAR_/, '');
+                const tokenSnap = await getDoc(doc(db, 'selar_pending', selarRef));
+                if (!tokenSnap.exists()) return false;
+                if (tokenSnap.data().used !== true) return false;
+                await fetchProfile(user);
+                localStorage.removeItem('pendingVipPlan');
+                return true;
+            }
+            // Fapshi (Cameroon Mobile Money)
+            const result = await verifyFapshiPayment(cleanTransId);
+            if (result.status === 'SUCCESSFUL' || result.alreadyProcessed) {
+                await fetchProfile(user);
+                localStorage.removeItem('pendingVipPlan');
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.error('Verification failed:', e);
+            return false;
+        }
         /*
         if (!user) return false;
         const cleanTransId = transId.split(',')[0].trim();
